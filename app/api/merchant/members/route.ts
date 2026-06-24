@@ -85,11 +85,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 })
   }
 
-  const result = (members ?? []).map(m => {
+  const result = (members ?? []).map((m: {
+    id: string
+    first_name: string
+    last_name: string
+    phone: string
+    total_stamps: number
+    subscription_status: string
+    created_at: string
+    home_store_id: string
+    visits: {
+      date: string
+      store_id: string
+      stores: { display_name: string }[]
+    }[]
+  }) => {
     const tier = getTier(m.total_stamps)
     // Get most recent visit
     const sortedVisits = (m.visits ?? []).sort(
-      (a: { date: string }, b: { date: string }) => b.date.localeCompare(a.date)
+      (a, b) => b.date.localeCompare(a.date)
     )
     const lastVisit = sortedVisits[0]
 
@@ -103,8 +117,7 @@ export async function GET(req: NextRequest) {
       subscriptionStatus: m.subscription_status,
       joinedAt:           m.created_at,
       lastVisitDate:      lastVisit?.date ?? null,
-      // @ts-expect-error — Supabase join
-      lastVisitStore:     lastVisit?.stores?.display_name ?? null,
+      lastVisitStore:     lastVisit?.stores[0]?.display_name ?? null,
     }
   })
 

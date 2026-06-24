@@ -92,14 +92,14 @@ export async function GET(req: NextRequest) {
       id: string
       coupon_value: number
       redeemed_at: string
-      members?: { first_name?: string; last_name?: string; total_stamps?: number } | null
-      stores?: { display_name?: string } | null
+      members: { first_name: string; last_name: string; total_stamps: number }[]
+      stores: { display_name: string }[]
     }) => ({
       id:           r.id,
       couponValue:  r.coupon_value,
       redeemedAt:   r.redeemed_at,
-      memberName:   r.members ? `${r.members.first_name} ${r.members.last_name}` : 'Unknown',
-      storeName:    r.stores?.display_name ?? 'Unknown',
+      memberName:   r.members[0] ? `${r.members[0].first_name} ${r.members[0].last_name}` : 'Unknown',
+      storeName:    r.stores[0]?.display_name ?? 'Unknown',
     })),
     total:      count ?? 0,
     page,
