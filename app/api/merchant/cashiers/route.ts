@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     cashiers: (data ?? []).map((c: {
       id: string; name: string; email: string; role: string
       pin: string; is_active: boolean; created_at: string
-      stores?: { display_name?: string } | null
+      stores: { display_name: string }[] | null
     }) => ({
       id:        c.id,
       name:      c.name,
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       pin:       c.pin,    // shown to owner only — never to members
       isActive:  c.is_active,
       createdAt: c.created_at,
-      storeName: c.stores?.display_name ?? null,
+      storeName: Array.isArray(c.stores) ? c.stores[0]?.display_name ?? null : (c.stores as any)?.display_name ?? null,
     })),
   })
 }
