@@ -12,7 +12,7 @@ const DEFAULT_STORE = {
   id: '',
   name: 'BinPerks',
   brandColor: '#4A4B98',
-  logoUrl: null,
+  logoUrl: null as string | null,
   merchantId: '',
 }
 
