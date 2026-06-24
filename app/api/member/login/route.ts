@@ -34,6 +34,16 @@ interface LoginRequest {
   memberId?: string
 }
 
+interface MemberRow {
+  id: string
+  email: string
+  first_name: string
+  auth_user_id: string | null
+  is_blacklisted: boolean
+  home_store_id: string
+  merchant_id: string
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as Partial<LoginRequest>
@@ -46,28 +56,18 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createServerSupabaseClient()
 
-    let member: {
-      id: string
-      email: string
-      first_name: string
-      auth_user_id: string | null
-      is_blacklisted: boolean
-      home_store_id: string
-    } | null = null
+    let member: MemberRow | null = null
 
     if (memberId) {
-      // Disambiguated request — fetch the exact account chosen.
       const { data } = await supabase
         .from('members')
-        .select('id, email, first_name, auth_user_id, is_blacklisted, home_store_id, phone')
+        .select('id, email, first_name, auth_user_id, is_blacklisted, home_store_id, merchant_id')
         .eq('id', memberId)
         .eq('phone', phone)
         .eq('status', 'active')
         .single()
       member = data ?? null
     } else {
-      // Only return active members — deactivated accounts get the same
-      // "not_found" 404 response so they can't receive new magic links.
       const { data: matches } = await supabase
         .from('members')
         .select('id, email, first_name, auth_user_id, is_blacklisted, home_store_id, merchant_id')
@@ -79,8 +79,6 @@ export async function POST(req: NextRequest) {
       }
 
       if (matches.length > 1) {
-        // Multiple merchants share this phone — let the member pick their store,
-        // without revealing anything else about the other accounts.
         const storeIds = matches.map(m => m.home_store_id)
         const { data: stores } = await supabase
           .from('stores')
@@ -100,16 +98,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: 'multiple_accounts', accounts })
       }
 
-      member = matches[0] as typeof member as any
+      member = matches[0] as MemberRow
     }
 
     if (!member) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
-
-    // Blacklisted members can still receive a login link — the dashboard
-    // itself shows a generic "account unavailable" state. Never reveal the
-    // reason here (same rule as the cashier-facing stamp tool).
 
     const admin = createAdminSupabaseClient()
     const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
@@ -128,8 +122,6 @@ export async function POST(req: NextRequest) {
     // TODO: POST to GHL webhook once the Express route exists:
     //   POST https://your-backend.com/webhooks/ghl/member-login
     //   { memberId: member.id, phone, firstName: member.first_name, magicLink: linkData.properties.action_link }
-    //   GHL sends the SMS containing the link. Supabase never sends it directly
-    //   (phone provider is OFF).
 
     return NextResponse.json({ ok: true })
 
