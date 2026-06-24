@@ -1,39 +1,17 @@
-/**
- * POST /api/join/vip
- *
- * Creates a Stripe checkout session for VIP membership ($22.95/mo).
- * Called by Page 3 if member chooses VIP.
- *
- * The Stripe webhook (on checkout.session.completed) updates:
- *   members.subscription_status = 'vip'
- *   members.vip_billing_cycle = 'monthly'
- *
- * VIP revenue split: 80% to merchant via Stripe Connect, 20% to BinPerks
- *
- * Request body:
- *   { memberId, merchantId, successUrl, cancelUrl }
- *
- * Response:
- *   200 { checkoutUrl }
- *   400 { error }
- *   500 { error }
- */
-
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-02-24.acacia',
 })
 
-const VIP_PRICE_USD = 2295 // $22.95 in cents
+const VIP_PRICE_USD = 2295
 
 interface VipRequest {
   memberId: string
-  merchantId: string                // resolved server-side to merchants.stripe_connect_id
-  successUrl: string                // e.g. /join/[storeKey]/thankyou?plan=vip
-  cancelUrl: string                 // e.g. /join/[storeKey]/vip (back to upsell)
+  merchantId: string
+  successUrl: string
+  cancelUrl: string
 }
 
 export async function POST(req: NextRequest) {
@@ -45,23 +23,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Resolve the merchant's Stripe Connect account server-side — never trust
-    // a connect ID from the client.
-    const supabase = await createServerSupabaseClient()
-    const { data: merchant, error: merchantError } = await supabase
-      .from('merchants')
-      .select('stripe_connect_id')
-      .eq('id', merchantId)
-      .single()
-
-    if (merchantError || !merchant?.stripe_connect_id) {
-      return NextResponse.json({ error: 'merchant_not_stripe_connected' }, { status: 400 })
-    }
-
-    const merchantStripeConnectId = merchant.stripe_connect_id
-
-    // Create Stripe checkout session with Connect transfer
-    // 80% to merchant, 20% to BinPerks (application_fee_percent)
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
@@ -80,28 +41,14 @@ export async function POST(req: NextRequest) {
         },
       ],
       subscription_data: {
-        application_fee_percent: 20, // 20% to BinPerks
         metadata: {
           memberId,
+          merchantId,
           type: 'vip_membership',
         },
       },
       success_url: successUrl,
       cancel_url: cancelUrl,
-      // Top-level session metadata — the webhook reads this directly off
-      // checkout.session.completed without an extra Stripe API call.
-      // (subscription_data.metadata above propagates to the Subscription
-      // object instead, which the webhook uses for later invoice/cancel events.)
-      metadata: {
-        memberId,
-        type: 'vip_membership',
-      },
-      // Route payment to merchant's connected account
-      // @ts-expect-error — stripe-node types lag on newer params
-      on_behalf_of: merchantStripeConnectId,
-      transfer_data: {
-        destination: merchantStripeConnectId,
-      },
     })
 
     return NextResponse.json({ checkoutUrl: session.url })
