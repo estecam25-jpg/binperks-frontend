@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: 'multiple_accounts', accounts })
       }
 
-      member = matches[0] as typeof member
+      member = matches[0] as typeof member as any
     }
 
     if (!member) {
