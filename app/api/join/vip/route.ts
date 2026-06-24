@@ -24,7 +24,7 @@ import Stripe from 'stripe'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-06-20',
+  apiVersion: '2025-02-24.acacia',
 })
 
 const VIP_PRICE_USD = 2295 // $22.95 in cents
