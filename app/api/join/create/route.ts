@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
     }
 
-    const supabase = await createServerSupabaseClient()
+    const supabase = createAdminSupabaseClient()
 
     // 1. Check phone uniqueness within this merchant (members list is per-merchant,
     //    never shared across merchants — see "Member & Location Model" rules)
