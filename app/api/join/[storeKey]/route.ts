@@ -11,14 +11,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ storeKey: string }> }
 ) {
   const { storeKey } = await params
-  const supabase = await createServerSupabaseClient()
+  const supabase = createAdminSupabaseClient()
 
   const { data, error } = await supabase
     .from('stores')
