@@ -202,10 +202,11 @@ export async function POST(req: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           merchantId:  merchant.id,
-          firstName, lastName, email: normalizedEmail, phone, website,
-          companyName, storeName, city, state,
-          locationCount: count,
-          monthlyTotal,
+          firstName,
+          lastName,
+          phone,
+          email:       normalizedEmail,
+          companyName,
         }),
       }).catch(err => console.error('[/api/merchant/apply] GHL webhook error:', err))
     }

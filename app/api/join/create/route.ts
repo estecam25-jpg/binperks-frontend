@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     //    right /join/[storeKey] funnel (QR codes use the same canonical_key)
     const { data: store, error: storeError } = await supabase
       .from('stores')
-      .select('canonical_key')
+      .select('canonical_key, display_name')
       .eq('id', storeId)
       .single()
 
@@ -190,12 +190,25 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 6. TODO: POST to GHL webhook once the Express route exists:
-    //    POST https://your-backend.com/webhooks/ghl/member-created
-    //    { memberId, firstName, lastName, phone, email, storeId, merchantId, isReferred: !!referrerMemberId }
-    //    GHL then creates the contact and sends the welcome SMS with the magic link.
-
+    // 6. Notify GHL (fire-and-forget — don't block the response).
+    //    Skipped if GHL_MEMBER_CREATED_WEBHOOK_URL is not yet configured.
     const finalReferralUrl = `${APP_URL}/join/${store.canonical_key}?ref=${referralCode}`
+    const ghlWebhook = process.env.GHL_MEMBER_CREATED_WEBHOOK_URL
+    if (ghlWebhook) {
+      fetch(ghlWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId,
+          firstName,
+          lastName,
+          phone,
+          email,
+          storeName:   store.display_name,
+          referralUrl: finalReferralUrl,
+        }),
+      }).catch(err => console.error('[/api/join/create] GHL webhook error:', err))
+    }
 
     return NextResponse.json({
       memberId,
