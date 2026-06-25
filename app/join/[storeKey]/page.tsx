@@ -6,23 +6,54 @@ import { useRouter, useParams } from 'next/navigation'
 import { signupStore, signupRef, type SignupStore, type SignupRef } from '@/lib/signup-session'
 import { headerTextColor, storeInitials } from '@/lib/branding'
 
+type PageState = 'loading' | 'error' | 'ready'
+
 export default function JoinLandingPage() {
   const router = useRouter()
   const params = useParams()
   const storeKey = params.storeKey as string
 
-  const [store, setStore] = useState<SignupStore | null>(null)
-  const [ref, setRef] = useState<SignupRef | null>(null)
+  const [store, setStore]           = useState<SignupStore | null>(null)
+  const [ref, setRef]               = useState<SignupRef | null>(null)
+  const [pageState, setPageState]   = useState<PageState>('loading')
   const [stampsFilled, setStampsFilled] = useState(0)
   const animRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ── Fetch store data on mount ──────────────────────────────────────────────
   useEffect(() => {
-    const s = signupStore.get()
-    if (s) setStore(s)
     const r = signupRef.get()
     if (r) setRef(r)
 
-    // Animate stamp grid filling up one-by-one
+    async function loadStore() {
+      // Use session cache when navigating back within the funnel
+      const cached = signupStore.get()
+      if (cached && cached.storeKey === storeKey) {
+        setStore(cached)
+        setPageState('ready')
+        return
+      }
+
+      try {
+        const res = await fetch(`/api/join/${storeKey}`)
+        if (!res.ok) {
+          setPageState('error')
+          return
+        }
+        const data: SignupStore = await res.json()
+        signupStore.set(data)
+        setStore(data)
+        setPageState('ready')
+      } catch {
+        setPageState('error')
+      }
+    }
+
+    loadStore()
+  }, [storeKey])
+
+  // ── Stamp animation — starts only once store is ready ─────────────────────
+  useEffect(() => {
+    if (pageState !== 'ready') return
     let count = 0
     function fillNext() {
       count++
@@ -33,12 +64,39 @@ export default function JoinLandingPage() {
     }
     animRef.current = setTimeout(fillNext, 400)
     return () => { if (animRef.current) clearTimeout(animRef.current) }
-  }, [])
+  }, [pageState])
 
-  if (!store) return null
+  // ── Loading ────────────────────────────────────────────────────────────────
+  if (pageState === 'loading') {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-[#F5F5F8]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 rounded-full border-4 border-[#4A4B98] border-t-transparent animate-spin" />
+          <p className="text-[14px] font-semibold text-[#8E8EA8] font-['Montserrat']">Loading…</p>
+        </div>
+      </div>
+    )
+  }
 
-  const textColor = headerTextColor(store.brandColor)
-  const textOpacity = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.75)' : 'rgba(26,26,46,0.65)'
+  // ── Error / store not found ────────────────────────────────────────────────
+  if (pageState === 'error' || !store) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-[#F5F5F8] px-6">
+        <div className="flex flex-col items-center gap-4 text-center max-w-xs">
+          <span className="text-5xl">🤔</span>
+          <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Store not found</h1>
+          <p className="text-[14px] text-[#8E8EA8] font-medium font-['Montserrat'] leading-relaxed">
+            This link doesn't match an active BinPerks store. Check with the store and try again.
+          </p>
+          <p className="text-[11px] text-[#8E8EA8] font-medium">Powered by BinPerks</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Ready ──────────────────────────────────────────────────────────────────
+  const textColor        = headerTextColor(store.brandColor)
+  const textOpacity      = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.75)' : 'rgba(26,26,46,0.65)'
   const textOpacityStrong = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.92)' : 'rgba(26,26,46,0.9)'
 
   function handleJoin() {
@@ -186,7 +244,7 @@ export default function JoinLandingPage() {
         </div>
       )}
 
-      {/* ── Level-up teaser (soft — no explicit dollar amounts per spec) ── */}
+      {/* ── Level-up teaser ── */}
       <div className="px-5 pb-10 max-w-md mx-auto w-full">
         <div
           className="rounded-2xl p-5 flex flex-col gap-2"
