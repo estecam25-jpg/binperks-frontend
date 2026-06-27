@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
     }
 
-    const supabase = await createServerSupabaseClient()
+    const supabase = createAdminSupabaseClient()
     const count = Math.max(1, Number(locationCount) || 1)
     const monthlyTotal = calculateMonthlyTotal(count)
     void monthlyTotal // used for clarity in line-item construction below
