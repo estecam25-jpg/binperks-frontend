@@ -80,7 +80,7 @@ export default function MerchantLandingPage() {
           </div>
           <div className="bg-[#F5F5F8] px-5 py-3 border-t border-[#EBEBF2]">
             <p className="text-[11px] text-[#8E8EA8] font-medium text-center">
-              VIP members earn faster — you keep 80% of every $22.95/mo VIP fee
+              VIP members earn faster — you keep 80% of every $29.99/mo VIP fee
             </p>
           </div>
         </div>

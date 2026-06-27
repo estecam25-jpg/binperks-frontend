@@ -232,8 +232,8 @@ export default function MemberDashboardPage() {
             <p className="font-['Coiny'] text-lg" style={{ color: brandColor }}>Keep earning with VIP</p>
             <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">
               {hasUsedFreeLifetimeCoupon
-                ? "You've used your one lifetime Free coupon. Upgrade to VIP ($22.95/mo) to keep earning stamps and unlock bigger coupons."
-                : 'Upgrade to VIP ($22.95/mo) to earn stamps faster and unlock bigger coupons.'}
+                ? "You've used your one lifetime Free coupon. Upgrade to VIP ($29.99/mo) to keep earning stamps and unlock bigger coupons."
+                : 'Upgrade to VIP ($29.99/mo) to earn stamps faster and unlock bigger coupons.'}
             </p>
             <span className="text-[13px] font-bold mt-1" style={{ color: brandColor }}>See VIP perks →</span>
           </Link>

@@ -8,7 +8,7 @@ interface MeResponse {
   store: { brandName: string; brandColor: string; id: string } | null
 }
 
-const VIP_PRICE = '$22.95'
+const VIP_PRICE = '$29.99'
 
 const VIP_PERKS = [
   { icon: '⚡', text: 'Earn stamps up to 5× faster as you level up' },

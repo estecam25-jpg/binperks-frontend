@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { signupStore, signupMember, type SignupStore } from '@/lib/signup-session'
 
-const VIP_PRICE = '$22.95'
+const VIP_PRICE = '$29.99'
 
 // VIP perks list — specific, not vague
 const VIP_PERKS = [

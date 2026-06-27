@@ -215,7 +215,7 @@ export default function MerchantApplyPage() {
               hint='How customers know this location — e.g. "Acme Bins Downtown"'
               error={err('storeName')}
             >
-              <input type="text" placeholder="Acme Bins Downtown"
+              <input type="text" placeholder="Acme Bins Prosperous"
                 value={form.storeName}
                 onChange={e => update('storeName', e.target.value)}
                 onBlur={() => touch('storeName')}
@@ -232,7 +232,7 @@ export default function MerchantApplyPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="City" error={err('city')}>
-                <input type="text" placeholder="Lakeland"
+                <input type="text" placeholder="Prosperous"
                   value={form.city}
                   onChange={e => update('city', e.target.value)}
                   onBlur={() => touch('city')}

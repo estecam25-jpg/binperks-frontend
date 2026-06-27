@@ -257,16 +257,26 @@ export default function LookupPage() {
             </button>
           )}
 
-          <button
-            onClick={handleFind}
-            disabled={!canSearch || isLoading}
-            className="w-full py-[18px] rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide bg-[#4A4B98] disabled:opacity-35 disabled:cursor-not-allowed active:scale-[0.97] transition-all flex items-center justify-center gap-2"
-          >
-            {isLoading && (
-              <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-            )}
-            {isLoading ? 'Looking up…' : 'Find Member'}
-          </button>
+          {lookupState === 'found' ? (
+            <button
+              onClick={handleFind}
+              disabled={!canSearch || isLoading}
+              className="self-center text-[13px] font-semibold text-[#8E8EA8] underline underline-offset-2 disabled:opacity-40"
+            >
+              {isLoading ? 'Looking up…' : 'Find a different member'}
+            </button>
+          ) : (
+            <button
+              onClick={handleFind}
+              disabled={!canSearch || isLoading}
+              className="w-full py-[18px] rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide bg-[#4A4B98] disabled:opacity-35 disabled:cursor-not-allowed active:scale-[0.97] transition-all flex items-center justify-center gap-2"
+            >
+              {isLoading && (
+                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              )}
+              {isLoading ? 'Looking up…' : 'Find Member'}
+            </button>
+          )}
         </div>
 
         {recent.length > 0 && (

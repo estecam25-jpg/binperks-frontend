@@ -123,14 +123,6 @@ function ThankYouContent() {
           </div>
         </div>
 
-        {/* Dashboard button (shows after provisioning — disabled for now) */}
-        <div className="w-full flex flex-col gap-3">
-          <div className="w-full py-4 rounded-2xl font-bold text-[15px] font-['Montserrat'] bg-[#EBEBF2] text-[#8E8EA8] text-center cursor-not-allowed">
-            Go to merchant dashboard
-            <p className="text-[11px] font-medium mt-0.5">Available once BinPerks provisions your store</p>
-          </div>
-        </div>
-
         {/* Help */}
         <div className="w-full bg-white rounded-2xl shadow-sm px-5 py-4">
           <p className="text-[13px] font-bold text-[#1A1A2E] mb-1">Questions?</p>
