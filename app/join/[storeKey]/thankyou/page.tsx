@@ -48,19 +48,6 @@ export default function ThankYouPage() {
     }
   }
 
-  function handleShareReferral() {
-    if (!member) return
-    if (navigator.share) {
-      navigator.share({
-        title: `Join ${store?.brandName} Rewards`,
-        text: `I just joined the ${store?.brandName} rewards program! Use my link to sign up and we both earn bonus stamps.`,
-        url: member.referralUrl,
-      })
-    } else {
-      handleCopyReferral()
-    }
-  }
-
   if (!store || !member) return null
 
   const isVip = plan === 'vip'
@@ -159,24 +146,13 @@ export default function ThankYouPage() {
             </button>
           </div>
 
-          {/* Share button */}
-          <button
-            onClick={handleShareReferral}
-            className="w-full py-4 rounded-2xl font-bold text-[16px] font-['Montserrat'] tracking-wide text-white active:scale-[0.97] transition-all"
-            style={{ backgroundColor: store.brandColor }}
-          >
-            Share My Referral Link
-          </button>
         </div>
 
-        {/* Dashboard button */}
-        <div className="w-full flex flex-col gap-2.5 pt-2">
-          <button
-            onClick={() => router.push('/member/dashboard')}
-            className="w-full py-4 rounded-2xl font-semibold text-[15px] font-['Montserrat'] text-[#8E8EA8] border-2 border-[#EBEBF2] active:border-[#4A4B98] active:text-[#4A4B98] transition-colors"
-          >
-            Go to my dashboard →
-          </button>
+        {/* Sign-in notice — dashboard is only accessible after magic link click */}
+        <div className="w-full bg-white rounded-2xl border-2 border-[#EBEBF2] px-5 py-4 text-center">
+          <p className="text-[14px] font-semibold text-[#1A1A2E]">
+            Your sign-in link is on its way via text message.
+          </p>
         </div>
 
         {/* Footer */}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase'
 import TierBadge from '@/components/stamp/TierBadge'
 import { getTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
@@ -108,10 +109,15 @@ export default function MemberDashboardPage() {
 
   if (!member) {
     return (
-      <div className="min-h-dvh flex flex-col items-center justify-center bg-[#F5F5F8] px-6 text-center gap-3">
-        <p className="text-[15px] font-semibold text-[#1A1A2E]">We couldn't load your account.</p>
-        <button onClick={() => router.replace('/member/login')} className="text-[13px] font-semibold text-[#4A4B98] underline">
-          Back to sign in
+      <div className="min-h-dvh flex flex-col items-center justify-center bg-[#F5F5F8] px-6 text-center gap-4">
+        <p className="text-[15px] font-semibold text-[#1A1A2E] max-w-xs leading-relaxed">
+          Check your texts for a sign-in link to access your dashboard.
+        </p>
+        <button
+          onClick={() => router.replace('/member/login')}
+          className="w-full max-w-xs py-4 rounded-2xl font-bold text-[15px] font-['Montserrat'] bg-[#4A4B98] text-white active:scale-[0.97] transition-all"
+        >
+          Go to sign in
         </button>
       </div>
     )
@@ -156,8 +162,19 @@ export default function MemberDashboardPage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* White-label header */}
+      {/* White-label header — shows store logo + name */}
       <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: brandColor }}>
+        {store?.logoUrl ? (
+          <div className="w-8 h-8 rounded-full bg-white overflow-hidden flex-shrink-0 shadow-sm">
+            <Image
+              src={store.logoUrl}
+              alt={brandName}
+              width={32}
+              height={32}
+              className="object-cover w-full h-full"
+            />
+          </div>
+        ) : null}
         <span className="font-['Coiny'] text-xl leading-none text-white">{storeName}</span>
         <span className="text-white/50 text-[10px] font-semibold tracking-widest uppercase ml-auto">
           Powered by BinPerks

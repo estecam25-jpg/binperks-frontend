@@ -3,14 +3,44 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export async function POST(req: NextRequest) {
   try {
-    const { memberId, storeId, cashierId, merchantId } = await req.json()
+    const { memberId, storeId, cashierId } = await req.json()
 
-    if (!memberId || !storeId || !cashierId || !merchantId) {
+    if (!memberId || !storeId || !cashierId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
     const supabase = await createServerSupabaseClient()
     const today = new Date().toISOString().split('T')[0]
+
+    // 0. Verify cashier exists and resolve merchant_id server-side.
+    //    Never trust the merchantId supplied by the client — a tampered request
+    //    could otherwise stamp a member at a completely different merchant.
+    //    This enforces Core Rule #6: cross-merchant isolation — always.
+    const { data: cashier, error: cashierError } = await supabase
+      .from('staff_users')
+      .select('merchant_id')
+      .eq('id', cashierId)
+      .eq('is_active', true)
+      .single()
+
+    if (cashierError || !cashier) {
+      return NextResponse.json({ error: 'Cashier not found' }, { status: 404 })
+    }
+
+    const merchantId = cashier.merchant_id
+
+    // Verify the member belongs to this merchant — if not, this is a
+    // cross-merchant stamp attempt and must be rejected.
+    const { data: memberOwnership } = await supabase
+      .from('members')
+      .select('id')
+      .eq('id', memberId)
+      .eq('merchant_id', merchantId)
+      .maybeSingle()
+
+    if (!memberOwnership) {
+      return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+    }
 
     // 1. Check for duplicate visit today
     const { data: existingVisit } = await supabase

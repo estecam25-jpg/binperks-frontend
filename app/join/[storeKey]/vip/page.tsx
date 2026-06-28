@@ -164,11 +164,11 @@ export default function VipUpsellPage() {
             ))}
           </div>
 
-          {/* Low-contrast "stay free" link — not a big button */}
+          {/* Outlined secondary button — visible and tappable but lower visual weight than VIP CTA */}
           <button
             onClick={handleFree}
             disabled={loading === 'free'}
-            className="text-[13px] font-semibold text-[#8E8EA8] underline self-start mt-1 disabled:opacity-50"
+            className="w-full py-4 rounded-2xl font-semibold text-[15px] font-['Montserrat'] text-[#8E8EA8] border-2 border-[#EBEBF2] active:border-[#D1D1DC] active:bg-[#F5F5F8] transition-colors disabled:opacity-50"
           >
             {loading === 'free' ? 'Continuing…' : 'Stay with the free plan'}
           </button>
