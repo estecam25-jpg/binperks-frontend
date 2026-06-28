@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Look up the store's canonical_key so the referral_url points at the
-    //    right /join/[storeKey] funnel (QR codes use the same canonical_key)
+    //    right /member/join/[storeKey] funnel (QR codes use the same canonical_key)
     const { data: store, error: storeError } = await supabase
       .from('stores')
       .select('canonical_key, display_name')
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
 
     let memberId: string | null = null
     for (let attempt = 0; attempt < 3 && !memberId; attempt++) {
-      const referralUrl = `${APP_URL}/join/${store.canonical_key}?ref=${referralCode}`
+      const referralUrl = `${APP_URL}/member/join/${store.canonical_key}?ref=${referralCode}`
       const { data: inserted, error: insertError } = await supabase
         .from('members')
         .insert({
@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
 
     // 6. Notify GHL (fire-and-forget — don't block the response).
     //    Skipped if GHL_MEMBER_CREATED_WEBHOOK_URL is not yet configured.
-    const finalReferralUrl = `${APP_URL}/join/${store.canonical_key}?ref=${referralCode}`
+    const finalReferralUrl = `${APP_URL}/member/join/${store.canonical_key}?ref=${referralCode}`
     const ghlWebhook = process.env.GHL_MEMBER_CREATED_WEBHOOK_URL
     if (ghlWebhook) {
       fetch(ghlWebhook, {

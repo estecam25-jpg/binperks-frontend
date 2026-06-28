@@ -12,6 +12,7 @@ interface Account {
 
 interface Props {
   brandColor: string
+  storeKey: string
 }
 
 function formatPhone(raw: string): string {
@@ -26,7 +27,7 @@ function normalizePhone(v: string): string { return v.replace(/\D/g, '') }
 
 type ViewState = 'idle' | 'loading' | 'sent' | 'not_found' | 'multiple_accounts' | 'error'
 
-function LoginFormContent({ brandColor }: Props) {
+function LoginFormContent({ brandColor, storeKey }: Props) {
   const searchParams = useSearchParams()
   const [phone, setPhone] = useState('')
   const [touched, setTouched] = useState(false)
@@ -171,8 +172,14 @@ function LoginFormContent({ brandColor }: Props) {
         {view === 'not_found' && (
           <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl">
             <p className="text-[12px] font-semibold text-orange-800">
-              We couldn't find an account for that number. Ask your store for their
-              sign-up link, or scan the QR code in-store to join.
+              We couldn't find an account for that number.{' '}
+              <a
+                href={`/member/join/${storeKey}`}
+                className="underline font-bold"
+                style={{ color: brandColor }}
+              >
+                Join this store →
+              </a>
             </p>
           </div>
         )}
@@ -198,7 +205,18 @@ function LoginFormContent({ brandColor }: Props) {
         </button>
       </form>
 
-      <p className="text-[11px] text-[#8E8EA8] text-center font-medium mt-4">
+      <p className="text-[13px] text-[#8E8EA8] text-center font-medium">
+        New here?{' '}
+        <a
+          href={`/member/join/${storeKey}`}
+          className="font-bold underline"
+          style={{ color: brandColor }}
+        >
+          Join this store →
+        </a>
+      </p>
+
+      <p className="text-[11px] text-[#8E8EA8] text-center font-medium">
         Questions? <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
       </p>
     </>
@@ -207,10 +225,10 @@ function LoginFormContent({ brandColor }: Props) {
 
 // Suspense wrapper required because useSearchParams() opts the component into
 // dynamic rendering — Next.js requires this at the page boundary.
-export default function LoginForm({ brandColor }: Props) {
+export default function LoginForm({ brandColor, storeKey }: Props) {
   return (
     <Suspense>
-      <LoginFormContent brandColor={brandColor} />
+      <LoginFormContent brandColor={brandColor} storeKey={storeKey} />
     </Suspense>
   )
 }

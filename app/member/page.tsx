@@ -1,8 +1,11 @@
 /**
- * /member/join — Member signup entry point.
+ * /member — Member entry point (store finder).
  *
  * Shows all active stores. Member selects their store to proceed to
- * /join/[storeKey] to sign up.
+ * /member/join/[storeKey] to sign up, or can navigate to sign in.
+ *
+ * Kept as a separate file from /member/join so it can be repurposed
+ * as a combined join/login hub later.
  *
  * Server component — uses admin client to bypass RLS.
  */
@@ -20,7 +23,7 @@ interface Store {
   state: string
 }
 
-export default async function MemberJoinPage() {
+export default async function MemberPage() {
   const admin = createAdminSupabaseClient()
 
   const { data: stores } = await admin

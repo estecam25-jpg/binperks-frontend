@@ -57,7 +57,7 @@ export default async function MemberLoginPage({
 
       <main className="flex-1 flex flex-col items-center px-4 py-10 gap-6 max-w-md mx-auto w-full">
         {/* Client component handles phone input + magic-link submission */}
-        <LoginForm brandColor={brandColor} />
+        <LoginForm brandColor={brandColor} storeKey={storeKey} />
       </main>
     </div>
   )
