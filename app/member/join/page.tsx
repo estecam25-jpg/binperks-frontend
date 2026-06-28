@@ -1,8 +1,8 @@
 /**
- * /member/login — Member sign-in entry point.
+ * /member/join — Member signup entry point.
  *
- * Shows all active stores. Member selects their home store to proceed to
- * /member/login/[storeKey] where they enter their phone number.
+ * Shows all active stores. Member selects their store to proceed to
+ * /join/[storeKey] to sign up.
  *
  * Server component — uses admin client to bypass RLS.
  */
@@ -20,7 +20,7 @@ interface Store {
   state: string
 }
 
-export default async function MemberLoginHomePage() {
+export default async function MemberJoinPage() {
   const admin = createAdminSupabaseClient()
 
   const { data: stores } = await admin
@@ -41,8 +41,10 @@ export default async function MemberLoginHomePage() {
       <main className="flex-1 flex flex-col items-center px-4 py-8 gap-6 max-w-md mx-auto w-full">
 
         <div className="w-full text-center">
-          <h1 className="font-['Coiny'] text-3xl text-[#1A1A2E] mb-1">Welcome back</h1>
-          <p className="text-[14px] text-[#8E8EA8] font-medium">Select your store to sign in.</p>
+          <h1 className="font-['Coiny'] text-3xl text-[#1A1A2E] mb-1">Join a store</h1>
+          <p className="text-[14px] text-[#8E8EA8] font-medium">
+            Select your store to start earning rewards.
+          </p>
         </div>
 
         {!stores || stores.length === 0 ? (
@@ -54,7 +56,7 @@ export default async function MemberLoginHomePage() {
             {stores.map(store => (
               <Link
                 key={store.id}
-                href={`/member/login/${store.canonical_key}`}
+                href={`/join/${store.canonical_key}`}
                 className="w-full flex items-center gap-4 bg-white rounded-2xl px-5 py-4 shadow-sm active:scale-[0.98] transition-transform"
               >
                 {/* Brand color accent bar */}
@@ -73,9 +75,9 @@ export default async function MemberLoginHomePage() {
         )}
 
         <p className="text-[11px] text-[#8E8EA8] text-center font-medium">
-          New here?{' '}
-          <Link href="/member/join" className="underline text-[#4A4B98] font-semibold">
-            Join a store
+          Already a member?{' '}
+          <Link href="/member/login" className="underline text-[#4A4B98] font-semibold">
+            Sign in
           </Link>
         </p>
 

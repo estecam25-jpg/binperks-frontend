@@ -1,191 +1,81 @@
-'use client'
+/**
+ * /stamp — Stamp tool entry point.
+ *
+ * Shows all active stores. Cashier selects their store to proceed to
+ * /stamp/[storeKey] where they enter their PIN.
+ *
+ * Server component — uses admin client to bypass RLS.
+ */
 
-import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
-import StoreHeader from '@/components/stamp/StoreHeader'
-import { cashierSession, storeSession, type CashierSession } from '@/lib/stamp-session'
+import Link from 'next/link'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
-const PIN_LENGTH = 4
-
-const DEFAULT_STORE = {
-  id: '',
-  name: 'BinPerks',
-  brandColor: '#4A4B98',
-  logoUrl: null as string | null,
-  merchantId: '',
+interface Store {
+  id: string
+  canonical_key: string
+  display_name: string
+  brand_name: string
+  brand_color: string
+  city: string
+  state: string
 }
 
-export default function StampSignInPage() {
-  const router = useRouter()
-  const [pin, setPin] = useState('')
-  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
-  const [store, setStore] = useState(DEFAULT_STORE)
+export default async function StampHomePage() {
+  const admin = createAdminSupabaseClient()
 
-  useEffect(() => {
-    const s = storeSession.get()
-    if (s) setStore(s)
-  }, [])
-
-  const handleDigit = useCallback((digit: string) => {
-    if (status === 'loading') return
-    setPin(prev => {
-      if (prev.length >= PIN_LENGTH) return prev
-      const next = prev + digit
-      if (next.length === PIN_LENGTH) {
-        setTimeout(() => submitPin(next), 120)
-      }
-      return next
-    })
-    setStatus('idle')
-  }, [status]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleDelete = useCallback(() => {
-    if (status === 'loading') return
-    setPin(prev => prev.slice(0, -1))
-    setStatus('idle')
-  }, [status])
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key >= '0' && e.key <= '9') handleDigit(e.key)
-      else if (e.key === 'Backspace') handleDelete()
-      else if (e.key === 'Enter' && pin.length === PIN_LENGTH) submitPin(pin)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [pin, handleDigit, handleDelete]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function submitPin(enteredPin: string) {
-    setStatus('loading')
-
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('staff_users')
-      .select('id, name, role, merchant_id, store_id')
-      .eq('pin', enteredPin)
-      .eq('is_active', true)
-      .single()
-
-    if (error || !data) {
-      setStatus('error')
-      setPin('')
-      return
-    }
-
-    const session: CashierSession = {
-      id: data.id,
-      name: data.name,
-      role: data.role,
-      merchantId: data.merchant_id,
-      storeId: data.store_id,
-    }
-    cashierSession.set(session)
-    router.push('/stamp/lookup')
-  }
-
-  const isError = status === 'error'
-  const isLoading = status === 'loading'
+  const { data: stores } = await admin
+    .from('stores')
+    .select('id, canonical_key, display_name, brand_name, brand_color, city, state')
+    .eq('is_active', true)
+    .order('state')
+    .order('display_name') as { data: Store[] | null }
 
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
-      <StoreHeader
-        storeName={store.name}
-        brandColor={store.brandColor}
-        logoUrl={store.logoUrl}
-      />
 
-      <main className="flex-1 flex flex-col items-center justify-center px-5 py-8 gap-8">
-        <div className="bg-white rounded-2xl p-8 w-full max-w-sm shadow-sm flex flex-col items-center gap-7">
+      {/* Header */}
+      <div className="px-5 py-4 flex items-center justify-center" style={{ backgroundColor: '#4A4B98' }}>
+        <span className="font-['Coiny'] text-2xl text-white tracking-wide">BinPerks</span>
+      </div>
 
-          <span className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
-            Cashier Sign In
-          </span>
+      <main className="flex-1 flex flex-col items-center px-4 py-8 gap-6 max-w-md mx-auto w-full">
 
-          <div className="flex gap-4 items-center">
-            {Array.from({ length: PIN_LENGTH }).map((_, i) => {
-              const filled = i < pin.length
-              return (
-                <div
-                  key={i}
-                  className={`
-                    w-5 h-5 rounded-full border-2 transition-all duration-100
-                    ${isError
-                      ? 'bg-[#DA1212] border-[#DA1212] animate-[shake_0.35s_ease]'
-                      : filled
-                        ? 'bg-[#FFB217] border-[#FFB217] scale-110'
-                        : 'bg-transparent border-[#D1D1DC]'
-                    }
-                  `}
-                />
-              )
-            })}
-          </div>
-
-          <p
-            className={`
-              text-[13px] font-semibold text-[#DA1212] text-center -mt-3 min-h-[18px]
-              transition-opacity duration-200
-              ${isError ? 'opacity-100' : 'opacity-0'}
-            `}
-          >
-            Incorrect PIN. Try again.
-          </p>
-
-          <div className="grid grid-cols-3 gap-2.5 w-full">
-            {['1','2','3','4','5','6','7','8','9'].map(d => (
-              <KeypadButton key={d} label={d} onPress={() => handleDigit(d)} disabled={isLoading} />
-            ))}
-            <KeypadButton label="⌫" onPress={handleDelete} disabled={isLoading} isDelete />
-            <KeypadButton label="0" onPress={() => handleDigit('0')} disabled={isLoading} />
-            <div />
-          </div>
+        <div className="w-full text-center">
+          <h1 className="font-['Coiny'] text-3xl text-[#1A1A2E] mb-1">Stamp Tool</h1>
+          <p className="text-[14px] text-[#8E8EA8] font-medium">Select your store to sign in.</p>
         </div>
 
-        <button
-          onClick={() => pin.length === PIN_LENGTH && submitPin(pin)}
-          disabled={pin.length !== PIN_LENGTH || isLoading}
-          className={`
-            w-full max-w-sm py-5 rounded-2xl font-bold text-[17px] text-white
-            font-['Montserrat'] tracking-wide
-            transition-all duration-150
-            disabled:opacity-35 disabled:cursor-not-allowed
-            active:scale-[0.97]
-          `}
-          style={{ backgroundColor: '#4A4B98' }}
-        >
-          {isLoading ? 'Signing in…' : 'Sign In'}
-        </button>
+        {!stores || stores.length === 0 ? (
+          <div className="w-full bg-white rounded-2xl px-5 py-6 text-center shadow-sm">
+            <p className="text-[14px] text-[#8E8EA8] font-medium">No active stores found.</p>
+          </div>
+        ) : (
+          <div className="w-full flex flex-col gap-2.5">
+            {stores.map(store => (
+              <Link
+                key={store.id}
+                href={`/stamp/${store.canonical_key}`}
+                className="w-full flex items-center gap-4 bg-white rounded-2xl px-5 py-4 shadow-sm active:scale-[0.98] transition-transform"
+              >
+                {/* Brand color accent bar */}
+                <div
+                  className="w-1.5 h-10 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: store.brand_color ?? '#4A4B98' }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] font-bold text-[#1A1A2E] truncate">{store.display_name}</p>
+                  <p className="text-[12px] text-[#8E8EA8] font-medium">{store.city}, {store.state}</p>
+                </div>
+                <span className="text-[20px] text-[#D1D1DC] flex-shrink-0">›</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        <p className="text-[11px] text-[#8E8EA8] text-center font-medium mt-4">
+          Questions? <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
+        </p>
       </main>
     </div>
-  )
-}
-
-interface KeypadButtonProps {
-  label: string
-  onPress: () => void
-  disabled?: boolean
-  isDelete?: boolean
-}
-
-function KeypadButton({ label, onPress, disabled, isDelete }: KeypadButtonProps) {
-  return (
-    <button
-      onClick={onPress}
-      disabled={disabled}
-      className={`
-        aspect-[1.15] rounded-2xl font-bold font-['Montserrat']
-        flex items-center justify-center
-        transition-all duration-100 select-none
-        disabled:opacity-50
-        active:scale-[0.93]
-        ${isDelete
-          ? 'text-[18px] text-[#8E8EA8] bg-[#F5F5F8] active:text-[#DA1212] active:bg-red-50'
-          : 'text-[22px] text-[#1A1A2E] bg-[#F5F5F8] active:bg-indigo-50'
-        }
-      `}
-    >
-      {label}
-    </button>
   )
 }
