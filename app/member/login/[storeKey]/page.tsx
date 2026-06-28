@@ -1,13 +1,24 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useParams } from 'next/navigation'
+import { headerTextColor } from '@/lib/branding'
+
+interface StoreInfo {
+  brandColor: string
+  brandName: string
+}
 
 interface Account {
   memberId: string
   storeName: string
   brandName: string
   brandColor: string
+}
+
+const DEFAULT_STORE: StoreInfo = {
+  brandColor: '#4A4B98',
+  brandName: 'BinPerks',
 }
 
 function formatPhone(raw: string): string {
@@ -24,15 +35,33 @@ type ViewState = 'idle' | 'loading' | 'sent' | 'not_found' | 'multiple_accounts'
 
 function MemberLoginContent() {
   const searchParams = useSearchParams()
+  const params = useParams()
+  const storeKey = params.storeKey as string
+
+  const [store, setStore] = useState<StoreInfo>(DEFAULT_STORE)
   const [phone, setPhone] = useState('')
   const [touched, setTouched] = useState(false)
   const [view, setView] = useState<ViewState>('idle')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [authError, setAuthError] = useState(false)
 
+  // Fetch store branding on mount — non-blocking, falls back to BinPerks if fetch fails
   useEffect(() => {
-    // ?error=auth means the magic link was expired or invalid — show a
-    // friendly message so the member knows to request a new link
+    async function loadBranding() {
+      try {
+        const res = await fetch(`/api/join/${storeKey}`)
+        if (!res.ok) return
+        const data = await res.json()
+        setStore({ brandColor: data.brandColor, brandName: data.brandName })
+      } catch {
+        // fall back to BinPerks default branding — form is already usable
+      }
+    }
+    if (storeKey) loadBranding()
+  }, [storeKey])
+
+  useEffect(() => {
+    // ?error=auth means the magic link was expired or invalid
     if (searchParams.get('error') === 'auth') {
       setAuthError(true)
     }
@@ -40,6 +69,9 @@ function MemberLoginContent() {
 
   const digits = normalizePhone(phone)
   const phoneValid = digits.length === 10
+
+  const textColor = headerTextColor(store.brandColor)
+  const subTextColor = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.5)' : 'rgba(26,26,46,0.45)'
 
   async function submitLogin(memberId?: string) {
     setView('loading')
@@ -73,16 +105,30 @@ function MemberLoginContent() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* Default BinPerks header — no store context until after login */}
-      <div className="px-5 py-4 flex items-center justify-center" style={{ backgroundColor: '#4A4B98' }}>
-        <span className="font-['Coiny'] text-2xl text-white tracking-wide">BinPerks</span>
+      {/* Store-branded mini-header */}
+      <div
+        className="px-5 py-3 flex items-center gap-2.5"
+        style={{ backgroundColor: store.brandColor }}
+      >
+        <span className="font-['Coiny'] text-xl leading-none" style={{ color: textColor }}>
+          {store.brandName}
+        </span>
+        <span
+          className="text-[10px] font-semibold tracking-widest uppercase ml-auto"
+          style={{ color: subTextColor }}
+        >
+          Powered by BinPerks
+        </span>
       </div>
 
       <main className="flex-1 flex flex-col items-center px-4 py-10 gap-6 max-w-md mx-auto w-full">
 
         {view === 'sent' ? (
           <div className="w-full flex flex-col items-center text-center gap-4 pt-6">
-            <div className="w-16 h-16 rounded-full bg-[#4A4B98]/10 flex items-center justify-center text-3xl">
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center text-3xl"
+              style={{ backgroundColor: `${store.brandColor}15` }}
+            >
               📱
             </div>
             <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Check your texts</h1>
@@ -92,7 +138,8 @@ function MemberLoginContent() {
             </p>
             <button
               onClick={() => setView('idle')}
-              className="text-[13px] font-semibold text-[#4A4B98] underline mt-2"
+              className="text-[13px] font-semibold underline mt-2"
+              style={{ color: store.brandColor }}
             >
               Use a different number
             </button>
@@ -159,9 +206,9 @@ function MemberLoginContent() {
                     w-full px-4 py-4 rounded-2xl border-2 font-['Montserrat'] text-[16px] font-semibold
                     text-[#1A1A2E] bg-white outline-none transition-colors
                     placeholder:text-[#D1D1DC] placeholder:font-medium
-                    focus:border-[#4A4B98]
                     ${touched && !phoneValid ? 'border-[#DA1212] bg-red-50' : 'border-transparent'}
                   `}
+                  style={touched && phoneValid ? { borderColor: store.brandColor } : undefined}
                 />
                 {touched && !phoneValid && (
                   <p className="text-[11px] text-[#DA1212] font-semibold mt-1 ml-1">
@@ -190,7 +237,8 @@ function MemberLoginContent() {
               <button
                 type="submit"
                 disabled={view === 'loading'}
-                className="w-full py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide bg-[#4A4B98] disabled:opacity-50 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
+                className="w-full py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide disabled:opacity-50 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
+                style={{ backgroundColor: store.brandColor }}
               >
                 {view === 'loading' && (
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -209,8 +257,8 @@ function MemberLoginContent() {
   )
 }
 
-// Suspense wrapper required because useSearchParams() opts the component into
-// dynamic rendering — Next.js requires this at the page boundary.
+// Suspense wrapper required because useSearchParams() + useParams() opt the
+// component into dynamic rendering — Next.js requires this at the page boundary.
 export default function MemberLoginPage() {
   return (
     <Suspense>
