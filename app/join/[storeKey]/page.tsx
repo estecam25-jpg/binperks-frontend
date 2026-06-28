@@ -197,6 +197,20 @@ export default function JoinLandingPage() {
         </p>
       </div>
 
+      {/* ── Already a member? ── */}
+      <div className="px-5 pt-6 pb-0 max-w-md mx-auto w-full text-center">
+        <p className="text-[13px] text-[#8E8EA8] font-medium">
+          Already a member?{' '}
+          <a
+            href={`/member/login/${storeKey}`}
+            className="font-bold underline"
+            style={{ color: store.brandColor }}
+          >
+            Sign in →
+          </a>
+        </p>
+      </div>
+
       {/* ── How it works ── */}
       <div className="px-5 py-10 flex flex-col gap-6 max-w-md mx-auto w-full">
         <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E] text-center">How it works</h2>
