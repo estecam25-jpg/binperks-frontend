@@ -59,11 +59,19 @@ export default async function StampHomePage() {
               >
                 {/* Brand color accent bar */}
                 <div
-                  className="w-1.5 h-10 rounded-full flex-shrink-0"
+                  className="w-1.5 h-12 rounded-full flex-shrink-0"
                   style={{ backgroundColor: store.brand_color ?? '#4A4B98' }}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[15px] font-bold text-[#1A1A2E] truncate">{store.display_name}</p>
+                  {/* Canonical key — small/light, top */}
+                  <p className="text-[10px] font-medium text-[#B0B0C8] tracking-wide truncate">
+                    {store.canonical_key}
+                  </p>
+                  {/* Display name — bold, primary */}
+                  <p className="text-[15px] font-bold text-[#1A1A2E] truncate leading-tight">
+                    {store.display_name}
+                  </p>
+                  {/* City, State — subtitle */}
                   <p className="text-[12px] text-[#8E8EA8] font-medium">{store.city}, {store.state}</p>
                 </div>
                 <span className="text-[20px] text-[#D1D1DC] flex-shrink-0">›</span>
