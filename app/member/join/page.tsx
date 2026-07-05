@@ -93,4 +93,14 @@ export default async function MemberJoinPage() {
                 </div>
                 <span className="text-[20px] text-[#D1D1DC] flex-shrink-0">›</span>
               </Link>
-  
+            ))}
+          </div>
+        )}
+
+        <p className="text-[11px] text-[#8E8EA8]E8EA8] text-center font-medium mt-2">
+          Questions? <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
+        </p>
+      </main>
+    </div>
+  )
+}

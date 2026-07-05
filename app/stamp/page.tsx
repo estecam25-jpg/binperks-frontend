@@ -85,4 +85,10 @@ export default async function StampHomePage() {
           </div>
         )}
 
-        <p className="text-[11px] text-[#8
+        <p className="text-[11px] text-[#8E8EA8]E8EA8] text-center font-medium mt-4">
+          Questions? <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
+        </p>
+      </main>
+    </div>
+  )
+}
