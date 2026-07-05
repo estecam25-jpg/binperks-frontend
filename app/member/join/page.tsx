@@ -95,4 +95,10 @@ export default async function MemberJoinPage() {
           </div>
         )}
 
-        <p className="text-[11px] text-[#8
+        <p className="text-[11px] text-[#8E8EA8] text-center font-medium mt-2">
+          Questions? <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
+        </p>
+      </main>
+    </div>
+  )
+}
