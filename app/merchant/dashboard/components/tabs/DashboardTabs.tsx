@@ -302,9 +302,9 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
 // ─── SettingsTab ──────────────────────────────────────────────────────────────
 
 const GOOGLE_FONTS = [
-  'Coiny', 'Montserrat', 'Poppins', 'Playfair Display', 'Oswald',
-  'Raleway', 'Nunito', 'Lato', 'Bebas Neue', 'Comfortaa',
-  'Quicksand', 'Josefin Sans', 'Pacifico', 'Lobster', 'Dancing Script',
+  'Google Sans', 'Playfair Display', 'Oswald', 'Dancing Script', 'Metamorphous',
+  'BioRhyme', 'Aboreto', 'Play', 'Quantico', 'Bebas Neue',
+  'Exo 2', 'Cinzel', 'Space Grotesk', 'Barlow', 'Abril Fatface',
 ]
 
 function googleFontUrl(family: string) {
@@ -318,7 +318,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
 
   // ── Branding state ───────────────────────────────────────────────────────
   const [brandColor,  setBrandColor]  = useState('#4A4B98')
-  const [fontFamily,  setFontFamily]  = useState('Coiny')
+  const [fontFamily,  setFontFamily]  = useState('Google Sans')
   const [logoUrl,     setLogoUrl]     = useState<string | null>(null)
   const [logoUploading, setLogoUploading] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
@@ -351,7 +351,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
 
   // Pre-load Google Font whenever fontFamily picker changes
   useEffect(() => {
-    if (!fontFamily || fontFamily === 'Coiny') return
+    if (!fontFamily) return
     const id = `gf-preview-${fontFamily.replace(/\s+/g, '-')}`
     if (document.getElementById(id)) return
     const link = document.createElement('link')
@@ -388,7 +388,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
       body: JSON.stringify({
         storeId:    activeStoreId,
         brandColor,
-        fontFamily: fontFamily === 'Coiny' ? null : fontFamily,
+        fontFamily: fontFamily || null,
         logoUrl,
       }),
     })

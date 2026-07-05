@@ -11,7 +11,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import Image from 'next/image'
+
 import { useRouter } from 'next/navigation'
 import { signupStore, signupRef, type SignupRef } from '@/lib/signup-session'
 import { headerTextColor, storeInitials } from '@/lib/branding'
@@ -75,7 +75,7 @@ export default function JoinLanding({
 
   // Load custom Google Font for headings if set
   useEffect(() => {
-    if (!fontFamily || fontFamily === 'Coiny') return
+    if (!fontFamily) return
     const id = 'bp-store-font'
     if (document.getElementById(id)) return
     const link = document.createElement('link')
@@ -102,7 +102,7 @@ export default function JoinLanding({
   const textColor         = headerTextColor(brandColor)
   const textOpacity       = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.75)' : 'rgba(26,26,46,0.65)'
   const textOpacityStrong = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.92)' : 'rgba(26,26,46,0.9)'
-  const headingFont       = fontFamily ? `'${fontFamily}', 'Coiny', sans-serif` : "'Coiny', sans-serif"
+  const headingFont       = fontFamily ? `'${fontFamily}', sans-serif` : "'Coiny', sans-serif"
   const locationLine      = [city, state].filter(Boolean).join(', ')
 
   function handleJoin() {
@@ -132,10 +132,10 @@ export default function JoinLanding({
         <div className="flex flex-col items-center gap-3">
           {logoUrl ? (
             <div className="w-20 h-20 rounded-full bg-white overflow-hidden shadow-lg">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={logoUrl}
                 alt={`${brandName} logo`}
-                width={80} height={80}
                 className="object-cover w-full h-full"
               />
             </div>
@@ -156,7 +156,7 @@ export default function JoinLanding({
             {brandName}
           </h1>
           {locationLine && (
-            <p className="text-[12px] font-semibold" style={{ color: textOpacity }}>
+            <p className="text-[15px] font-semibold" style={{ color: textOpacityStrong }}>
               {locationLine}
             </p>
           )}
