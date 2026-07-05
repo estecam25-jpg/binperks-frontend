@@ -11,30 +11,34 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
-type SupabaseServerClient = Awaited<ReturnType<typeof createServerSupabaseClient>>
-
-async function getMerchantId(supabase: SupabaseServerClient) {
+// Auth (identify the logged-in merchant) uses the server client so we read
+// the session cookie. All actual table reads/writes use the admin client —
+// RLS blocks these queries otherwise (see CLAUDE.md CRITICAL RLS RULE).
+async function getMerchantId() {
+  const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
-  const { data: m } = await supabase.from('merchants').select('id').eq('auth_user_id', user.id).single()
+  const admin = createAdminSupabaseClient()
+  const { data: m } = await admin.from('merchants').select('id').eq('auth_user_id', user.id).single()
   return m?.id ?? null
 }
 
 export async function GET(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const merchantId = await getMerchantId(supabase)
+  const merchantId = await getMerchantId()
   if (!merchantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const admin = createAdminSupabaseClient()
   const storeId = new URL(req.url).searchParams.get('storeId')
   if (!storeId) return NextResponse.json({ error: 'storeId required' }, { status: 400 })
 
   // Verify store belongs to merchant
-  const { data: store } = await supabase
+  const { data: store } = await admin
     .from('stores').select('id').eq('id', storeId).eq('merchant_id', merchantId).single()
   if (!store) return NextResponse.json({ error: 'Store not found' }, { status: 404 })
 
-  const { data: perks } = await supabase
+  const { data: perks } = await admin
     .from('perks')
     .select('slot, title, description, is_active, updated_at')
     .eq('store_id', storeId)
@@ -53,17 +57,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const merchantId = await getMerchantId(supabase)
+  const merchantId = await getMerchantId()
   if (!merchantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const admin = createAdminSupabaseClient()
   const { storeId, perks } = await req.json()
   if (!storeId || !Array.isArray(perks)) {
     return NextResponse.json({ error: 'storeId and perks[] required' }, { status: 400 })
   }
 
   // Verify store belongs to merchant
-  const { data: store } = await supabase
+  const { data: store } = await admin
     .from('stores').select('id').eq('id', storeId).eq('merchant_id', merchantId).single()
   if (!store) return NextResponse.json({ error: 'Store not found' }, { status: 404 })
 
@@ -80,7 +84,7 @@ export async function POST(req: NextRequest) {
       updated_at:  new Date().toISOString(),
     }))
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('perks')
     .upsert(upserts, { onConflict: 'store_id,slot' })
 

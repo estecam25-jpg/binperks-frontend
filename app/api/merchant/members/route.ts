@@ -23,6 +23,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getTier } from '@/lib/tiers'
 
 export async function GET(req: NextRequest) {
@@ -30,7 +31,12 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: merchant } = await supabase
+  // Auth uses the server client (session cookie). All table reads below use
+  // the admin client — RLS blocks these queries otherwise (see CLAUDE.md
+  // CRITICAL RLS RULE).
+  const admin = createAdminSupabaseClient()
+
+  const { data: merchant } = await admin
     .from('merchants')
     .select('id')
     .eq('auth_user_id', user.id)
@@ -45,7 +51,7 @@ export async function GET(req: NextRequest) {
   const limit   = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)))
   const offset  = (page - 1) * limit
 
-  let query = supabase
+  let query = admin
     .from('members')
     .select(`
       id,

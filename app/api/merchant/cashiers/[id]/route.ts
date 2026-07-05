@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 export async function DELETE(
   _req: NextRequest,
@@ -19,7 +20,12 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: merchant } = await supabase
+  // Auth uses the server client (session cookie). All table reads/writes
+  // below use the admin client — RLS blocks these queries otherwise
+  // (see CLAUDE.md CRITICAL RLS RULE).
+  const admin = createAdminSupabaseClient()
+
+  const { data: merchant } = await admin
     .from('merchants')
     .select('id')
     .eq('auth_user_id', user.id)
@@ -27,7 +33,7 @@ export async function DELETE(
   if (!merchant) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // Verify the cashier belongs to this merchant, and is not the owner record
-  const { data: cashier } = await supabase
+  const { data: cashier } = await admin
     .from('staff_users')
     .select('id, role, merchant_id')
     .eq('id', id)
@@ -39,7 +45,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Cannot remove the owner PIN' }, { status: 400 })
   }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('staff_users')
     .update({ is_active: false })
     .eq('id', id)

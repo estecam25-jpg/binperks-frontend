@@ -22,6 +22,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getTier } from '@/lib/tiers'
 
 function getFiscalWeekRange(fiscalWeekStart: string = 'friday') {
@@ -52,8 +53,13 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Auth uses the server client (session cookie). All table reads below use
+  // the admin client — RLS blocks these queries otherwise (see CLAUDE.md
+  // CRITICAL RLS RULE).
+  const admin = createAdminSupabaseClient()
+
   // Get merchant
-  const { data: merchant } = await supabase
+  const { data: merchant } = await admin
     .from('merchants')
     .select('id, company_name, location_count')
     .eq('auth_user_id', user.id)
@@ -64,7 +70,7 @@ export async function GET(req: NextRequest) {
   const storeIdParam = new URL(req.url).searchParams.get('storeId')
 
   // Get all stores for this merchant
-  const { data: stores } = await supabase
+  const { data: stores } = await admin
     .from('stores')
     .select('id, display_name, canonical_key, city, state, is_active, fiscal_week_start')
     .eq('merchant_id', merchant.id)
@@ -97,7 +103,7 @@ export async function GET(req: NextRequest) {
     recentMembersRes,
   ] = await Promise.all([
     // Total active members across scoped stores
-    supabase
+    admin
       .from('members')
       .select('id', { count: 'exact', head: true })
       .eq('merchant_id', merchant.id)
@@ -105,14 +111,14 @@ export async function GET(req: NextRequest) {
       .in('home_store_id', storeIds),
 
     // Stamps today
-    supabase
+    admin
       .from('visits')
       .select('id', { count: 'exact', head: true })
       .in('store_id', storeIds)
       .eq('date', todayStr),
 
     // Coupons redeemed this fiscal week
-    supabase
+    admin
       .from('rewards')
       .select('id', { count: 'exact', head: true })
       .in('redeemed_at_location_id', storeIds)
@@ -121,21 +127,21 @@ export async function GET(req: NextRequest) {
       .lte('redeemed_at', weekEnd.toISOString()),
 
     // Referrals this week
-    supabase
+    admin
       .from('referrals')
       .select('id', { count: 'exact', head: true })
       .eq('merchant_id', merchant.id)
       .gte('created_at', weekStart.toISOString()),
 
     // New members this week
-    supabase
+    admin
       .from('members')
       .select('id', { count: 'exact', head: true })
       .in('home_store_id', storeIds)
       .gte('created_at', weekStart.toISOString()),
 
     // Fiscal week chart — stamp counts per day
-    supabase
+    admin
       .from('visits')
       .select('date')
       .in('store_id', storeIds)
@@ -143,7 +149,7 @@ export async function GET(req: NextRequest) {
       .lte('date', weekEnd.toISOString().split('T')[0]),
 
     // Recent members (10 most recent)
-    supabase
+    admin
       .from('members')
       .select('id, first_name, last_name, total_stamps, created_at')
       .eq('merchant_id', merchant.id)

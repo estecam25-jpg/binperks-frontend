@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 function getFiscalWeekRange(offset: number, fiscalWeekStart = 'friday') {
   const dayMap: Record<string, number> = {
@@ -38,7 +39,12 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: merchant } = await supabase
+  // Auth uses the server client (session cookie). All table reads below use
+  // the admin client — RLS blocks these queries otherwise (see CLAUDE.md
+  // CRITICAL RLS RULE).
+  const admin = createAdminSupabaseClient()
+
+  const { data: merchant } = await admin
     .from('merchants')
     .select('id')
     .eq('auth_user_id', user.id)
@@ -54,12 +60,12 @@ export async function GET(req: NextRequest) {
 
   // Get fiscal week start for this merchant/store
   const { data: storeData } = storeId
-    ? await supabase.from('stores').select('fiscal_week_start').eq('id', storeId).single()
-    : await supabase.from('stores').select('fiscal_week_start').eq('merchant_id', merchant.id).limit(1).single()
+    ? await admin.from('stores').select('fiscal_week_start').eq('id', storeId).single()
+    : await admin.from('stores').select('fiscal_week_start').eq('merchant_id', merchant.id).limit(1).single()
 
   const { weekStart, weekEnd } = getFiscalWeekRange(weekOffset, storeData?.fiscal_week_start)
 
-  let query = supabase
+  let query = admin
     .from('rewards')
     .select(`
       id,
