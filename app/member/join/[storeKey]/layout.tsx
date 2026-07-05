@@ -1,85 +1,53 @@
 /**
  * Layout for /member/join/[storeKey]/*
  *
- * Resolves store branding from canonical_key on first load,
- * stores it in sessionStorage, and passes it via CSS custom properties
- * so all child pages inherit the white-label branding.
+ * Renders children immediately (no blocking spinner) and caches store
+ * branding + referral code in sessionStorage in the background so that
+ * child pages (signup, vip, thankyou) can read them via signupStore.get().
+ *
+ * The join landing page (page.tsx) fetches branding server-side, so it
+ * doesn't depend on this layout for its initial render.
  */
 
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams, useSearchParams, useRouter } from 'next/navigation'
-import { signupStore, signupRef, type SignupStore } from '@/lib/signup-session'
-import { headerTextColor } from '@/lib/branding'
+import { useEffect } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
+import { signupStore, signupRef } from '@/lib/signup-session'
 
 export default function JoinLayout({ children }: { children: React.ReactNode }) {
   const params = useParams()
   const searchParams = useSearchParams()
-  const router = useRouter()
   const storeKey = params.storeKey as string
-  const [store, setStore] = useState<SignupStore | null>(null)
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function resolveStore() {
-      // Use cached store if same storeKey
+    async function prime() {
+      // Skip if already cached for this store
       const cached = signupStore.get()
       if (cached && cached.storeKey === storeKey) {
-        setStore(cached)
-        setLoading(false)
         resolveRef(searchParams.get('ref'))
         return
       }
 
-      // Fetch store branding
       const res = await fetch(`/api/join/${storeKey}`)
-      if (!res.ok) {
-        router.replace('/404')
-        return
-      }
-      const data: SignupStore = await res.json()
+      if (!res.ok) return
+      const data = await res.json()
       signupStore.set(data)
-      setStore(data)
-      setLoading(false)
-
-      // Resolve referral code if present
       resolveRef(searchParams.get('ref'))
     }
 
     async function resolveRef(code: string | null) {
       if (!code) return
-      // Don't re-resolve if already cached
       const cached = signupRef.get()
       if (cached && cached.code === code) return
-
       const res = await fetch(`/api/join/ref/${code}`)
       if (!res.ok) return
       const data = await res.json()
       signupRef.set({ code, ...data })
     }
 
-    resolveStore()
-  }, [storeKey, searchParams, router])
+    prime()
+  }, [storeKey, searchParams])
 
-  if (loading || !store) {
-    return (
-      <div className="min-h-dvh flex items-center justify-center bg-[#F5F5F8]">
-        <span className="w-8 h-8 border-[3px] border-[#EBEBF2] border-t-[#4A4B98] rounded-full animate-spin" />
-      </div>
-    )
-  }
-
-  const textColor = headerTextColor(store.brandColor)
-
-  return (
-    <div
-      style={{
-        '--store-color': store.brandColor,
-        '--store-text': textColor,
-      } as React.CSSProperties}
-    >
-      {children}
-    </div>
-  )
+  return <>{children}</>
 }

@@ -27,8 +27,7 @@ export default async function StampHomePage() {
     .from('stores')
     .select('id, canonical_key, display_name, brand_name, brand_color, city, state')
     .eq('is_active', true)
-    .order('state')
-    .order('display_name') as { data: Store[] | null }
+    .order('canonical_key', { ascending: true }) as { data: Store[] | null }
 
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
