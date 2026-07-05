@@ -17,15 +17,18 @@ import { signupStore, signupRef, type SignupRef } from '@/lib/signup-session'
 import { headerTextColor, storeInitials } from '@/lib/branding'
 
 interface Props {
-  storeKey:         string
-  storeId:          string
-  merchantId:       string
-  storeName:        string
-  brandColor:       string
-  brandName:        string
-  logoUrl:          string | null
-  googleReviewUrl:  string | null
+  storeKey:          string
+  storeId:           string
+  merchantId:        string
+  storeName:         string
+  brandColor:        string
+  brandName:         string
+  logoUrl:           string | null
+  googleReviewUrl:   string | null
   facebookReviewUrl: string | null
+  city:              string | null
+  state:             string | null
+  fontFamily:        string | null
   referrer: {
     code:              string
     referrerMemberId:  string
@@ -43,6 +46,9 @@ export default function JoinLanding({
   logoUrl,
   googleReviewUrl,
   facebookReviewUrl,
+  city,
+  state,
+  fontFamily,
   referrer,
 }: Props) {
   const router = useRouter()
@@ -67,6 +73,18 @@ export default function JoinLanding({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load custom Google Font for headings if set
+  useEffect(() => {
+    if (!fontFamily || fontFamily === 'Coiny') return
+    const id = 'bp-store-font'
+    if (document.getElementById(id)) return
+    const link = document.createElement('link')
+    link.id = id
+    link.rel = 'stylesheet'
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontFamily)}:wght@700&display=swap`
+    document.head.appendChild(link)
+  }, [fontFamily])
+
   // Stamp animation
   useEffect(() => {
     let count = 0
@@ -84,6 +102,8 @@ export default function JoinLanding({
   const textColor         = headerTextColor(brandColor)
   const textOpacity       = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.75)' : 'rgba(26,26,46,0.65)'
   const textOpacityStrong = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.92)' : 'rgba(26,26,46,0.9)'
+  const headingFont       = fontFamily ? `'${fontFamily}', 'Coiny', sans-serif` : "'Coiny', sans-serif"
+  const locationLine      = [city, state].filter(Boolean).join(', ')
 
   function handleJoin() {
     router.push(`/member/join/${storeKey}/signup`)
@@ -92,7 +112,7 @@ export default function JoinLanding({
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* ── Referral banner ── */}
+      {/* Referral banner */}
       {referrer && (
         <div className="bg-[#2A7D34] px-4 py-3 flex items-center gap-3">
           <span className="text-xl flex-shrink-0">🎁</span>
@@ -103,7 +123,7 @@ export default function JoinLanding({
         </div>
       )}
 
-      {/* ── Hero — full white-label branding ── */}
+      {/* Hero */}
       <div
         className="flex flex-col items-center px-5 pt-10 pb-12 gap-6"
         style={{ backgroundColor: brandColor, color: textColor }}
@@ -129,15 +149,23 @@ export default function JoinLanding({
               </span>
             </div>
           )}
-          <h1 className="font-['Coiny'] text-4xl tracking-wide leading-none text-center">
+          <h1
+            className="text-4xl font-bold tracking-wide leading-none text-center"
+            style={{ fontFamily: headingFont }}
+          >
             {brandName}
           </h1>
+          {locationLine && (
+            <p className="text-[12px] font-semibold" style={{ color: textOpacity }}>
+              {locationLine}
+            </p>
+          )}
           <p className="text-[13px] font-semibold tracking-wide" style={{ color: textOpacity }}>
             Rewards Program
           </p>
         </div>
 
-        {/* ── Stamp grid ── */}
+        {/* Stamp grid */}
         <div className="flex flex-col items-center gap-3 w-full max-w-xs">
           <div className="grid grid-cols-10 gap-2 w-full">
             {Array.from({ length: 20 }).map((_, i) => (
@@ -181,7 +209,7 @@ export default function JoinLanding({
         </p>
       </div>
 
-      {/* ── Already a member? ── */}
+      {/* Already a member? */}
       <div className="px-5 pt-6 pb-0 max-w-md mx-auto w-full text-center">
         <p className="text-[13px] text-[#8E8EA8] font-medium">
           Already a member?{' '}
@@ -195,9 +223,14 @@ export default function JoinLanding({
         </p>
       </div>
 
-      {/* ── How it works ── */}
+      {/* How it works */}
       <div className="px-5 py-10 flex flex-col gap-6 max-w-md mx-auto w-full">
-        <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E] text-center">How it works</h2>
+        <h2
+          className="text-2xl font-bold text-[#1A1A2E] text-center"
+          style={{ fontFamily: headingFont }}
+        >
+          How it works
+        </h2>
         <div className="flex flex-col gap-4">
           {[
             {
@@ -232,24 +265,27 @@ export default function JoinLanding({
         </div>
       </div>
 
-      {/* ── Referral benefit callout ── */}
+      {/* Referral benefit callout */}
       {referrer && (
         <div className="mx-5 mb-8 bg-green-50 border-2 border-green-200 rounded-2xl p-5 max-w-md mx-auto w-full">
           <p className="font-['Coiny'] text-xl text-[#1A1A2E] mb-1">You were referred! 🎉</p>
           <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
             Join today and <strong className="text-[#1A1A2E]">{referrer.referrerFirstName}</strong> earns
-            {' '}2 bonus stamps as a thank-you. You'll get a head start on your first reward.
+            {' '}2 bonus stamps as a thank-you. You&apos;ll get a head start on your first reward.
           </p>
         </div>
       )}
 
-      {/* ── Level-up teaser ── */}
+      {/* Level-up teaser */}
       <div className="px-5 pb-10 max-w-md mx-auto w-full">
         <div
           className="rounded-2xl p-5 flex flex-col gap-2"
-          style={{ backgroundColor: `${brandColor}12`, borderColor: `${brandColor}30`, border: '1.5px solid' }}
+          style={{ backgroundColor: `${brandColor}12`, border: `1.5px solid ${brandColor}30` }}
         >
-          <p className="font-['Coiny'] text-xl" style={{ color: brandColor }}>
+          <p
+            className="text-xl font-bold"
+            style={{ color: brandColor, fontFamily: headingFont }}
+          >
             Bigger rewards as you level up
           </p>
           <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
@@ -266,10 +302,11 @@ export default function JoinLanding({
         </div>
       </div>
 
-      {/* ── Footer ── */}
+      {/* Footer */}
       <div className="px-5 pb-8 text-center">
         <p className="text-[10px] text-[#8E8EA8] font-medium">
-          Powered by BinPerks · <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
+          Powered by BinPerks ·{' '}
+          <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
         </p>
       </div>
     </div>

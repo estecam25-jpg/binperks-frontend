@@ -301,16 +301,100 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
 
 // ─── SettingsTab ──────────────────────────────────────────────────────────────
 
+const GOOGLE_FONTS = [
+  'Coiny', 'Montserrat', 'Poppins', 'Playfair Display', 'Oswald',
+  'Raleway', 'Nunito', 'Lato', 'Bebas Neue', 'Comfortaa',
+  'Quicksand', 'Josefin Sans', 'Pacifico', 'Lobster', 'Dancing Script',
+]
+
+function googleFontUrl(family: string) {
+  return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@700&display=swap`
+}
+
 interface Cashier { id: string; name: string; role: string; pin: string; isActive: boolean }
 
 export function SettingsTab({ storeId, stores }: { storeId: string | null; stores: StoreRef[] }) {
   const activeStoreId = storeId ?? stores[0]?.id
+
+  // ── Branding state ───────────────────────────────────────────────────────
+  const [brandColor,  setBrandColor]  = useState('#4A4B98')
+  const [fontFamily,  setFontFamily]  = useState('Coiny')
+  const [logoUrl,     setLogoUrl]     = useState<string | null>(null)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [brandSaving, setBrandSaving] = useState(false)
+  const [brandSaved,  setBrandSaved]  = useState(false)
+  const [brandLoading, setBrandLoading] = useState(true)
+
+  // ── Cashier state ────────────────────────────────────────────────────────
   const [cashiers, setCashiers] = useState<Cashier[]>([])
   const [newName, setNewName] = useState('')
   const [newPin, setNewPin] = useState('')
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState('')
   const [loading, setLoading] = useState(true)
+
+  // Fetch current branding when active store changes
+  useEffect(() => {
+    if (!activeStoreId) return
+    setBrandLoading(true)
+    fetch(`/api/merchant/store?storeId=${activeStoreId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) {
+          setBrandColor(d.brandColor ?? '#4A4B98')
+          setFontFamily(d.fontFamily ?? 'Coiny')
+          setLogoUrl(d.logoUrl ?? null)
+        }
+        setBrandLoading(false)
+      })
+  }, [activeStoreId])
+
+  // Pre-load Google Font whenever fontFamily picker changes
+  useEffect(() => {
+    if (!fontFamily || fontFamily === 'Coiny') return
+    const id = `gf-preview-${fontFamily.replace(/\s+/g, '-')}`
+    if (document.getElementById(id)) return
+    const link = document.createElement('link')
+    link.id = id
+    link.rel = 'stylesheet'
+    link.href = googleFontUrl(fontFamily)
+    document.head.appendChild(link)
+  }, [fontFamily])
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !activeStoreId) return
+    setLogoUploading(true)
+    const { createClient } = await import('@/lib/supabase')
+    const supabase = createClient()
+    const ext = file.name.split('.').pop() ?? 'jpg'
+    const path = `${activeStoreId}/logo.${ext}`
+    const { error } = await supabase.storage
+      .from('store-logos')
+      .upload(path, file, { upsert: true, contentType: file.type })
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('store-logos').getPublicUrl(path)
+      setLogoUrl(publicUrl)
+    }
+    setLogoUploading(false)
+  }
+
+  async function handleBrandSave() {
+    if (!activeStoreId) return
+    setBrandSaving(true)
+    const res = await fetch('/api/merchant/store', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        storeId:    activeStoreId,
+        brandColor,
+        fontFamily: fontFamily === 'Coiny' ? null : fontFamily,
+        logoUrl,
+      }),
+    })
+    setBrandSaving(false)
+    if (res.ok) { setBrandSaved(true); setTimeout(() => setBrandSaved(false), 3000) }
+  }
 
   useEffect(() => {
     if (!activeStoreId) return
@@ -352,6 +436,119 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
 
   return (
     <div className="flex flex-col gap-5 p-4 pb-16">
+
+      {/* ── Store Branding ── */}
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#EBEBF2]">
+          <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Store Branding</h2>
+          <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
+            Logo, color, and font shown on your customer-facing join page.
+          </p>
+        </div>
+
+        {brandLoading ? (
+          <div className="p-5 flex flex-col gap-3">
+            {[...Array(3)].map((_, i) => <div key={i} className="h-10 bg-[#F5F5F8] rounded-xl animate-pulse" />)}
+          </div>
+        ) : (
+          <div className="p-5 flex flex-col gap-5">
+
+            {/* Logo upload */}
+            <div className="flex flex-col gap-2">
+              <label className="text-[13px] font-bold text-[#1A1A2E]">Store Logo</label>
+              <div className="flex items-center gap-4">
+                {/* Preview */}
+                <div
+                  className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden border border-[#EBEBF2]"
+                  style={{ backgroundColor: brandColor }}
+                >
+                  {logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="font-['Coiny'] text-white text-xl leading-none">
+                      {stores.find(s => s.id === activeStoreId)?.storeName?.slice(0, 2).toUpperCase() ?? '??'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="cursor-pointer inline-flex items-center gap-2 bg-[#F5F5F8] rounded-xl px-4 py-2 text-[13px] font-semibold text-[#1A1A2E] hover:bg-[#EBEBF2] transition-colors">
+                    {logoUploading ? 'Uploading…' : 'Upload image'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={logoUploading}
+                      onChange={handleLogoUpload}
+                    />
+                  </label>
+                  {logoUrl && (
+                    <button
+                      onClick={() => setLogoUrl(null)}
+                      className="text-[11px] text-[#8E8EA8] font-medium text-left hover:text-red-500 transition-colors"
+                    >
+                      Remove logo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Brand color */}
+            <div className="flex flex-col gap-2">
+              <label className="text-[13px] font-bold text-[#1A1A2E]">Brand Color</label>
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-xl border border-[#EBEBF2] flex-shrink-0"
+                  style={{ backgroundColor: brandColor }}
+                />
+                <input
+                  type="color"
+                  value={brandColor}
+                  onChange={e => setBrandColor(e.target.value)}
+                  className="w-10 h-10 rounded-lg border border-[#EBEBF2] cursor-pointer p-0.5 bg-white"
+                />
+                <span className="text-[13px] font-mono text-[#8E8EA8]">{brandColor}</span>
+              </div>
+            </div>
+
+            {/* Font selector */}
+            <div className="flex flex-col gap-2">
+              <label className="text-[13px] font-bold text-[#1A1A2E]">Heading Font</label>
+              <select
+                value={fontFamily}
+                onChange={e => setFontFamily(e.target.value)}
+                className="rounded-xl border border-[#EBEBF2] bg-[#F5F5F8] px-4 py-2 text-[13px] text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-[#4A4B98]/30"
+              >
+                {GOOGLE_FONTS.map(f => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+              {/* Live font preview */}
+              <div
+                className="mt-1 rounded-xl px-4 py-3 text-center text-xl font-bold"
+                style={{
+                  backgroundColor: brandColor,
+                  color: '#fff',
+                  fontFamily: `'${fontFamily}', 'Coiny', sans-serif`,
+                }}
+              >
+                {stores.find(s => s.id === activeStoreId)?.storeName ?? 'Store Name Preview'}
+              </div>
+            </div>
+
+            {/* Save button */}
+            <button
+              onClick={handleBrandSave}
+              disabled={brandSaving}
+              className="w-full py-3.5 rounded-xl font-bold text-[14px] text-white transition-colors disabled:opacity-60"
+              style={{ backgroundColor: '#4A4B98' }}
+            >
+              {brandSaving ? 'Saving…' : brandSaved ? '✓ Saved!' : 'Save Branding'}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Cashier PIN management */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -447,7 +644,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
 
       {/* Support */}
       <p className="text-[11px] text-[#8E8EA8] text-center font-medium">
-        Billing, cancellation, or technical issues?{' '}
+        Billing, cancellation, or technical issues?{'  '}
         <a href="mailto:support@binperks.com" className="underline text-[#4A4B98] font-semibold">
           support@binperks.com
         </a>
