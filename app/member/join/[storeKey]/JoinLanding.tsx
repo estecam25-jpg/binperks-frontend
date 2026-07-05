@@ -156,7 +156,7 @@ export default function JoinLanding({
             {brandName}
           </h1>
           {locationLine && (
-            <p className="text-[20px] font-bold" style={{ color: textOpacityStrong }}>
+            <p className="text-[24px] font-semibold" style={{ color: textOpacityStrong }}>
               {locationLine}
             </p>
           )}
