@@ -85,10 +85,15 @@ export default function StampSignInPage() {
     setStatus('loading')
 
     const supabase = createClient()
+
+    // Filter by store_id so a PIN collision across stores never returns the
+    // wrong cashier. store.id is loaded from the store fetch on mount and is
+    // the UUID of the store whose /stamp/[storeKey] URL this tablet is on.
     const { data, error } = await supabase
       .from('staff_users')
       .select('id, name, role, merchant_id, store_id')
       .eq('pin', enteredPin)
+      .eq('store_id', store.id)
       .eq('is_active', true)
       .single()
 
