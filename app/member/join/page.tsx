@@ -31,6 +31,8 @@ export default async function MemberJoinPage() {
     .eq('is_active', true)
     .order('canonical_key', { ascending: true }) as { data: Store[] | null }
 
+  console.log('stores fetched:', stores?.length, stores?.map(s => s.canonical_key))
+
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
@@ -91,8 +93,4 @@ export default async function MemberJoinPage() {
                 </div>
                 <span className="text-[20px] text-[#D1D1DC] flex-shrink-0">›</span>
               </Link>
-            ))}
-          </div>
-        )}
-
-        <p className="text-[11px] text-[#8
+  
