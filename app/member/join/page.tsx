@@ -80,7 +80,7 @@ export default async function MemberJoinPage() {
                   </p>
                   {/* Display name — bold, primary */}
                   <p className="text-[15px] font-bold text-[#1A1A2E] truncate leading-tight">
-                    {store.brand_name}
+                    {store.display_name}
                   </p>
                   {/* City, State — subtitle */}
                   {(store.city || store.state) && (
@@ -95,7 +95,7 @@ export default async function MemberJoinPage() {
           </div>
         )}
 
-        <p className="text-[11px] text-[#8E8EA8] text-center font-medium mt-4">
+        <p className="text-[11px] text-[#8E8EA8] text-center font-medium mt-2">
           Questions? <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
         </p>
       </main>
