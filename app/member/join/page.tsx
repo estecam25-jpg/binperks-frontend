@@ -10,6 +10,8 @@
 import Link from 'next/link'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
+export const dynamic = 'force-dynamic'
+
 interface Store {
   id: string
   canonical_key: string
@@ -81,7 +83,11 @@ export default async function MemberJoinPage() {
                     {store.display_name}
                   </p>
                   {/* City, State — subtitle */}
-                  <p className="text-[12px] text-[#8E8EA8] font-medium">{store.city}, {store.state}</p>
+                  {(store.city || store.state) && (
+                    <p className="text-[12px] text-[#8E8EA8] font-medium">
+                      {[store.city, store.state].filter(Boolean).join(', ')}
+                    </p>
+                  )}
                 </div>
                 <span className="text-[20px] text-[#D1D1DC] flex-shrink-0">›</span>
               </Link>
@@ -89,10 +95,4 @@ export default async function MemberJoinPage() {
           </div>
         )}
 
-        <p className="text-[11px] text-[#8E8EA8] text-center font-medium mt-2">
-          Questions? <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
-        </p>
-      </main>
-    </div>
-  )
-}
+        <p className="text-[11px] text-[#8
