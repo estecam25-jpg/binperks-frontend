@@ -114,6 +114,8 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    console.log('[/api/member/login] linkData:', JSON.stringify(linkData))
+
     if (linkError || !linkData) {
       console.error('[/api/member/login] generateLink error:', linkError)
       return NextResponse.json({ error: 'Failed to generate login link' }, { status: 500 })
