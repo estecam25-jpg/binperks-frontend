@@ -119,9 +119,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to generate login link' }, { status: 500 })
     }
 
-    // TODO: POST to GHL webhook once the Express route exists:
-    //   POST https://your-backend.com/webhooks/ghl/member-login
-    //   { memberId: member.id, phone, firstName: member.first_name, magicLink: linkData.properties.action_link }
+    // Fire-and-forget: send magic link to member via GHL → SMS
+    const ghlWebhook = process.env.GHL_MAGIC_LINK_WEBHOOK_URL
+    if (ghlWebhook) {
+      fetch(ghlWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId:  member.id,
+          phone,
+          firstName: member.first_name,
+          magicLink: linkData.properties.action_link,
+        }),
+      }).catch(err => console.error('[/api/member/login] GHL webhook error:', err))
+    }
 
     return NextResponse.json({ ok: true })
 
