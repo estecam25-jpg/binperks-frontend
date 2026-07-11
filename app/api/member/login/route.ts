@@ -123,19 +123,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to generate login link' }, { status: 500 })
     }
 
-    // Fire-and-forget: send magic link to member via GHL → SMS
+    // Awaited: send magic link to member via GHL → SMS
     const ghlWebhook = process.env.GHL_MAGIC_LINK_WEBHOOK_URL
     if (ghlWebhook) {
-      fetch(ghlWebhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          memberId:  member.id,
-          phone,
-          firstName: member.first_name,
-          magicLink: linkData.properties.action_link,
-        }),
-      }).catch(err => console.error('[/api/member/login] GHL webhook error:', err))
+      try {
+        await fetch(ghlWebhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            memberId:  member.id,
+            phone,
+            firstName: member.first_name,
+            magicLink: linkData.properties.action_link,
+          }),
+        })
+      } catch (err) {
+        console.error('[/api/member/login] GHL webhook error:', err)
+      }
     }
 
     return NextResponse.json({ ok: true })
