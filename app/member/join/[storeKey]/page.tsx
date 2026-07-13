@@ -30,17 +30,12 @@ export default async function JoinLandingPage({
   const admin = createAdminSupabaseClient()
 
   // Fetch store branding server-side — same pattern as /member/login/[storeKey]
-  const { data: storeData } = await admin
+  const { data: store } = await admin
     .from('stores')
-    .select('id, canonical_key, display_name, brand_name, brand_color, logo_url, merchant_id, google_review_url, facebook_review_url, city, state, font_family')
+    .select('id, canonical_key, display_name, brand_name, brand_color, logo_url, merchant_id, google_review_url, facebook_review_url')
     .eq('canonical_key', storeKey)
     .eq('is_active', true)
     .maybeSingle()
-  const store = storeData as typeof storeData & {
-    city: string | null
-    state: string | null
-    font_family: string | null
-  }
 
   // Store not found
   if (!store) {
@@ -88,9 +83,6 @@ export default async function JoinLandingPage({
       logoUrl={store.logo_url ?? null}
       googleReviewUrl={store.google_review_url ?? null}
       facebookReviewUrl={store.facebook_review_url ?? null}
-      city={store.city ?? null}
-      state={store.state ?? null}
-      fontFamily={store.font_family ?? 'Montserrat'}
       referrer={referrer}
     />
   )
