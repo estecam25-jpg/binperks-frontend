@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     })
     console.log('[/api/member/login] insert result:', insertError)
     if (insertError) console.error('[/api/member/login] short_links insert error:', insertError)
-    const smsLink = magicLink
+    const smsLink = `${process.env.NEXT_PUBLIC_APP_URL}/s/${code}`
 
     // Awaited: send short magic link to member via GHL → SMS
     const ghlWebhook = process.env.GHL_MAGIC_LINK_WEBHOOK_URL
