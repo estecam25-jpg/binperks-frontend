@@ -125,7 +125,8 @@ export async function POST(req: NextRequest) {
     const magicLink = `${APP_URL}/auth/confirm?token_hash=${linkData.properties.hashed_token}&type=magiclink&next=/member/dashboard`
 
     const code = Math.random().toString(36).substring(2, 10)
-    const { error: insertError } = await admin.from('short_links').insert({
+    const admin2 = createAdminSupabaseClient()
+    const { error: insertError } = await admin2.from('short_links').insert({
       code,
       url: magicLink,
       expires_at: new Date(Date.now() + 65 * 60 * 1000).toISOString(),
