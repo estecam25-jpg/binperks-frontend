@@ -31,7 +31,7 @@ export async function GET(
     }
 
     // Single-use: delete before redirecting
-    await redis.del(`short:${code}`)
+    // single use disabled - let TTL handle expiry
 
     return NextResponse.redirect(url)
   } catch (err) {
