@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
             memberId:  member.id,
             phone,
             firstName: member.first_name,
-            magicLink: `${APP_URL}/auth/callback?token_hash=${linkData.properties.hashed_token}&type=magiclink&next=/member/dashboard`,
+            magicLink: `${APP_URL}/auth/confirm?token_hash=${linkData.properties.hashed_token}&type=magiclink&next=/member/dashboard`,
           }),
         })
       } catch (err) {
