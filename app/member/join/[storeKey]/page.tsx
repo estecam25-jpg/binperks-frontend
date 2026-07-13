@@ -89,6 +89,7 @@ export default async function JoinLandingPage({
   }
 
   return (
+    {/* @ts-ignore */}
     <JoinLanding
       storeKey={storeKey}
       storeId={store.id}
