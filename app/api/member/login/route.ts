@@ -123,19 +123,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to generate login link' }, { status: 500 })
     }
 
-    // Build confirm URL then shorten it so the SMS stays under 160 chars
+    // Build confirm URL then shorten it inline (no self-HTTP-call) so SMS stays under 160 chars
     const magicLink = `${APP_URL}/auth/confirm?token_hash=${linkData.properties.hashed_token}&type=magiclink&next=/member/dashboard`
 
     let smsLink = magicLink // fallback to full URL if shortener fails
     try {
-      const shortenRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/shorten`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: magicLink }),
-      })
-      if (shortenRes.ok) {
-        const { shortUrl } = await shortenRes.json() as { shortUrl?: string }
-        if (shortUrl) smsLink = shortUrl
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+      const arr = new Uint8Array(8)
+      crypto.getRandomValues(arr)
+      const code = Array.from(arr).map(b => chars[b % chars.length]).join('')
+      const expiresAt = new Date(Date.now() + 65 * 60 * 1000).toISOString()
+      const { error: shortErr } = await admin
+        .from('short_links')
+        .insert({ code, url: magicLink, expires_at: expiresAt })
+      if (shortErr) {
+        console.error('[/api/member/login] shorten insert error:', shortErr.message)
+      } else {
+        smsLink = `${APP_URL}/s/${code}`
       }
     } catch (err) {
       console.error('[/api/member/login] shorten error:', err)
