@@ -123,7 +123,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to generate login link' }, { status: 500 })
     }
 
-    // Awaited: send magic link to member via GHL → SMS
+    // Build confirm URL then shorten it so the SMS stays under 160 chars
+    const magicLink = `${APP_URL}/auth/confirm?token_hash=${linkData.properties.hashed_token}&type=magiclink&next=/member/dashboard`
+
+    let smsLink = magicLink // fallback to full URL if shortener fails
+    try {
+      const shortenRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/shorten`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: magicLink }),
+      })
+      if (shortenRes.ok) {
+        const { shortUrl } = await shortenRes.json() as { shortUrl?: string }
+        if (shortUrl) smsLink = shortUrl
+      }
+    } catch (err) {
+      console.error('[/api/member/login] shorten error:', err)
+    }
+
+    // Awaited: send short magic link to member via GHL → SMS
     const ghlWebhook = process.env.GHL_MAGIC_LINK_WEBHOOK_URL
     if (ghlWebhook) {
       try {
@@ -134,7 +152,7 @@ export async function POST(req: NextRequest) {
             memberId:  member.id,
             phone,
             firstName: member.first_name,
-            magicLink: `${APP_URL}/auth/confirm?token_hash=${linkData.properties.hashed_token}&type=magiclink&next=/member/dashboard`,
+            magicLink: smsLink,
           }),
         })
       } catch (err) {
