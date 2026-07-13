@@ -130,6 +130,7 @@ export async function POST(req: NextRequest) {
       url: magicLink,
       expires_at: new Date(Date.now() + 65 * 60 * 1000).toISOString(),
     })
+    console.log('[/api/member/login] insert result:', insertError)
     if (insertError) console.error('[/api/member/login] short_links insert error:', insertError)
     const smsLink = `${process.env.NEXT_PUBLIC_APP_URL}/s/${code}`
 
