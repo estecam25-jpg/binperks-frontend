@@ -125,11 +125,12 @@ export async function POST(req: NextRequest) {
     const magicLink = `${APP_URL}/auth/confirm?token_hash=${linkData.properties.hashed_token}&type=magiclink&next=/member/dashboard`
 
     const code = Math.random().toString(36).substring(2, 10)
-    await admin.from('short_links').insert({
+    const { error: insertError } = await admin.from('short_links').insert({
       code,
       url: magicLink,
       expires_at: new Date(Date.now() + 65 * 60 * 1000).toISOString(),
     })
+    if (insertError) console.error('[/api/member/login] short_links insert error:', insertError)
     const smsLink = `${process.env.NEXT_PUBLIC_APP_URL}/s/${code}`
 
     // Awaited: send short magic link to member via GHL → SMS
