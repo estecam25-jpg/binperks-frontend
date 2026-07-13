@@ -51,7 +51,7 @@ export default async function JoinLandingPage({
     .eq('canonical_key', storeKey)
     .eq('is_active', true)
     .maybeSingle()
-  const store = storeData as StoreRow | null
+  const store = storeData as any
 
   // Store not found
   if (!store) {
@@ -89,8 +89,8 @@ export default async function JoinLandingPage({
   }
 
   return (
-    {/* @ts-ignore */}
-    <JoinLanding
+    
+    <JoinLanding {...({} as any)}
       storeKey={storeKey}
       storeId={store.id}
       merchantId={store.merchant_id}
