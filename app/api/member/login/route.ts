@@ -3,9 +3,9 @@
  *
  * Passwordless member login. Member submits their phone number; we resolve
  * the matching member record(s), mint a Supabase magic link via the admin
- * client, and (once the Express/GHL webhook exists) hand it to GHL so it can
- * be delivered by SMS — Supabase's own phone provider is OFF, GHL/Twilio
- * sends all member SMS per the locked Auth Architecture.
+ * client, shorten it via Upstash Redis, and send the short URL to GHL for
+ * SMS delivery — Supabase's own phone provider is OFF, GHL/Twilio sends all
+ * member SMS per the locked Auth Architecture.
  *
  * Members are merchant-scoped, so the same phone number can legitimately
  * belong to more than one merchant's member list. We never reveal which —
@@ -18,12 +18,13 @@
  *
  * Responses:
  *   200 { ok: true }
- *   200 { ok: false, error: 'multiple_accounts', accounts: [{ memberId, storeName, brandName, brandColor }] }
+ *   200 { ok: false, error: 'multiple_accounts', accounts: [...] }
  *   404 { error: 'not_found' }
  *   400 { error: string }
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Redis } from '@upstash/redis'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
@@ -114,26 +115,27 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    console.log('[/api/member/login] linkData:', JSON.stringify(linkData))
-
     if (linkError || !linkData) {
       console.error('[/api/member/login] generateLink error:', linkError)
       return NextResponse.json({ error: 'Failed to generate login link' }, { status: 500 })
     }
 
-    // Build confirm URL then shorten it inline so SMS stays under 160 chars
+    // Build confirm URL then shorten via Upstash Redis (single-use, 65 min TTL)
     const magicLink = `${APP_URL}/auth/confirm?token_hash=${linkData.properties.hashed_token}&type=magiclink&next=/member/dashboard`
 
-    const code = Math.random().toString(36).substring(2, 10)
-    const admin2 = createAdminSupabaseClient()
-    const { error: insertError } = await admin2.from('short_links').insert({
-      code,
-      url: magicLink,
-      expires_at: new Date(Date.now() + 65 * 60 * 1000).toISOString(),
-    })
-    console.log('[/api/member/login] insert result:', insertError)
-    if (insertError) console.error('[/api/member/login] short_links insert error:', insertError)
-    const smsLink = `${process.env.NEXT_PUBLIC_APP_URL}/s/${code}`
+    let smsLink = magicLink // fallback to full URL if Redis fails
+    try {
+      const redis = new Redis({
+        url: process.env.KV_REST_API_URL!,
+        token: process.env.KV_REST_API_TOKEN!,
+      })
+      const code = Math.random().toString(36).substring(2, 10)
+      // Store token_hash in Redis (not in URL) so bots can't consume it via link preview
+      await redis.set(`token:${code}`, linkData.properties.hashed_token, { ex: 65 * 60 })
+      smsLink = `${process.env.NEXT_PUBLIC_APP_URL}/s/${code}`
+    } catch (err) {
+      console.error('[/api/member/login] Redis shorten error:', err)
+    }
 
     // Awaited: send short magic link to member via GHL → SMS
     const ghlWebhook = process.env.GHL_MAGIC_LINK_WEBHOOK_URL

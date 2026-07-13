@@ -1,35 +1,50 @@
 /**
  * POST /api/auth/confirm
  *
- * Called by the /auth/confirm page when the user taps "Tap to Sign In".
- * Verifies the OTP token, sets session cookies, and returns the redirect URL.
+ * Called by /auth/confirm when the user taps "Tap to Sign In".
+ * Looks up the token_hash from Redis using the short code, verifies the OTP,
+ * sets session cookies, and returns { redirectUrl }.
  *
- * Using a POST (not GET) means SMS link-preview bots cannot consume the token
- * by pre-fetching the URL — bots only follow GET requests.
+ * The token_hash is never sent to the browser — it lives only in Redis until
+ * this handler retrieves and deletes it (single-use).
  *
- * Request body: { token_hash: string, type: string, next: string }
+ * Request body: { code: string, next?: string }
  * Response:     { redirectUrl: string } on success
  *               { error: string }       on failure
  */
 
 import { createServerClient } from '@supabase/ssr'
-import type { EmailOtpType } from '@supabase/supabase-js'
+import { Redis } from '@upstash/redis'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   const body = await request.json() as {
-    token_hash?: string
-    type?: string
+    code?: string
     next?: string
   }
 
-  const { token_hash, type, next = '/member/dashboard' } = body
+  const { code, next = '/member/dashboard' } = body
 
-  if (!token_hash || !type) {
-    return NextResponse.json({ error: 'Missing token_hash or type' }, { status: 400 })
+  if (!code) {
+    return NextResponse.json({ error: 'Missing code' }, { status: 400 })
   }
 
+  // Look up token_hash from Redis and delete it (single-use)
+  const redis = new Redis({
+    url: process.env.KV_REST_API_URL!,
+    token: process.env.KV_REST_API_TOKEN!,
+  })
+
+  const token_hash = await redis.get<string>(`token:${code}`)
+
+  if (!token_hash) {
+    return NextResponse.json({ error: 'expired' }, { status: 410 })
+  }
+
+  await redis.del(`token:${code}`)
+
+  // Verify the OTP and set session cookies
   const cookieStore = await cookies()
 
   const supabase = createServerClient(
@@ -53,7 +68,7 @@ export async function POST(request: NextRequest) {
 
   const { error } = await supabase.auth.verifyOtp({
     token_hash,
-    type: type as EmailOtpType,
+    type: 'magiclink',
   })
 
   if (error) {
@@ -61,8 +76,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 400 })
   }
 
-  // Build response with session cookies so the browser stores them
-  // before the client navigates to the dashboard
+  // Copy session cookies into the response so the browser stores them
   const response = NextResponse.json({ redirectUrl: next })
 
   cookieStore.getAll().forEach(cookie => {
