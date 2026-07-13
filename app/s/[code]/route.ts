@@ -1,45 +1,41 @@
 /**
  * GET /s/[code]
  *
- * URL shortener redirect handler.
- * Looks up the short code in the short_links table, redirects to the stored
- * URL, then deletes the record (single-use link).
+ * URL shortener redirect handler using Upstash Redis.
+ * Looks up the short code, redirects to the stored URL, then deletes the
+ * key (single-use link). Keys auto-expire after 65 minutes via Redis TTL.
  *
- * Expired or missing codes redirect to /member/login?error=expired
- * so the member can request a fresh magic link.
+ * Missing or expired codes redirect to /member/login?error=expired.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { Redis } from '@upstash/redis'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ code: string }> }
 ) {
   const { code } = await params
-  const admin = createAdminSupabaseClient()
-
-  const { data } = await admin
-    .from('short_links')
-    .select('id, url, expires_at')
-    .eq('code', code)
-    .maybeSingle()
-
   const expired = new URL('/member/login?error=expired', request.url)
 
-  if (!data) {
+  try {
+    const redis = new Redis({
+      url: process.env.KV_REST_API_URL!,
+      token: process.env.KV_REST_API_TOKEN!,
+    })
+
+    const url = await redis.get<string>(`short:${code}`)
+
+    if (!url) {
+      return NextResponse.redirect(expired)
+    }
+
+    // Single-use: delete before redirecting
+    await redis.del(`short:${code}`)
+
+    return NextResponse.redirect(url)
+  } catch (err) {
+    console.error('[/s/[code]] Redis error:', err)
     return NextResponse.redirect(expired)
   }
-
-  if (new Date(data.expires_at) < new Date()) {
-    await admin.from('short_links').delete().eq('id', data.id)
-    return NextResponse.redirect(expired)
-  }
-
-  const destination = data.url
-
-  // Single-use: delete before redirecting
-  await admin.from('short_links').delete().eq('id', data.id)
-
-  return NextResponse.redirect(destination)
 }
