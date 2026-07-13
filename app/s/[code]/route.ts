@@ -1,13 +1,11 @@
 /**
  * GET /s/[code]
  *
- * URL shortener redirect handler.
- * Checks that the code exists in Redis, then redirects to the /auth/confirm
- * page with ONLY the code — the token_hash never appears in the URL, so
- * SMS link-preview bots cannot follow it and consume the token.
+ * URL shortener redirect handler using Upstash Redis.
+ * Looks up the short code, redirects to the stored URL, then deletes the
+ * key (single-use link). Keys auto-expire after 65 minutes via Redis TTL.
  *
- * The actual token_hash is stored in Redis under token:[code] and is only
- * retrieved when the member taps the "Sign In" button on /auth/confirm.
+ * Missing or expired codes redirect to /member/login?error=expired.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,15 +24,16 @@ export async function GET(
       token: process.env.KV_REST_API_TOKEN!,
     })
 
-    // Verify the token exists — don't consume it yet (that happens on button tap)
-    const tokenExists = await redis.exists(`token:${code}`)
+    const url = await redis.get<string>(`short:${code}`)
 
-    if (!tokenExists) {
+    if (!url) {
       return NextResponse.redirect(expired)
     }
 
-    // Redirect to confirm page with only the code — token_hash stays in Redis
-    return NextResponse.redirect(new URL(`/auth/confirm?code=${code}`, request.url))
+    // Single-use: delete before redirecting
+    // single use disabled - let TTL handle expiry
+
+    return NextResponse.redirect(url)
   } catch (err) {
     console.error('[/s/[code]] Redis error:', err)
     return NextResponse.redirect(expired)

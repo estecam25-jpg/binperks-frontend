@@ -1,16 +1,15 @@
 /**
  * /auth/confirm
  *
- * Intermediate sign-in page. The magic link in the SMS points to /s/[code]
- * which redirects here with only the short code — the token_hash is stored
- * in Redis and never exposed in the URL. This prevents SMS link-preview bots
- * from consuming the single-use token before the user taps the link.
+ * Intermediate sign-in page. The magic link in the SMS points here instead of
+ * directly to /auth/callback. This prevents SMS app link-preview bots from
+ * consuming the single-use token before the user taps the link.
  *
  * Flow:
- *   SMS → /s/[code] → /auth/confirm?code=XXXXXXXX
- *   User taps "Sign In" → POST /api/auth/confirm with { code }
- *   API looks up token_hash from Redis, calls verifyOtp, sets session cookies
- *   Client navigates to /member/dashboard
+ *   SMS link → /auth/confirm?token_hash=XXX&type=magiclink&next=/member/dashboard
+ *   User taps "Sign In" button → POST /api/auth/confirm
+ *   API calls verifyOtp, sets session cookies, returns { redirectUrl }
+ *   Client navigates to redirectUrl (member dashboard)
  */
 
 'use client'
@@ -23,11 +22,12 @@ function ConfirmForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/member/dashboard'
+  const token_hash = searchParams.get('token_hash')
+  const type       = searchParams.get('type')
+  const next       = searchParams.get('next') ?? '/member/dashboard'
 
   async function handleSignIn() {
-    if (!code) {
+    if (!token_hash || !type) {
       setError('Invalid sign-in link. Please request a new one.')
       return
     }
@@ -38,7 +38,7 @@ function ConfirmForm() {
       const res = await fetch('/api/auth/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, next }),
+        body: JSON.stringify({ token_hash, type, next }),
       })
 
       const data = await res.json()
@@ -96,7 +96,7 @@ function ConfirmForm() {
           ) : (
             <button
               onClick={handleSignIn}
-              disabled={loading || !code}
+              disabled={loading || !token_hash}
               className="w-full py-4 rounded-2xl font-bold text-[16px] font-['Montserrat'] shadow-md active:scale-[0.97] transition-transform disabled:opacity-60"
               style={{ backgroundColor: '#4A4B98', color: '#FFFFFF' }}
             >
