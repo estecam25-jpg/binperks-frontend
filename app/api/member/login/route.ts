@@ -21,6 +21,7 @@
  *   200 { ok: false, error: 'multiple_accounts', accounts: [...] }
  *   404 { error: 'not_found' }
  *   400 { error: string }
+ *   429 { error: string }  — rate limited
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -52,6 +53,24 @@ export async function POST(req: NextRequest) {
 
     if (!phone || phone.length !== 10) {
       return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
+    }
+
+    // Rate limiting: max 5 magic link requests per phone per 15-minute window.
+    // Prevents SMS credit abuse and phone enumeration via timing differences.
+    const redis = new Redis({
+      url: process.env.KV_REST_API_URL!,
+      token: process.env.KV_REST_API_TOKEN!,
+    })
+    const rateLimitKey = `ratelimit:login:${phone}`
+    const requests = await redis.incr(rateLimitKey)
+    if (requests === 1) {
+      await redis.expire(rateLimitKey, 15 * 60) // 15-minute window
+    }
+    if (requests > 5) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please wait 15 minutes before requesting a new sign-in link.' },
+        { status: 429 }
+      )
     }
 
     // This is a public endpoint (no Supabase session). Use admin client for
@@ -126,10 +145,7 @@ export async function POST(req: NextRequest) {
 
     let smsLink = magicLink // fallback to full URL if Redis fails
     try {
-      const redis = new Redis({
-        url: process.env.KV_REST_API_URL!,
-        token: process.env.KV_REST_API_TOKEN!,
-      })
+      // Reuse the redis client already created above for rate limiting
       const code = Math.random().toString(36).substring(2, 10)
       // Store token_hash in Redis (not in URL) so bots can't consume it via link preview
       await redis.set(`token:${code}`, linkData.properties.hashed_token, { ex: 65 * 60 })
@@ -164,4 +180,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-// redeploy Mon Jul 13 19:54:43 EDT 2026
