@@ -167,7 +167,7 @@ export default function LookupPage() {
           onClick={handleSwitchCashier}
           className="text-[12px] font-semibold text-[#4A4B98] border border-[#4A4B98] rounded-lg px-3 py-1.5 active:bg-[#4A4B98] active:text-white transition-colors"
         >
-          Switch
+          Switch Cashier
         </button>
       </div>
 
