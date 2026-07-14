@@ -1,4 +1,4 @@
-// ─── RedemptionsTab ───────────────────────────────────────────────────────────
+// --- RedemptionsTab ---
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -114,114 +114,180 @@ export function RedemptionsTab({ storeId }: { storeId: string | null }) {
   )
 }
 
-// ─── PerksTab ─────────────────────────────────────────────────────────────────
+// --- PerksTab ---
 
 interface Perk { slot: number; title: string; description: string; isActive: boolean }
 interface StoreRef { id: string; storeName: string; storeKey?: string }
 
+const FREE_PERK_DEFAULTS: Perk[] = [
+  { slot: 1, title: 'Birthday Perk', description: 'Show your ID during your birthday month for 5% off anything from the bins.', isActive: true },
+  { slot: 2, title: 'Behind the Register Discount', description: 'Get 10% off any non-bin items.', isActive: true },
+]
+
+const VIP_PERK_DEFAULTS: Perk[] = [
+  { slot: 1, title: 'VIP Bins', description: 'Shop in your Exclusive VIP bins. All items in these bins have a $50+ retail value.', isActive: true },
+  { slot: 2, title: 'VIP Line', description: 'VIP members get to be the first to shop.', isActive: true },
+  { slot: 3, title: 'VIP Hour', description: 'Shop for 3 hours with fellow VIP members before we open to the public.', isActive: true },
+  { slot: 4, title: 'Behind the Register Discount', description: 'Get 20% off any non-bin items.', isActive: true },
+  { slot: 5, title: 'BOGO $1 Day', description: 'Buy One Get One free on Dollar Day.', isActive: true },
+]
+
 export function PerksTab({ storeId, stores }: { storeId: string | null; stores: StoreRef[] }) {
   const activeStoreId = storeId ?? stores[0]?.id
-  const [perks, setPerks] = useState<Perk[]>(
-    Array.from({ length: 5 }, (_, i) => ({ slot: i + 1, title: '', description: '', isActive: false }))
-  )
+  const [freePerks, setFreePerks] = useState<Perk[]>(FREE_PERK_DEFAULTS)
+  const [vipPerks, setVipPerks] = useState<Perk[]>(VIP_PERK_DEFAULTS)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [freeWarning, setFreeWarning] = useState(false)
+  const [vipWarning, setVipWarning] = useState(false)
 
   useEffect(() => {
     if (!activeStoreId) return
     setLoading(true)
     fetch(`/api/merchant/perks?storeId=${activeStoreId}`)
       .then(r => r.json())
-      .then(d => { setPerks(d.perks); setLoading(false) })
+      .then(d => {
+        const fp: Perk[] = d.freePerks ?? []
+        const vp: Perk[] = d.vipPerks ?? []
+        setFreePerks(fp.some((p: Perk) => p.title) ? fp : FREE_PERK_DEFAULTS)
+        setVipPerks(vp.some((p: Perk) => p.title) ? vp : VIP_PERK_DEFAULTS)
+        setLoading(false)
+      })
   }, [activeStoreId])
 
-  function updatePerk(slot: number, field: keyof Perk, value: string | boolean) {
-    setPerks(prev => prev.map(p => p.slot === slot ? { ...p, [field]: value } : p))
-    setSaved(false)
+  function updateFree(slot: number, field: keyof Perk, value: string | boolean) {
+    setFreePerks(prev => prev.map(p => p.slot === slot ? { ...p, [field]: value } : p))
+    setSaved(false); setFreeWarning(false)
+  }
+
+  function updateVip(slot: number, field: keyof Perk, value: string | boolean) {
+    setVipPerks(prev => prev.map(p => p.slot === slot ? { ...p, [field]: value } : p))
+    setSaved(false); setVipWarning(false)
   }
 
   async function handleSave() {
     if (!activeStoreId) return
+    if (freePerks.filter(p => p.isActive).length < 1) { setFreeWarning(true); return }
+    if (vipPerks.filter(p => p.isActive).length < 3) { setVipWarning(true); return }
     setSaving(true)
     const res = await fetch('/api/merchant/perks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId: activeStoreId, perks }),
+      body: JSON.stringify({ storeId: activeStoreId, freePerks, vipPerks }),
     })
     setSaving(false)
     if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000) }
   }
 
+  function PerkCard({
+    perk, label, onChange,
+  }: {
+    perk: Perk
+    label: string
+    onChange: (slot: number, field: keyof Perk, value: string | boolean) => void
+  }) {
+    return (
+      <div className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">{label}</span>
+          <button
+            onClick={() => onChange(perk.slot, 'isActive', !perk.isActive)}
+            className={`relative w-10 h-6 rounded-full transition-colors ${perk.isActive ? 'bg-[#4A4B98]' : 'bg-[#D1D1DC]'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${perk.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
+          </button>
+        </div>
+        <input
+          type="text"
+          placeholder="Perk title..."
+          value={perk.title}
+          onChange={e => onChange(perk.slot, 'title', e.target.value)}
+          maxLength={60}
+          className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-bold text-[#1A1A2E] placeholder:font-normal placeholder:text-[#D1D1DC]"
+        />
+        <textarea
+          rows={2}
+          placeholder="Short description members will see..."
+          value={perk.description}
+          onChange={e => onChange(perk.slot, 'description', e.target.value)}
+          maxLength={140}
+          className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[13px] font-medium text-[#1A1A2E] placeholder:text-[#D1D1DC] resize-none"
+        />
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        {[...Array(7)].map((_, i) => <div key={i} className="bg-white rounded-2xl h-28 animate-pulse" />)}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-4 p-4 pb-12">
+    <div className="flex flex-col gap-5 p-4 pb-12">
+
       <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
         <p className="text-[12px] font-semibold text-amber-800 leading-snug">
-          Update your perks monthly. If you don't update them, last month's carry over automatically.
+          Update your perks monthly. If you don&apos;t update them, last month&apos;s carry over automatically.
           Members see these on their dashboard.
         </p>
       </div>
 
-      {loading ? (
-        <div className="flex flex-col gap-3">
-          {[...Array(5)].map((_, i) => <div key={i} className="bg-white rounded-2xl h-28 animate-pulse" />)}
+      {/* Free member perks */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <p className="text-[13px] font-bold text-[#1A1A2E]">Free Member Perks</p>
+          <span className="text-[11px] font-semibold text-[#8E8EA8]">2 slots &middot; min 1 active</span>
         </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {perks.map(perk => (
-            <div key={perk.slot} className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">
-                  Perk {perk.slot}
-                </span>
-                {/* Active toggle */}
-                <button
-                  onClick={() => updatePerk(perk.slot, 'isActive', !perk.isActive)}
-                  className={`relative w-10 h-6 rounded-full transition-colors ${perk.isActive ? 'bg-[#4A4B98]' : 'bg-[#D1D1DC]'}`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${perk.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
-                </button>
-              </div>
-              <input
-                type="text"
-                placeholder={`Perk ${perk.slot} title…`}
-                value={perk.title}
-                onChange={e => updatePerk(perk.slot, 'title', e.target.value)}
-                maxLength={60}
-                className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-bold text-[#1A1A2E] placeholder:font-normal placeholder:text-[#D1D1DC]"
-              />
-              <textarea
-                rows={2}
-                placeholder="Short description members will see…"
-                value={perk.description}
-                onChange={e => updatePerk(perk.slot, 'description', e.target.value)}
-                maxLength={140}
-                className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[13px] font-medium text-[#1A1A2E] placeholder:text-[#D1D1DC] resize-none"
-              />
-            </div>
-          ))}
+        {freeWarning && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+            <p className="text-[12px] font-semibold text-red-700">At least 1 Free perk must be active.</p>
+          </div>
+        )}
+        {freePerks.map(p => (
+          <PerkCard key={p.slot} perk={p} label={`Free Perk ${p.slot}`} onChange={updateFree} />
+        ))}
+      </div>
+
+      <div className="border-t border-[#EBEBF2]" />
+
+      {/* VIP member perks */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <p className="text-[13px] font-bold text-[#1A1A2E]">VIP Member Perks</p>
+          <span className="text-[11px] font-semibold text-[#8E8EA8]">5 slots &middot; min 3 active</span>
         </div>
-      )}
+        {vipWarning && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+            <p className="text-[12px] font-semibold text-red-700">At least 3 VIP perks must be active.</p>
+          </div>
+        )}
+        {vipPerks.map(p => (
+          <PerkCard key={p.slot} perk={p} label={`VIP Perk ${p.slot}`} onChange={updateVip} />
+        ))}
+      </div>
 
       <button
         onClick={handleSave}
-        disabled={saving || loading}
+        disabled={saving}
         className="w-full py-4 rounded-2xl font-bold text-[16px] text-white font-['Montserrat'] bg-[#4A4B98] disabled:opacity-50 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
       >
         {saving && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-        {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save Perks'}
+        {saved ? '✓ Saved' : saving ? 'Saving...' : 'Save Perks'}
       </button>
     </div>
   )
 }
 
-// ─── MarketingTab ─────────────────────────────────────────────────────────────
+// --- MarketingTab ---
 
 export function MarketingTab({ storeId, stores }: { storeId: string | null; stores: { id: string; storeName: string; storeKey?: string; city: string; state: string }[] }) {
   const activeStore = storeId ? stores.find(s => s.id === storeId) : stores[0]
   const [copied, setCopied] = useState(false)
 
-  // /join/[storeKey] resolves by canonical_key, NOT the store's UUID.
   const joinUrl = activeStore?.storeKey
     ? `https://app.binperks.com/join/${activeStore.storeKey}`
     : ''
@@ -233,9 +299,6 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   }
 
   async function handleDownloadQR() {
-    // QR code is generated as a PNG from the store's join URL
-    // In production: use qrcode library or a QR API
-    // For now: open a QR generator service
     window.open(`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(joinUrl)}&format=png`, '_blank')
   }
 
@@ -246,7 +309,6 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
       <div className="bg-white rounded-2xl px-5 py-6 shadow-sm flex flex-col items-center gap-4">
         <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] self-start">QR code</h2>
         <div className="w-40 h-40 bg-[#F5F5F8] rounded-2xl flex items-center justify-center border-2 border-[#EBEBF2]">
-          {/* In production: render actual QR code SVG using `qrcode` npm package */}
           <div className="text-center">
             <span className="text-4xl">📱</span>
             <p className="text-[10px] text-[#8E8EA8] font-bold mt-1">QR Code</p>
@@ -265,11 +327,11 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         </button>
       </div>
 
-      {/* Referral / join link */}
+      {/* Join link */}
       <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
         <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Member join link</h2>
         <p className="text-[12px] text-[#8E8EA8] font-medium">
-          Share this link on social media or in your store's bio to let customers sign up online.
+          Share this link on social media or in your store&apos;s bio to let customers sign up online.
         </p>
         <div className="flex items-center gap-2 bg-[#F5F5F8] rounded-xl px-3 py-2.5">
           <p className="flex-1 text-[12px] font-semibold text-[#8E8EA8] truncate">{joinUrl || 'Not provisioned yet'}</p>
@@ -299,7 +361,7 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   )
 }
 
-// ─── SettingsTab ──────────────────────────────────────────────────────────────
+// --- SettingsTab ---
 
 const GOOGLE_FONTS = [
   'Google Sans', 'Playfair Display', 'Oswald', 'Dancing Script', 'Metamorphous',
@@ -316,24 +378,21 @@ interface Cashier { id: string; name: string; role: string; pin: string; isActiv
 export function SettingsTab({ storeId, stores }: { storeId: string | null; stores: StoreRef[] }) {
   const activeStoreId = storeId ?? stores[0]?.id
 
-  // ── Branding state ───────────────────────────────────────────────────────
-  const [brandColor,  setBrandColor]  = useState('#4A4B98')
-  const [fontFamily,  setFontFamily]  = useState('Google Sans')
-  const [logoUrl,     setLogoUrl]     = useState<string | null>(null)
+  const [brandColor,    setBrandColor]    = useState('#4A4B98')
+  const [fontFamily,    setFontFamily]    = useState('Google Sans')
+  const [logoUrl,       setLogoUrl]       = useState<string | null>(null)
   const [logoUploading, setLogoUploading] = useState(false)
-  const [brandSaving, setBrandSaving] = useState(false)
-  const [brandSaved,  setBrandSaved]  = useState(false)
-  const [brandLoading, setBrandLoading] = useState(true)
+  const [brandSaving,   setBrandSaving]   = useState(false)
+  const [brandSaved,    setBrandSaved]    = useState(false)
+  const [brandLoading,  setBrandLoading]  = useState(true)
 
-  // ── Cashier state ────────────────────────────────────────────────────────
   const [cashiers, setCashiers] = useState<Cashier[]>([])
-  const [newName, setNewName] = useState('')
-  const [newPin, setNewPin] = useState('')
-  const [adding, setAdding] = useState(false)
+  const [newName,  setNewName]  = useState('')
+  const [newPin,   setNewPin]   = useState('')
+  const [adding,   setAdding]   = useState(false)
   const [addError, setAddError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading,  setLoading]  = useState(true)
 
-  // Fetch current branding when active store changes
   useEffect(() => {
     if (!activeStoreId) return
     setBrandLoading(true)
@@ -349,7 +408,6 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
       })
   }, [activeStoreId])
 
-  // Pre-load Google Font whenever fontFamily picker changes
   useEffect(() => {
     if (!fontFamily) return
     const id = `gf-preview-${fontFamily.replace(/\s+/g, '-')}`
@@ -368,12 +426,12 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
     const { createClient } = await import('@/lib/supabase')
     const supabase = createClient()
     const ext = file.name.split('.').pop() ?? 'jpg'
-    const path = `${activeStoreId}/logo.${ext}`
+    const filePath = `${activeStoreId}/logo.${ext}`
     const { error } = await supabase.storage
       .from('store-logos')
-      .upload(path, file, { upsert: true, contentType: file.type })
+      .upload(filePath, file, { upsert: true, contentType: file.type })
     if (!error) {
-      const { data: { publicUrl } } = supabase.storage.from('store-logos').getPublicUrl(path)
+      const { data: { publicUrl } } = supabase.storage.from('store-logos').getPublicUrl(filePath)
       setLogoUrl(publicUrl)
     }
     setLogoUploading(false)
@@ -385,12 +443,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
     const res = await fetch('/api/merchant/store', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        storeId:    activeStoreId,
-        brandColor,
-        fontFamily: fontFamily || null,
-        logoUrl,
-      }),
+      body: JSON.stringify({ storeId: activeStoreId, brandColor, fontFamily: fontFamily || null, logoUrl }),
     })
     setBrandSaving(false)
     if (res.ok) { setBrandSaved(true); setTimeout(() => setBrandSaved(false), 3000) }
@@ -419,7 +472,6 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
     })
     if (res.ok) {
       setNewName(''); setNewPin('')
-      // Refresh
       fetch(`/api/merchant/cashiers?storeId=${activeStoreId}`)
         .then(r => r.json()).then(d => setCashiers(d.cashiers ?? []))
     } else {
@@ -437,7 +489,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
   return (
     <div className="flex flex-col gap-5 p-4 pb-16">
 
-      {/* ── Store Branding ── */}
+      {/* Store Branding */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[#EBEBF2]">
           <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Store Branding</h2>
@@ -457,7 +509,6 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
             <div className="flex flex-col gap-2">
               <label className="text-[13px] font-bold text-[#1A1A2E]">Store Logo</label>
               <div className="flex items-center gap-4">
-                {/* Preview */}
                 <div
                   className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden border border-[#EBEBF2]"
                   style={{ backgroundColor: brandColor }}
@@ -473,7 +524,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="cursor-pointer inline-flex items-center gap-2 bg-[#F5F5F8] rounded-xl px-4 py-2 text-[13px] font-semibold text-[#1A1A2E] hover:bg-[#EBEBF2] transition-colors">
-                    {logoUploading ? 'Uploading…' : 'Upload image'}
+                    {logoUploading ? 'Uploading...' : 'Upload image'}
                     <input
                       type="file"
                       accept="image/*"
@@ -524,27 +575,22 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
                   <option key={f} value={f}>{f}</option>
                 ))}
               </select>
-              {/* Live font preview */}
               <div
                 className="mt-1 rounded-xl px-4 py-3 text-center text-xl font-bold"
-                style={{
-                  backgroundColor: brandColor,
-                  color: '#fff',
-                  fontFamily: `'${fontFamily}', 'Coiny', sans-serif`,
-                }}
+                style={{ backgroundColor: brandColor, color: '#fff', fontFamily: `'${fontFamily}', 'Coiny', sans-serif` }}
               >
                 {stores.find(s => s.id === activeStoreId)?.storeName ?? 'Store Name Preview'}
               </div>
             </div>
 
-            {/* Save button */}
+            {/* Save branding */}
             <button
               onClick={handleBrandSave}
               disabled={brandSaving}
               className="w-full py-3.5 rounded-xl font-bold text-[14px] text-white transition-colors disabled:opacity-60"
               style={{ backgroundColor: '#4A4B98' }}
             >
-              {brandSaving ? 'Saving…' : brandSaved ? '✓ Saved!' : 'Save Branding'}
+              {brandSaving ? 'Saving...' : brandSaved ? '✓ Saved!' : 'Save Branding'}
             </button>
           </div>
         )}
@@ -559,7 +605,6 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
           </p>
         </div>
 
-        {/* Cashier list */}
         {loading ? (
           <div className="p-4 flex flex-col gap-2">
             {[...Array(2)].map((_, i) => <div key={i} className="h-12 bg-[#F5F5F8] rounded-xl animate-pulse" />)}
@@ -591,7 +636,6 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
           </div>
         )}
 
-        {/* Add cashier form */}
         <form onSubmit={handleAddCashier} className="px-5 py-4 border-t border-[#EBEBF2] flex flex-col gap-3">
           <p className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">Add cashier</p>
           <div className="flex gap-2.5">
@@ -618,7 +662,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
             disabled={adding}
             className="w-full py-3 rounded-xl font-bold text-[14px] text-white font-['Montserrat'] bg-[#4A4B98] disabled:opacity-50"
           >
-            {adding ? 'Adding…' : 'Add Cashier'}
+            {adding ? 'Adding...' : 'Add Cashier'}
           </button>
         </form>
       </div>

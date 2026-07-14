@@ -3,7 +3,7 @@
  *
  * URL shortener redirect handler.
  * Checks that the code exists in Redis, then redirects to the /auth/confirm
- * page with ONLY the code — the token_hash never appears in the URL, so
+ * page with ONLY the code -- the token_hash never appears in the URL, so
  * SMS link-preview bots cannot follow it and consume the token.
  *
  * The actual token_hash is stored in Redis under token:[code] and is only
@@ -26,7 +26,7 @@ export async function GET(
       token: process.env.KV_REST_API_TOKEN!,
     })
 
-    // Verify the token exists — don't consume it yet (that happens on button tap)
+    // Verify the token exists -- don't consume it yet (that happens on button tap)
     console.log(`[/s/[code]] checking token:${code} in Redis`)
     const tokenExists = await redis.exists(`token:${code}`)
     console.log(`[/s/[code]] tokenExists:`, tokenExists)
@@ -35,7 +35,7 @@ export async function GET(
       return NextResponse.redirect(expired)
     }
 
-    // Redirect to confirm page with only the code — token_hash stays in Redis
+    // Redirect to confirm page with only the code -- token_hash stays in Redis
     return NextResponse.redirect(new URL(`/auth/confirm?code=${code}`, request.url))
   } catch (err) {
     console.error('[/s/[code]] Redis error:', err)

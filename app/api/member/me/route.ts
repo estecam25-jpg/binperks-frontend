@@ -7,7 +7,7 @@
  * coupons, and active perks at their home store.
  *
  * Responses:
- *   200 { member, store, rewards, perks }
+ *   200 { member, store, rewards, freePerks, vipPerks }
  *   401 { error: 'not_authenticated' }
  *   404 { error: 'member_not_found' }
  */
@@ -45,7 +45,7 @@ export async function GET() {
     .eq('id', member.home_store_id)
     .single()
 
-  // Full reward history (not just active) — the dashboard partitions this
+  // Full reward history (not just active) -- the dashboard partitions this
   // into "active coupon" vs "past coupons" client-side, and uses the
   // redeemed count to know whether a Free member has used their one
   // lifetime $5 coupon yet.
@@ -55,12 +55,20 @@ export async function GET() {
     .eq('member_id', member.id)
     .order('earned_at', { ascending: false })
 
-  const { data: perks } = await supabase
+  const { data: perksRows } = await supabase
     .from('perks')
-    .select('id, slot, title, description')
+    .select('id, slot, title, description, member_type')
     .eq('store_id', member.home_store_id)
     .eq('is_active', true)
     .order('slot', { ascending: true })
+
+  const allPerks = perksRows ?? []
+  const freePerks = allPerks
+    .filter(p => p.member_type === 'free')
+    .map(p => ({ id: p.id, slot: p.slot, title: p.title, description: p.description }))
+  const vipPerks = allPerks
+    .filter(p => p.member_type === 'vip')
+    .map(p => ({ id: p.id, slot: p.slot, title: p.title, description: p.description }))
 
   return NextResponse.json({
     member: {
@@ -82,12 +90,12 @@ export async function GET() {
       createdAt:          member.created_at,
     },
     store: store ? {
-      id:               store.id,
-      storeName:        store.display_name,
-      brandName:        store.brand_name,
-      brandColor:       store.brand_color ?? '#4A4B98',
-      logoUrl:          store.logo_url,
-      googleReviewUrl:  store.google_review_url,
+      id:                store.id,
+      storeName:         store.display_name,
+      brandName:         store.brand_name,
+      brandColor:        store.brand_color ?? '#4A4B98',
+      logoUrl:           store.logo_url,
+      googleReviewUrl:   store.google_review_url,
       facebookReviewUrl: store.facebook_review_url,
     } : null,
     rewards: (rewards ?? []).map(r => ({
@@ -98,11 +106,7 @@ export async function GET() {
       earnedAt:    r.earned_at,
       redeemedAt:  r.redeemed_at,
     })),
-    perks: (perks ?? []).map(p => ({
-      id:          p.id,
-      slot:        p.slot,
-      title:       p.title,
-      description: p.description,
-    })),
+    freePerks,
+    vipPerks,
   })
 }

@@ -58,7 +58,8 @@ export default function MemberDashboardPage() {
   const [member, setMember] = useState<MemberData | null>(null)
   const [store, setStore] = useState<StoreData | null>(null)
   const [rewards, setRewards] = useState<Reward[]>([])
-  const [perks, setPerks] = useState<Perk[]>([])
+  const [freePerks, setFreePerks] = useState<Perk[]>([])
+  const [vipPerks, setVipPerks] = useState<Perk[]>([])
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -76,7 +77,8 @@ export default function MemberDashboardPage() {
       setMember(data.member)
       setStore(data.store)
       setRewards(data.rewards ?? [])
-      setPerks(data.perks ?? [])
+      setFreePerks(data.freePerks ?? [])
+      setVipPerks(data.vipPerks ?? [])
       setLoading(false)
     }
     load()
@@ -95,7 +97,7 @@ export default function MemberDashboardPage() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
     } catch {
-      // no-op fallback — clipboard API unavailable
+      // no-op fallback
     }
   }
 
@@ -127,8 +129,6 @@ export default function MemberDashboardPage() {
   const brandName = store?.brandName ?? 'BinPerks'
   const storeName = store?.storeName ?? 'BinPerks'
 
-  // Blacklisted members get a generic "account unavailable" state — never
-  // reveal the reason, same rule as the cashier-facing stamp tool.
   if (member.isBlacklisted) {
     return (
       <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
@@ -162,7 +162,7 @@ export default function MemberDashboardPage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* White-label header — shows store logo + name */}
+      {/* White-label header */}
       <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: brandColor }}>
         {store?.logoUrl ? (
           <div className="w-8 h-8 rounded-full bg-white overflow-hidden flex-shrink-0 shadow-sm">
@@ -199,7 +199,6 @@ export default function MemberDashboardPage() {
               {member.totalStamps}
             </span>
           </div>
-
           <div className="w-full mt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[12px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
@@ -252,7 +251,7 @@ export default function MemberDashboardPage() {
                 ? "You've used your one lifetime Free coupon. Upgrade to VIP ($29.99/mo) to keep earning stamps and unlock bigger coupons."
                 : 'Upgrade to VIP ($29.99/mo) to earn stamps faster and unlock bigger coupons.'}
             </p>
-            <span className="text-[13px] font-bold mt-1" style={{ color: brandColor }}>See VIP perks →</span>
+            <span className="text-[13px] font-bold mt-1" style={{ color: brandColor }}>See VIP perks</span>
           </Link>
         )}
 
@@ -280,12 +279,14 @@ export default function MemberDashboardPage() {
         </div>
 
         {/* Perks at this store */}
-        {perks.length > 0 && (
+        {(freePerks.length > 0 || vipPerks.length > 0) && (
           <div className="w-full flex flex-col gap-2.5">
             <p className="text-[12px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] px-1">
               Perks at {brandName}
             </p>
-            {perks.map(p => (
+
+            {/* Free perks — visible to all members */}
+            {freePerks.map(p => (
               <div key={p.id} className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm">
                 <p className="text-[14px] font-bold text-[#1A1A2E]">{p.title}</p>
                 {p.description && (
@@ -293,6 +294,38 @@ export default function MemberDashboardPage() {
                 )}
               </div>
             ))}
+
+            {/* VIP perks -- fully shown to VIP, grayed out for free members */}
+            {vipPerks.map(p =>
+              isFree ? (
+                <div key={p.id} className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm relative overflow-hidden">
+                  <p className="text-[14px] font-bold text-[#D1D1DC]">{p.title}</p>
+                  {p.description && (
+                    <p className="text-[12px] text-[#D1D1DC] font-medium mt-0.5 leading-relaxed">{p.description}</p>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-end pr-4">
+                    <span
+                      className="text-[10px] font-bold px-2.5 py-1 rounded-full"
+                      style={{ backgroundColor: `${brandColor}18`, color: brandColor }}
+                    >
+                      VIP Only — Upgrade to unlock
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div key={p.id} className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded-full bg-[#4A4B98] text-white flex-shrink-0">
+                      VIP
+                    </span>
+                    <p className="text-[14px] font-bold text-[#1A1A2E]">{p.title}</p>
+                  </div>
+                  {p.description && (
+                    <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">{p.description}</p>
+                  )}
+                </div>
+              )
+            )}
           </div>
         )}
 
@@ -312,7 +345,7 @@ export default function MemberDashboardPage() {
         )}
 
         {/* Account links */}
-        <div className="w-full grid grid-cols-3 gap-2.5 mt-1">
+        <div className="w-full grid grid-cols-2 gap-2.5 mt-1">
           <Link href="/member/feedback" className="flex flex-col items-center gap-1 py-3.5 rounded-2xl bg-white shadow-sm text-center">
             <span className="text-lg">💬</span>
             <span className="text-[11px] font-bold text-[#1A1A2E]">Feedback</span>
@@ -320,10 +353,6 @@ export default function MemberDashboardPage() {
           <Link href="/member/settings" className="flex flex-col items-center gap-1 py-3.5 rounded-2xl bg-white shadow-sm text-center">
             <span className="text-lg">⚙️</span>
             <span className="text-[11px] font-bold text-[#1A1A2E]">Settings</span>
-          </Link>
-          <Link href="/member/export" className="flex flex-col items-center gap-1 py-3.5 rounded-2xl bg-white shadow-sm text-center">
-            <span className="text-lg">⬇️</span>
-            <span className="text-[11px] font-bold text-[#1A1A2E]">Export data</span>
           </Link>
         </div>
 

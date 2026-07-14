@@ -5,7 +5,7 @@
  * Looks up the token_hash from Redis using the short code, verifies the OTP,
  * sets session cookies, and returns { redirectUrl }.
  *
- * The token_hash is never sent to the browser — it lives only in Redis until
+ * The token_hash is never sent to the browser -- it lives only in Redis until
  * this handler retrieves and deletes it (single-use).
  *
  * Request body: { code: string, next?: string }
