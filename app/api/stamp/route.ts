@@ -1,24 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export async function POST(req: NextRequest) {
   try {
-    const { memberId, storeId, cashierId } = await req.json()
+    const { memberId, storeId, cashierId, pin } = await req.json()
 
-    if (!memberId || !storeId || !cashierId) {
+    if (!memberId || !storeId || !cashierId || !pin) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
     const supabase = await createServerSupabaseClient()
     const today = new Date().toISOString().split('T')[0]
 
-    // 0. Verify cashier exists and resolve merchant_id server-side.
-    //    Never trust the merchantId supplied by the client — a tampered request
-    //    could otherwise stamp a member at a completely different merchant.
-    //    This enforces Core Rule #6: cross-merchant isolation — always.
+    // 0. Verify cashier exists, resolve merchant_id, and re-verify PIN with bcrypt.
+    //    Never trust the merchantId supplied by the client. Re-checking the PIN
+    //    server-side on every stamp prevents a stolen cashier session from being
+    //    used if the tablet is compromised after login.
     const { data: cashier, error: cashierError } = await supabase
       .from('staff_users')
-      .select('merchant_id')
+      .select('merchant_id, pin')
       .eq('id', cashierId)
       .eq('is_active', true)
       .single()
@@ -27,10 +28,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Cashier not found' }, { status: 404 })
     }
 
+    // Verify PIN with bcrypt. Supports legacy plaintext PINs during transition.
+    const storedPin: string = cashier.pin ?? ''
+    const isHash = storedPin.startsWith('$2')
+    const pinValid = isHash
+      ? await bcrypt.compare(pin, storedPin)
+      : storedPin === pin  // legacy plaintext fallback
+
+    if (!pinValid) {
+      return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
+    }
+
     const merchantId = cashier.merchant_id
 
-    // Verify the member belongs to this merchant — if not, this is a
-    // cross-merchant stamp attempt and must be rejected.
+    // Verify the member belongs to this merchant — cross-merchant stamp attempt
+    // must be rejected (Core Rule #5).
     const { data: memberOwnership } = await supabase
       .from('members')
       .select('id')

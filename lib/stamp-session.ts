@@ -4,6 +4,7 @@ export interface CashierSession {
   role: 'owner' | 'cashier'
   merchantId: string
   storeId: string
+  pin: string  // plaintext as typed — sent to stamp route for server-side bcrypt re-verification
 }
 
 export interface StoreSession {

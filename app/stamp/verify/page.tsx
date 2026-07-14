@@ -34,7 +34,7 @@ export default function VerifyPage() {
     if (!member) { router.replace('/stamp/lookup'); return }
     setMemberFirstName(member.firstName)
 
-    runTransaction(member.id, c.storeId, c.id, c.merchantId, member.firstName, member.lastName)
+    runTransaction(member.id, c.storeId, c.id, c.merchantId, member.firstName, member.lastName, c.pin)
   }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function runTransaction(
@@ -43,7 +43,8 @@ export default function VerifyPage() {
     cashierId: string,
     merchantId: string,
     firstName: string,
-    lastName: string
+    lastName: string,
+    pin: string
   ) {
     await tick(80)
     setRingProgress(75)
@@ -63,7 +64,8 @@ export default function VerifyPage() {
       const res = await fetch('/api/stamp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberId, storeId, cashierId, merchantId }),
+        // pin is included so /api/stamp can re-verify with bcrypt on every stamp
+        body: JSON.stringify({ memberId, storeId, cashierId, merchantId, pin }),
       })
 
       const data = await res.json()
@@ -100,7 +102,7 @@ export default function VerifyPage() {
     const m = foundMemberSession.get()
     if (c && m) {
       setTimeout(() => {
-        runTransaction(m.id, c.storeId, c.id, c.merchantId, m.firstName, m.lastName)
+        runTransaction(m.id, c.storeId, c.id, c.merchantId, m.firstName, m.lastName, c.pin)
       }, 50)
     }
   }

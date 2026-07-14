@@ -373,7 +373,7 @@ function googleFontUrl(family: string) {
   return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@700&display=swap`
 }
 
-interface Cashier { id: string; name: string; role: string; pin: string; isActive: boolean }
+interface Cashier { id: string; name: string; role: string; isActive: boolean }
 
 export function SettingsTab({ storeId, stores }: { storeId: string | null; stores: StoreRef[] }) {
   const activeStoreId = storeId ?? stores[0]?.id
@@ -620,7 +620,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
                 <div className="flex-1">
                   <p className="text-[13px] font-bold text-[#1A1A2E]">{c.name}</p>
                   <p className="text-[11px] text-[#8E8EA8] font-medium capitalize">
-                    {c.role} · PIN: {c.pin}
+                    {c.role}
                   </p>
                 </div>
                 {c.role !== 'owner' && (

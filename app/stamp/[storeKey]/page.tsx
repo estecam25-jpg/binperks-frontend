@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import { cashierSession, storeSession, type CashierSession } from '@/lib/stamp-session'
 
@@ -84,34 +83,37 @@ export default function StampSignInPage() {
   async function submitPin(enteredPin: string) {
     setStatus('loading')
 
-    const supabase = createClient()
+    // Verify PIN server-side via bcrypt — never query staff_users from the browser.
+    // /api/stamp/auth compares the entered PIN against the stored bcrypt hash.
+    try {
+      const res = await fetch('/api/stamp/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: enteredPin, storeId: store.id }),
+      })
 
-    // Filter by store_id so a PIN collision across stores never returns the
-    // wrong cashier. store.id is loaded from the store fetch on mount and is
-    // the UUID of the store whose /stamp/[storeKey] URL this tablet is on.
-    const { data, error } = await supabase
-      .from('staff_users')
-      .select('id, name, role, merchant_id, store_id')
-      .eq('pin', enteredPin)
-      .eq('store_id', store.id)
-      .eq('is_active', true)
-      .single()
+      if (!res.ok) {
+        setStatus('error')
+        setPin('')
+        return
+      }
 
-    if (error || !data) {
+      const data = await res.json()
+
+      const session: CashierSession = {
+        id:         data.id,
+        name:       data.name,
+        role:       data.role,
+        merchantId: data.merchantId,
+        storeId:    store.id,
+        pin:        enteredPin,  // stored for per-stamp bcrypt re-verification in /api/stamp
+      }
+      cashierSession.set(session)
+      router.push('/stamp/lookup')
+    } catch {
       setStatus('error')
       setPin('')
-      return
     }
-
-    const session: CashierSession = {
-      id: data.id,
-      name: data.name,
-      role: data.role,
-      merchantId: data.merchant_id,
-      storeId: data.store_id,
-    }
-    cashierSession.set(session)
-    router.push('/stamp/lookup')
   }
 
   // Loading store data
@@ -127,7 +129,7 @@ export default function StampSignInPage() {
   if (status === 'store_error') {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-[#F5F5F8] px-6 text-center gap-5">
-        <span className="text-4xl">🏪</span>
+        <span className="text-4xl">&#127978;</span>
         <div>
           <p className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-1">Store not found</p>
           <p className="text-[14px] text-[#8E8EA8] font-medium max-w-xs">
@@ -196,7 +198,7 @@ export default function StampSignInPage() {
             {['1','2','3','4','5','6','7','8','9'].map(d => (
               <KeypadButton key={d} label={d} onPress={() => handleDigit(d)} disabled={isLoading} />
             ))}
-            <KeypadButton label="⌫" onPress={handleDelete} disabled={isLoading} isDelete />
+            <KeypadButton label="&#9003;" onPress={handleDelete} disabled={isLoading} isDelete />
             <KeypadButton label="0" onPress={() => handleDigit('0')} disabled={isLoading} />
             <div />
           </div>
@@ -208,7 +210,7 @@ export default function StampSignInPage() {
           className="w-full max-w-sm py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide transition-all duration-150 disabled:opacity-35 disabled:cursor-not-allowed active:scale-[0.97]"
           style={{ backgroundColor: store.brandColor }}
         >
-          {isLoading ? 'Signing in…' : 'Sign In'}
+          {isLoading ? 'Signing in\u2026' : 'Sign In'}
         </button>
       </main>
     </div>
