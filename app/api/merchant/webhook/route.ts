@@ -18,7 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 const webhookSecret = process.env.STRIPE_MERCHANT_WEBHOOK_SECRET
@@ -40,7 +40,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
-  const supabase = await createServerSupabaseClient()
+  // Stripe calls this endpoint with no session cookie, so we must use the
+  // admin client (service role) to bypass RLS. The Stripe signature above
+  // is the authentication for all writes below.
+  const supabase = createAdminSupabaseClient()
 
   switch (event.type) {
 

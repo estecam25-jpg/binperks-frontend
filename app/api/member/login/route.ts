@@ -25,7 +25,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { Redis } from '@upstash/redis'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 const APP_URL = 'https://app.binperks.com'
@@ -55,12 +54,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
     }
 
-    const supabase = await createServerSupabaseClient()
+    // This is a public endpoint (no Supabase session). Use admin client for
+    // all table reads so RLS does not block member lookups. The phone number
+    // is the authentication token on this route.
+    const admin = createAdminSupabaseClient()
 
     let member: MemberRow | null = null
 
     if (memberId) {
-      const { data } = await supabase
+      const { data } = await admin
         .from('members')
         .select('id, email, first_name, auth_user_id, is_blacklisted, home_store_id, merchant_id')
         .eq('id', memberId)
@@ -69,7 +71,7 @@ export async function POST(req: NextRequest) {
         .single()
       member = data ?? null
     } else {
-      const { data: matches } = await supabase
+      const { data: matches } = await admin
         .from('members')
         .select('id, email, first_name, auth_user_id, is_blacklisted, home_store_id, merchant_id')
         .eq('phone', phone)
@@ -81,7 +83,7 @@ export async function POST(req: NextRequest) {
 
       if (matches.length > 1) {
         const storeIds = matches.map(m => m.home_store_id)
-        const { data: stores } = await supabase
+        const { data: stores } = await admin
           .from('stores')
           .select('id, display_name, brand_name, brand_color')
           .in('id', storeIds)
@@ -106,7 +108,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
 
-    const admin = createAdminSupabaseClient()
     const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
       type: 'magiclink',
       email: member.email,
