@@ -1,17 +1,8 @@
-/**
- * GET /api/merchant/export — DISABLED
- *
- * Member data is owned by BinPerks, not merchants.
- * Merchants cannot export contact lists or phone numbers.
- * Per platform philosophy: BinPerks retains all member data
- * when a merchant subscription ends.
- */
-
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server"
 
 export async function GET() {
   return NextResponse.json(
-    { error: 'Member data export is not available. BinPerks owns all member data.' },
+    { error: "Member data export is not available. BinPerks owns all member data." },
     { status: 403 }
   )
 }
