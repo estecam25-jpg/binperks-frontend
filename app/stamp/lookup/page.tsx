@@ -43,7 +43,7 @@ export default function LookupPage() {
 
   useEffect(() => {
     const c = cashierSession.get()
-    if (!c) { router.replace('/stamp'); return }
+    if (!c) { router.replace(`/stamp/${storeSession.get()?.storeKey ?? ''}`); return }
     setCashier({ name: c.name, role: c.role })
     const s = storeSession.get()
     if (s) setStore({ name: s.name, brandColor: s.brandColor, logoUrl: s.logoUrl })
@@ -74,7 +74,7 @@ export default function LookupPage() {
     setFoundMember(null)
 
     const c = cashierSession.get()
-    if (!c) { router.replace('/stamp'); return }
+    if (!c) { router.replace(`/stamp/${storeSession.get()?.storeKey ?? ''}`); return }
 
     const supabase = createClient()
 
@@ -139,7 +139,7 @@ export default function LookupPage() {
 
   function handleSwitchCashier() {
     signOutCashier()
-    router.replace('/stamp')
+    router.replace(`/stamp/${storeSession.get()?.storeKey ?? ''}`)
   }
 
   const isLoading = lookupState === 'loading'
