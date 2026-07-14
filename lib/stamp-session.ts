@@ -8,6 +8,7 @@ export interface CashierSession {
 }
 
 export interface StoreSession {
+  storeKey: string
   id: string
   name: string
   brandColor: string

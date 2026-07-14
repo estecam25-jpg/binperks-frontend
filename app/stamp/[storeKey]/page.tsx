@@ -40,7 +40,7 @@ export default function StampSignInPage() {
           logoUrl: data.logoUrl ?? null,
           merchantId: data.merchantId,
         }
-        storeSession.set(s)
+        storeSession.set({ ...s, storeKey })
         setStore(s)
         setStatus('idle')
       } catch {
