@@ -11,20 +11,27 @@
  *   User taps "Sign In" → POST /api/auth/confirm with { code }
  *   API looks up token_hash from Redis, calls verifyOtp, sets session cookies
  *   Client navigates to /member/dashboard
+ *
+ * Note: uses window.location.search instead of useSearchParams() because
+ * useSearchParams() can return null for URL params in Next.js 16 even with
+ * a Suspense wrapper. Reading from window.location on mount is reliable.
  */
 
 'use client'
 
-import { Suspense, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
-function ConfirmForm() {
-  const searchParams = useSearchParams()
+export default function AuthConfirmPage() {
+  const [code, setCode] = useState<string | null>(null)
+  const [next, setNext] = useState('/member/dashboard')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const code = searchParams.get('code') ?? new URLSearchParams(window.location.search).get('code')
-  const next = searchParams.get('next') ?? '/member/dashboard'
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setCode(params.get('code'))
+    setNext(params.get('next') ?? '/member/dashboard')
+  }, [])
 
   async function handleSignIn() {
     if (!code) {
@@ -110,19 +117,5 @@ function ConfirmForm() {
         </p>
       </div>
     </div>
-  )
-}
-
-export default function AuthConfirmPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-dvh flex items-center justify-center bg-[#F5F5F8]">
-          <p className="text-[#8E8EA8] text-[13px] font-medium font-['Montserrat']">Loading…</p>
-        </div>
-      }
-    >
-      <ConfirmForm />
-    </Suspense>
   )
 }
