@@ -131,6 +131,7 @@ export async function POST(req: NextRequest) {
       })
       const code = Math.random().toString(36).substring(2, 10)
       // Store token_hash in Redis (not in URL) so bots can't consume it via link preview
+      console.log(`[login] hashed_token:`, linkData.properties.hashed_token)
       await redis.set(`token:${code}`, linkData.properties.hashed_token, { ex: 65 * 60 })
       smsLink = `${process.env.NEXT_PUBLIC_APP_URL}/s/${code}`
     } catch (err) {
