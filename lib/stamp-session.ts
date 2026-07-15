@@ -8,9 +8,9 @@ export interface CashierSession {
 }
 
 export interface StoreSession {
-  storeKey: string
   id: string
   name: string
+  storeKey: string
   brandColor: string
   logoUrl: string | null
   merchantId: string

@@ -34,6 +34,7 @@ interface StoreData {
   logoUrl: string | null
   googleReviewUrl: string | null
   facebookReviewUrl: string | null
+  memberMemo: string | null
 }
 
 interface Reward {
@@ -326,6 +327,15 @@ export default function MemberDashboardPage() {
                 </div>
               )
             )}
+          </div>
+        )}
+
+        {/* Member Memo */}
+        {store?.memberMemo && (
+          <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-2">
+            <p className="font-['Coiny'] text-xl text-[#1A1A2E]">Member Memo</p>
+            <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">{brandName}</p>
+            <p className="text-[14px] font-medium text-[#1A1A2E] leading-relaxed">{store.memberMemo}</p>
           </div>
         )}
 

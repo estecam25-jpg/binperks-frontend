@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { MERCHANT_BASE_PRICE, MERCHANT_EXTRA_LOCATION_PRICE } from '@/lib/merchant-signup-session'
 import { TIERS } from '@/lib/tiers'
 
@@ -37,6 +38,13 @@ export default function MerchantLandingPage() {
         <p className="text-[12px] text-white/40 font-medium">
           ${MERCHANT_BASE_PRICE}/mo · Cancel anytime · Setup handled by BinPerks
         </p>
+
+        <Link
+          href="/merchant/login"
+          className="text-[13px] font-semibold text-white/60 hover:text-white/90 transition-colors"
+        >
+          Already a merchant? Sign in →
+        </Link>
       </div>
 
       {/* ── What your customers earn — tier table as selling point ── */}
@@ -85,12 +93,12 @@ export default function MerchantLandingPage() {
           </div>
         </div>
 
-        {/* What's included */}
+        {/* What’s included */}
         <div className="w-full flex flex-col gap-3">
-          <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E]">What's included</h2>
+          <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E]">What’s included</h2>
           <div className="flex flex-col gap-2.5">
             {[
-              { icon: '📱', title: 'Done-for-you setup', body: 'BinPerks provisions your store — QR codes, branding, cashier PINs. You don\'t touch a line of code.' },
+              { icon: '📱', title: 'Done-for-you setup', body: 'BinPerks provisions your store — QR codes, branding, cashier PINs. You don’t touch a line of code.' },
               { icon: '🔁', title: 'Automated follow-up', body: 'Stamp confirmations, coupon alerts, and win-back messages go out automatically via SMS.' },
               { icon: '⭐', title: 'Review generation', body: 'Happy customers get nudged to leave Google and Facebook reviews. Unhappy ones reach you privately.' },
               { icon: '📊', title: 'Weekly reports', body: 'Stamps, redemptions, new members, and referrals — delivered by email every week.' },
@@ -100,9 +108,9 @@ export default function MerchantLandingPage() {
                 <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-xl flex-shrink-0">
                   {item.icon}
                 </div>
-                <div>
-                  <p className="text-[14px] font-bold text-[#1A1A2E] mb-0.5">{item.title}</p>
-                  <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">{item.body}</p>
+                <div className="flex-1">
+                  <p className="text-[14px] font-bold text-[#1A1A2E]">{item.title}</p>
+                  <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">{item.body}</p>
                 </div>
               </div>
             ))}
@@ -110,11 +118,9 @@ export default function MerchantLandingPage() {
         </div>
 
         {/* Pricing */}
-        <div className="w-full bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-[#EBEBF2]">
-            <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Simple pricing</h2>
-          </div>
-          <div className="px-5 py-5 flex flex-col gap-3">
+        <div className="w-full flex flex-col gap-3">
+          <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Simple pricing</h2>
+          <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
             <div className="flex items-baseline justify-between">
               <span className="text-[14px] font-bold text-[#1A1A2E]">First location</span>
               <span className="font-['Coiny'] text-2xl text-[#4A4B98]">${MERCHANT_BASE_PRICE}/mo</span>
