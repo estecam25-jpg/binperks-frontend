@@ -37,6 +37,7 @@ export interface StampResult {
   memberFirstName: string
   memberLastName: string
   freeCouponExhausted: boolean
+  stampBlocked: boolean   // true when stamp was NOT awarded (free member, coupon used, >20 stamps)
 }
 
 export interface RecentLookup {

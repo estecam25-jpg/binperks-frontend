@@ -73,6 +73,26 @@ export default function VerifyPage() {
       if (res.status === 409) { setVerifyState('duplicate'); return }
       if (!res.ok) { setVerifyState('error'); return }
 
+      // Free member lifetime coupon exhausted — stamp was BLOCKED server-side.
+      // Returns status 200 so we must check data.error explicitly.
+      if (data.error === 'free_coupon_exhausted') {
+        stampResultSession.set({
+          newTotalStamps:      data.totalStamps ?? 0,
+          couponIssued:        false,
+          couponRedeemed:      false,
+          couponValue:         0,
+          memberFirstName:     firstName,
+          memberLastName:      lastName,
+          freeCouponExhausted: true,
+          stampBlocked:        true,
+        })
+        setRingProgress(100)
+        setVerifyState('success')
+        await tick(600)
+        router.push('/stamp/success')
+        return
+      }
+
       stampResultSession.set({
         newTotalStamps:       data.newTotalStamps,
         couponIssued:         data.couponIssued,
@@ -81,6 +101,7 @@ export default function VerifyPage() {
         memberFirstName:      firstName,
         memberLastName:       lastName,
         freeCouponExhausted:  data.freeCouponExhausted ?? false,
+        stampBlocked:         false,
       })
 
       setRingProgress(100)

@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     // 2. Get member current stamps, coupon_due, and subscription_status
     const { data: member, error: memberError } = await supabase
       .from('members')
-      .select('total_stamps, coupon_due, subscription_status')
+      .select('total_stamps, coupon_due, subscription_status, first_name')
       .eq('id', memberId)
       .single()
 
@@ -91,6 +91,16 @@ export async function POST(req: NextRequest) {
 
     const isFreeMemberCouponExhausted =
       member.subscription_status === 'free' && (redeemedCount ?? 0) >= 1
+
+    // Core Rule #12 enforcement: if free member already redeemed their one lifetime coupon
+    // AND has accumulated more than 20 stamps, block the stamp entirely.
+    // (Visits 1–20 are allowed so they can earn + redeem their free coupon; visit 21+ is blocked.)
+    if (member.subscription_status === 'free' && isFreeMemberCouponExhausted && member.total_stamps > 20) {
+      return NextResponse.json(
+        { error: 'free_coupon_exhausted', memberName: member.first_name, totalStamps: member.total_stamps },
+        { status: 200 }
+      )
+    }
 
     // 3. Calculate tier multiplier
     const totalStamps = member.total_stamps

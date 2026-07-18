@@ -58,6 +58,54 @@ export default function SuccessPage() {
     )
   }
 
+  // ── Blocked screen — stamp NOT awarded (free lifetime coupon exhausted) ──
+  if (result.stampBlocked) {
+    return (
+      <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
+        <StoreHeader storeName={store.name} brandColor={store.brandColor} logoUrl={store.logoUrl} />
+        <main className="flex-1 flex flex-col items-center px-4 py-6 gap-3.5">
+
+          <div className="w-full max-w-md bg-[#FFB217] rounded-2xl px-5 py-5 flex items-start gap-3.5">
+            <span className="text-3xl flex-shrink-0 mt-0.5">🚫</span>
+            <div className="flex-1">
+              <p className="text-[16px] font-bold text-[#1A1A2E] leading-tight">Stamp not awarded</p>
+              <p className="text-[13px] text-[#1A1A2E]/70 font-medium mt-1 leading-relaxed">
+                {result.memberFirstName} has used their free lifetime BinPerks coupon.
+                Stamps are paused until they upgrade to VIP.
+              </p>
+            </div>
+          </div>
+
+          <div className="w-full max-w-md bg-amber-50 border-2 border-amber-200 rounded-2xl px-5 py-4">
+            <p className="text-[10px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8] mb-2">
+              Say to member
+            </p>
+            <p className="text-[15px] font-semibold text-[#1A1A2E] leading-relaxed">
+              &#34;<span className="text-[#2A7D34]">{result.memberFirstName}</span> has used their free BinPerks coupon!
+              Let them know they can upgrade to{' '}
+              <span className="text-[#2A7D34]">VIP for $29.99/mo</span> to keep earning stamps and unlock bigger coupons.&#34;
+            </p>
+          </div>
+
+          <div className="w-full max-w-md flex flex-col gap-2.5 mt-1">
+            <button
+              onClick={handleNextMember}
+              className="w-full py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] bg-[#4A4B98] active:scale-[0.97] transition-all tracking-wide"
+            >
+              Next Member →
+            </button>
+            <button
+              onClick={handleReturnToSignIn}
+              className="w-full py-4 rounded-2xl font-semibold text-[15px] text-[#8E8EA8] font-['Montserrat'] border-2 border-[#EBEBF2] active:border-[#1A1A2E] active:text-[#1A1A2E] transition-colors"
+            >
+              Return to Sign In
+            </button>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   const tier = getTier(result.newTotalStamps)
   const cyclePos = cyclePosition(result.newTotalStamps)
   const cycleDisplay = result.couponIssued ? 20 : cyclePos
