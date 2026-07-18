@@ -161,9 +161,9 @@ export async function POST(req: NextRequest) {
       (newTotalStamps >= 2000 && totalStamps < 2000) ? 'diamond' : null
 
     const approachingLevelUp =
-      (totalStamps < 200  && newTotalStamps >= 195)  ? 'silver'  :
-      (totalStamps < 750  && newTotalStamps >= 745)  ? 'gold'    :
-      (totalStamps < 2000 && newTotalStamps >= 1995) ? 'diamond' : null
+      (totalStamps < 200  && newTotalStamps >= 180)  ? 'silver'  :
+      (totalStamps < 750  && newTotalStamps >= 730)  ? 'gold'    :
+      (totalStamps < 2000 && newTotalStamps >= 1980) ? 'diamond' : null
     await supabase
       .from('members')
       .update({ total_stamps: newTotalStamps })
