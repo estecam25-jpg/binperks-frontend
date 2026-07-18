@@ -39,6 +39,7 @@ export interface StampResult {
   memberLastName: string
   freeCouponExhausted: boolean
   stampBlocked: boolean                                   // true when stamp was NOT awarded
+  isVip: boolean                                          // false = free member (Starter badge)
   justLeveledUp: 'silver' | 'gold' | 'diamond' | null  // tier reached this visit
   approachingLevelUp: 'silver' | 'gold' | 'diamond' | null // within 5 stamps of next tier
 }

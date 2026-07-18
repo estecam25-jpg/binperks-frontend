@@ -62,9 +62,9 @@ export default function MerchantLandingPage() {
             {TIERS.map(tier => (
               <div key={tier.name} className="flex items-center px-5 py-3.5 gap-4">
                 <div className="w-8 text-xl flex-shrink-0">
-                  {tier.name === 'Free'   ? '🪨' :
-                   tier.name === 'Silver' ? '🥈' :
-                   tier.name === 'Gold'   ? '🥇' : '💎'}
+                  {tier.name === 'Bronze'  ? '🥉' :
+                   tier.name === 'Silver'  ? '🥈' :
+                   tier.name === 'Gold'    ? '🥇' : '💎'}
                 </div>
                 <div className="flex-1">
                   <p className="text-[14px] font-bold text-[#1A1A2E]">{tier.name}</p>

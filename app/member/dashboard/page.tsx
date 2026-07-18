@@ -187,7 +187,7 @@ export default function MemberDashboardPage() {
         {/* Greeting + tier */}
         <div className="w-full flex flex-col items-center text-center gap-1.5">
           <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Hi, {member.firstName}</h1>
-          <TierBadge totalStamps={member.totalStamps} />
+          <TierBadge totalStamps={member.totalStamps} tierName={isFree ? 'Free' : undefined} />
         </div>
 
         {/* Stamp progress card */}

@@ -267,7 +267,7 @@ export default function SuccessPage() {
           <p className="text-[17px] font-bold text-[#1A1A2E]">
             {result.memberFirstName} {result.memberLastName}
           </p>
-          <TierBadge totalStamps={result.newTotalStamps} className="mt-1" />
+          <TierBadge totalStamps={result.newTotalStamps} tierName={!result.isVip ? 'Free' : undefined} className="mt-1" />
         </div>
 
         <div className="w-full max-w-md bg-amber-50 border-2 border-amber-200 rounded-2xl px-5 py-4">

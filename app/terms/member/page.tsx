@@ -68,7 +68,8 @@ export default function MemberTermsPage() {
               </thead>
               <tbody className="divide-y divide-[#EBEBF2] bg-white">
                 {[
-                  ['Starter', '0 – 199',     '$5.00'],
+                  ['Starter', '0+',              '$5.00 (one lifetime coupon)'],
+                  ['Bronze',  '0 – 199',     '$7.00'],
                   ['Silver',  '200 – 749',   '$10.00'],
                   ['Gold',    '750 – 1,999', '$12.00'],
                   ['Diamond', '2,000+',      '$15.00'],

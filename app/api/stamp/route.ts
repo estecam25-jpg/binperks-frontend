@@ -175,10 +175,12 @@ export async function POST(req: NextRequest) {
     const couponEarned = newCycle < oldCycle || newCycle === 0
 
     // 8. Determine coupon value (thresholds match VIP tier levels)
+    //    Bronze VIP (0-199) = $7, Starter free (any) = $5
     const couponValue =
       newTotalStamps >= 2000 ? 15 :
       newTotalStamps >= 750  ? 12 :
-      newTotalStamps >= 200  ? 10 : 5
+      newTotalStamps >= 200  ? 10 :
+      member.subscription_status === 'free' ? 5 : 7
 
     // Only issue the coupon if the stamp threshold was crossed AND the member
     // is eligible. Free members get exactly one lifetime coupon (Core Rule #12).
@@ -232,6 +234,7 @@ export async function POST(req: NextRequest) {
       freeCouponExhausted: isFreeMemberCouponExhausted,
       justLeveledUp,
       approachingLevelUp,
+      isVip: member.subscription_status === 'vip',
     })
 
   } catch (err) {
