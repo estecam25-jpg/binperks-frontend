@@ -9,7 +9,6 @@ interface TierBadgeProps {
 
 const BADGE_STYLES: Record<TierName, string> = {
   Free:    'bg-gray-100 text-gray-500',
-  Bronze:  'bg-orange-50 text-orange-800',
   Silver:  'bg-slate-100 text-slate-600',
   Gold:    'bg-yellow-50 text-yellow-800',
   Diamond: 'bg-indigo-50 text-indigo-700',

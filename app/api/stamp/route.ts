@@ -104,15 +104,20 @@ export async function POST(req: NextRequest) {
 
     // 3. Calculate stamp multiplier.
     //    Free members always get 1 stamp per visit (Core Rule #12).
-    //    VIP members get extra stamps based on lifetime total.
+    //    VIP members earn more stamps based on their tier.
+    //    Two-pass approach: if a visit causes a tier level-up, award the
+    //    NEW tier's multiplier (e.g. crossing into Silver at 200 stamps
+    //    earns 3 stamps on that same visit, not 2).
     const totalStamps = member.total_stamps
-    const multiplier =
-      member.subscription_status === 'free' ? 1 :
-      totalStamps >= 2000 ? 5 :
-      totalStamps >= 750  ? 4 :
-      totalStamps >= 200  ? 3 : 2  // VIP starts at 2x (Bronze equivalent)
 
-    const stampsToAward = multiplier
+    const vipMultiplier = (stamps: number) =>
+      stamps >= 2000 ? 5 :
+      stamps >= 750  ? 4 :
+      stamps >= 200  ? 3 : 2
+
+    const stampsToAward =
+      member.subscription_status === 'free' ? 1
+      : vipMultiplier(totalStamps + vipMultiplier(totalStamps))  // two-pass: check post-stamp tier
 
     // 4. Insert visit row
     const { error: visitError } = await supabase
@@ -169,12 +174,11 @@ export async function POST(req: NextRequest) {
     const newCycle = newTotalStamps % 20
     const couponEarned = newCycle < oldCycle || newCycle === 0
 
-    // 8. Determine coupon value
+    // 8. Determine coupon value (thresholds match VIP tier levels)
     const couponValue =
-      newTotalStamps >= 1000 ? 15 :
-      newTotalStamps >= 500  ? 12 :
-      newTotalStamps >= 300  ? 10 :
-      newTotalStamps >= 100  ? 7  : 5
+      newTotalStamps >= 2000 ? 15 :
+      newTotalStamps >= 750  ? 12 :
+      newTotalStamps >= 200  ? 10 : 5
 
     // Only issue the coupon if the stamp threshold was crossed AND the member
     // is eligible. Free members get exactly one lifetime coupon (Core Rule #12).

@@ -68,11 +68,10 @@ export default function MemberTermsPage() {
               </thead>
               <tbody className="divide-y divide-[#EBEBF2] bg-white">
                 {[
-                  ['Free',    '0 – 99',      '$5.00'],
-                  ['Bronze',  '100 – 299',   '$7.00'],
-                  ['Silver',  '300 – 499',   '$10.00'],
-                  ['Gold',    '500 – 999',   '$12.00'],
-                  ['Diamond', '1,000+',      '$15.00'],
+                  ['Starter', '0 – 199',     '$5.00'],
+                  ['Silver',  '200 – 749',   '$10.00'],
+                  ['Gold',    '750 – 1,999', '$12.00'],
+                  ['Diamond', '2,000+',      '$15.00'],
                 ].map(([tier, stamps, value]) => (
                   <tr key={tier}>
                     <td className="px-4 py-2.5 font-semibold text-[#1A1A2E]">{tier}</td>
