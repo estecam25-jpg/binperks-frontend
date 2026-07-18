@@ -106,26 +106,6 @@ export default function SuccessPage() {
   function buildScriptParts(): { text: string; highlight?: boolean }[] {
     const name = result!.memberFirstName
     const cv = result!.couponValue
-    if (result!.couponIssued) {
-      return [
-        { text: `"You've been stamped, ` },
-        { text: name, highlight: true },
-        { text: `! You just earned a ` },
-        { text: `$${cv} coupon`, highlight: true },
-        { text: ` — it'll be waiting for you on your next visit!"` },
-      ]
-    }
-    if (result!.couponRedeemed) {
-      return [
-        { text: `"You've been stamped, ` },
-        { text: name, highlight: true },
-        { text: `! Your ` },
-        { text: `$${cv} coupon`, highlight: true },
-        { text: ` was applied today — ` },
-        { text: `${remaining} more stamp${remaining !== 1 ? 's' : ''}`, highlight: true },
-        { text: ` and you earn another!"` },
-      ]
-    }
     if (leveledUp === 'silver') return [
       { text: `"🥈 Congratulations ` },
       { text: name, highlight: true },
@@ -180,6 +160,26 @@ export default function SuccessPage() {
       { text: `5x stamp multiplier`, highlight: true },
       { text: `!"` },
     ]
+    if (result!.couponIssued) {
+      return [
+        { text: `"You've been stamped, ` },
+        { text: name, highlight: true },
+        { text: `! You just earned a ` },
+        { text: `$${cv} coupon`, highlight: true },
+        { text: ` — it'll be waiting for you on your next visit!"` },
+      ]
+    }
+    if (result!.couponRedeemed) {
+      return [
+        { text: `"You've been stamped, ` },
+        { text: name, highlight: true },
+        { text: `! Your ` },
+        { text: `$${cv} coupon`, highlight: true },
+        { text: ` was applied today — ` },
+        { text: `${remaining} more stamp${remaining !== 1 ? 's' : ''}`, highlight: true },
+        { text: ` and you earn another!"` },
+      ]
+    }
     if (exhausted) {
       return [
         { text: `"You've been stamped, ` },
@@ -228,7 +228,7 @@ export default function SuccessPage() {
           </div>
         )}
 
-        {result.couponRedeemed && (
+        {result.couponRedeemed && !result.couponIssued && (
           <div className="w-full max-w-md bg-[#4A4B98] rounded-2xl px-5 py-4 flex items-center gap-3.5">
             <span className="text-3xl flex-shrink-0">✅</span>
             <div className="flex-1">
