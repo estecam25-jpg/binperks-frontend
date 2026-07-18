@@ -160,6 +160,15 @@ export default function MemberDashboardPage() {
   const isFree = member.subscriptionStatus === 'free'
   const hasUsedFreeLifetimeCoupon = isFree && pastRewards.some(r => r.status === 'redeemed')
 
+  const approachingBanner = (() => {
+    if (isFree) return null
+    const s = member.totalStamps
+    if (s >= 180 && s < 200)  return { emoji: '🥈', label: 'Silver',  mult: 3 }
+    if (s >= 730 && s < 750)  return { emoji: '🥇', label: 'Gold',    mult: 4 }
+    if (s >= 1980 && s < 2000) return { emoji: '💎', label: 'Diamond', mult: 5 }
+    return null
+  })()
+
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
@@ -219,6 +228,16 @@ export default function MemberDashboardPage() {
             </p>
           </div>
         </div>
+
+        {/* Approaching tier banner */}
+        {approachingBanner && (
+          <div className="w-full rounded-2xl px-5 py-4 flex items-center gap-3.5" style={{ backgroundColor: '#FFB217' }}>
+            <span className="text-3xl flex-shrink-0">{approachingBanner.emoji}</span>
+            <p className="text-[14px] font-semibold text-[#1A1A2E] leading-snug">
+              You’re almost a <strong>{approachingBanner.label} BinPerks member!</strong> Just a few more visits to unlock your <strong>{approachingBanner.mult}x stamp multiplier!</strong>
+            </p>
+          </div>
+        )}
 
         {/* Active coupons */}
         {activeRewards.length > 0 && (
