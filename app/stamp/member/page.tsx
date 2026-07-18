@@ -115,12 +115,7 @@ export default function MemberViewPage() {
               {member.firstName} {member.lastName}
             </p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              {member.subscriptionStatus !== 'vip' && <TierBadge totalStamps={member.totalStamps} />}
-              {member.subscriptionStatus === 'vip' && (
-                <span className="text-[10px] font-bold tracking-widest uppercase px-2.5 py-0.5 rounded-full bg-[#4A4B98] text-white">
-                  VIP
-                </span>
-              )}
+              <TierBadge totalStamps={member.totalStamps} />
             </div>
           </div>
         </div>
