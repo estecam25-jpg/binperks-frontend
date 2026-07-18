@@ -1,4 +1,4 @@
-import { getTier } from '@/lib/tiers'
+import { getTier, TIER_DISPLAY_NAMES } from '@/lib/tiers'
 import type { TierName } from '@/lib/tiers'
 
 interface TierBadgeProps {
@@ -26,7 +26,7 @@ export default function TierBadge({ totalStamps, tierName, className = '' }: Tie
         ${className}
       `}
     >
-      {tier}
+      {TIER_DISPLAY_NAMES[tier]}
     </span>
   )
 }

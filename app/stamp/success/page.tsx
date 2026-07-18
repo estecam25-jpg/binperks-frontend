@@ -65,25 +65,14 @@ export default function SuccessPage() {
         <StoreHeader storeName={store.name} brandColor={store.brandColor} logoUrl={store.logoUrl} />
         <main className="flex-1 flex flex-col items-center px-4 py-6 gap-3.5">
 
-          <div className="w-full max-w-md bg-[#FFB217] rounded-2xl px-5 py-5 flex items-start gap-3.5">
-            <span className="text-3xl flex-shrink-0 mt-0.5">🚫</span>
-            <div className="flex-1">
-              <p className="text-[16px] font-bold text-[#1A1A2E] leading-tight">Stamp not awarded</p>
-              <p className="text-[13px] text-[#1A1A2E]/70 font-medium mt-1 leading-relaxed">
-                {result.memberFirstName} has used their free lifetime BinPerks coupon.
-                Stamps are paused until they upgrade to VIP.
-              </p>
-            </div>
-          </div>
-
           <div className="w-full max-w-md bg-amber-50 border-2 border-amber-200 rounded-2xl px-5 py-4">
             <p className="text-[10px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8] mb-2">
               Say to member
             </p>
             <p className="text-[15px] font-semibold text-[#1A1A2E] leading-relaxed">
-              &#34;<span className="text-[#2A7D34]">{result.memberFirstName}</span> has used their free BinPerks coupon!
-              Let them know they can upgrade to{' '}
-              <span className="text-[#2A7D34]">VIP for $29.99/mo</span> to keep earning stamps and unlock bigger coupons.&#34;
+              &#34;<span className="text-[#2A7D34]">{result.memberFirstName}</span>, Thank you for being a BinPerks member.
+              You&#39;ve completed your <span className="text-[#4A4B98]">Starter</span> membership.
+              We encourage you to upgrade to <span className="text-[#2A7D34]">VIP</span> to keep earning stamps and unlock bigger rewards!&#34;
             </p>
           </div>
 
@@ -158,7 +147,7 @@ export default function SuccessPage() {
   }
 
   const progressLabel = () => {
-    if (exhausted) return <><strong className="text-[#1A1A2E]">Free coupon used</strong> — upgrade to VIP to keep earning</>
+    if (exhausted) return <><strong className="text-[#1A1A2E]">Starter coupon used</strong> — upgrade to VIP to keep earning</>
     if (result.couponIssued) return <><strong className="text-[#1A1A2E]">Coupon earned!</strong> New cycle starts on next visit</>
     if (result.couponRedeemed) return <>Coupon redeemed · <strong className="text-[#1A1A2E]">{remaining} more stamps</strong> to earn a <strong className="text-[#1A1A2E]">${tier.couponValue} coupon</strong></>
     return <><strong className="text-[#1A1A2E]">{remaining} more stamp{remaining !== 1 ? 's' : ''}</strong> to earn a <strong className="text-[#1A1A2E]">${tier.couponValue} coupon</strong></>
@@ -241,7 +230,7 @@ export default function SuccessPage() {
         <div className="bg-white rounded-2xl px-5 py-4 w-full max-w-md shadow-sm">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-[12px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
-              {exhausted ? 'Free member — no new coupons' : 'Toward next coupon'}
+              {exhausted ? 'Starter member — no new coupons' : 'Toward next coupon'}
             </span>
             <span className="text-[13px] font-bold text-[#1A1A2E]">{cycleDisplay} / 20</span>
           </div>

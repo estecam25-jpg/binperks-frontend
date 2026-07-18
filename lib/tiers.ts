@@ -33,3 +33,13 @@ export function stampsToNextCoupon(totalStamps: number): number {
   const pos = cyclePosition(totalStamps)
   return pos === 0 ? 20 : 20 - pos
 }
+
+// Display-only names for tier labels. 'Free' is the internal TierName key;
+// 'Starter' is what members and cashiers see. Never use for logic or DB values.
+export const TIER_DISPLAY_NAMES: Record<TierName, string> = {
+  Free:    'Starter',
+  Bronze:  'Bronze',
+  Silver:  'Silver',
+  Gold:    'Gold',
+  Diamond: 'Diamond',
+}

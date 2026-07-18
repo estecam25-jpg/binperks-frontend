@@ -147,7 +147,7 @@ export default function VipUpsellPage() {
         {/* ── Free card — intentionally low contrast ── */}
         <div className="w-full rounded-2xl border-2 border-[#EBEBF2] bg-white px-5 py-5 flex flex-col gap-3">
           <div className="flex items-baseline gap-2">
-            <span className="font-['Coiny'] text-3xl text-[#8E8EA8]">Free</span>
+            <span className="font-['Coiny'] text-3xl text-[#8E8EA8]">Starter</span>
             <span className="text-[13px] font-medium text-[#8E8EA8]">membership</span>
           </div>
 
