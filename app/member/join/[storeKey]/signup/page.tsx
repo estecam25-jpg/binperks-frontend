@@ -343,6 +343,14 @@ export default function JoinSignupPage() {
             </div>
           )}
 
+          {/* Legal notice */}
+          <p className="text-[11px] text-[#8E8EA8] font-medium text-center leading-relaxed">
+            By creating an account you agree to our{' '}
+            <a href="/terms/member" target="_blank" rel="noopener noreferrer" className="text-[#4A4B98] font-semibold underline">Terms of Service</a>
+            {' '}and{' '}
+            <a href="/terms/privacy" target="_blank" rel="noopener noreferrer" className="text-[#4A4B98] font-semibold underline">Privacy Policy</a>.
+          </p>
+
           {/* Submit */}
           <button
             type="submit"
