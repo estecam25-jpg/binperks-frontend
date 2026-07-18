@@ -102,13 +102,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 3. Calculate tier multiplier
+    // 3. Calculate stamp multiplier.
+    //    Free members always get 1 stamp per visit (Core Rule #12).
+    //    VIP members get extra stamps based on lifetime total.
     const totalStamps = member.total_stamps
     const multiplier =
-      totalStamps >= 1000 ? 5 :
-      totalStamps >= 500  ? 4 :
-      totalStamps >= 300  ? 3 :
-      totalStamps >= 100  ? 2 : 1
+      member.subscription_status === 'free' ? 1 :
+      totalStamps >= 2000 ? 5 :
+      totalStamps >= 750  ? 4 :
+      totalStamps >= 200  ? 3 : 2  // VIP starts at 2x (Bronze equivalent)
+
+    const stampsToAward = multiplier
 
     // 4. Insert visit row
     const { error: visitError } = await supabase
@@ -139,12 +143,22 @@ export async function POST(req: NextRequest) {
         merchant_id: merchantId,
         cashier_id:  cashierId,
         event_type:  'visit',
-        stamp_count: multiplier,
+        stamp_count: stampsToAward,
         awarded_at:  new Date().toISOString(),
       })
 
-    // 6. Update total_stamps
-    const newTotalStamps = totalStamps + multiplier
+    // 6. Update total_stamps and detect tier milestones
+    const newTotalStamps = totalStamps + stampsToAward
+
+    const justLeveledUp =
+      (newTotalStamps >= 200 && totalStamps < 200) ? 'silver' :
+      (newTotalStamps >= 750 && totalStamps < 750) ? 'gold'   :
+      (newTotalStamps >= 2000 && totalStamps < 2000) ? 'diamond' : null
+
+    const approachingLevelUp =
+      (totalStamps < 200  && newTotalStamps >= 195)  ? 'silver'  :
+      (totalStamps < 750  && newTotalStamps >= 745)  ? 'gold'    :
+      (totalStamps < 2000 && newTotalStamps >= 1995) ? 'diamond' : null
     await supabase
       .from('members')
       .update({ total_stamps: newTotalStamps })
@@ -207,10 +221,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       newTotalStamps,
+      stampCount: stampsToAward,
       couponIssued,
       couponRedeemed,
       couponValue,
       freeCouponExhausted: isFreeMemberCouponExhausted,
+      justLeveledUp,
+      approachingLevelUp,
     })
 
   } catch (err) {

@@ -83,8 +83,11 @@ export default function VerifyPage() {
           couponValue:         0,
           memberFirstName:     firstName,
           memberLastName:      lastName,
-          freeCouponExhausted: true,
-          stampBlocked:        true,
+          freeCouponExhausted:  true,
+          stampBlocked:         true,
+          stampCount:           0,
+          justLeveledUp:        null,
+          approachingLevelUp:   null,
         })
         setRingProgress(100)
         setVerifyState('success')
@@ -102,6 +105,9 @@ export default function VerifyPage() {
         memberLastName:       lastName,
         freeCouponExhausted:  data.freeCouponExhausted ?? false,
         stampBlocked:         false,
+        stampCount:           data.stampCount ?? 1,
+        justLeveledUp:        data.justLeveledUp ?? null,
+        approachingLevelUp:   data.approachingLevelUp ?? null,
       })
 
       setRingProgress(100)

@@ -100,6 +100,8 @@ export default function SuccessPage() {
   const cycleDisplay = result.couponIssued ? 20 : cyclePos
   const remaining = result.couponIssued ? 20 : stampsToNextCoupon(result.newTotalStamps)
   const exhausted = result.freeCouponExhausted
+  const leveledUp = result.justLeveledUp
+  const approaching = result.approachingLevelUp
 
   function buildScriptParts(): { text: string; highlight?: boolean }[] {
     const name = result!.memberFirstName
@@ -124,6 +126,60 @@ export default function SuccessPage() {
         { text: ` and you earn another!"` },
       ]
     }
+    if (leveledUp === 'silver') return [
+      { text: `"🥈 Congratulations ` },
+      { text: name, highlight: true },
+      { text: `! You just became a ` },
+      { text: `Silver BinPerks member`, highlight: true },
+      { text: `! You now earn ` },
+      { text: `3 stamps every visit`, highlight: true },
+      { text: `!"` },
+    ]
+    if (leveledUp === 'gold') return [
+      { text: `"🥇 Congratulations ` },
+      { text: name, highlight: true },
+      { text: `! You just became a ` },
+      { text: `Gold BinPerks member`, highlight: true },
+      { text: `! You now earn ` },
+      { text: `4 stamps every visit`, highlight: true },
+      { text: `!"` },
+    ]
+    if (leveledUp === 'diamond') return [
+      { text: `"💎 Congratulations ` },
+      { text: name, highlight: true },
+      { text: `! You just became a ` },
+      { text: `Diamond BinPerks member`, highlight: true },
+      { text: ` — the highest level! You now earn ` },
+      { text: `5 stamps every visit`, highlight: true },
+      { text: `!"` },
+    ]
+    if (approaching === 'silver') return [
+      { text: `"` },
+      { text: name, highlight: true },
+      { text: `, you're almost a 🥈 ` },
+      { text: `Silver BinPerks member`, highlight: true },
+      { text: `! Just a few more visits to unlock your ` },
+      { text: `3x stamp multiplier`, highlight: true },
+      { text: `!"` },
+    ]
+    if (approaching === 'gold') return [
+      { text: `"` },
+      { text: name, highlight: true },
+      { text: `, you're almost a 🥇 ` },
+      { text: `Gold BinPerks member`, highlight: true },
+      { text: `! Just a few more visits to unlock your ` },
+      { text: `4x stamp multiplier`, highlight: true },
+      { text: `!"` },
+    ]
+    if (approaching === 'diamond') return [
+      { text: `"` },
+      { text: name, highlight: true },
+      { text: `, you're almost a 💎 ` },
+      { text: `Diamond BinPerks member`, highlight: true },
+      { text: `! Just a few more visits to unlock your ` },
+      { text: `5x stamp multiplier`, highlight: true },
+      { text: `!"` },
+    ]
     if (exhausted) {
       return [
         { text: `"You've been stamped, ` },
@@ -200,7 +256,7 @@ export default function SuccessPage() {
 
         <div className="bg-white rounded-2xl px-6 pb-6 pt-7 w-full max-w-md shadow-sm flex flex-col items-center gap-1.5">
           <p className="text-[11px] font-bold tracking-[0.1em] uppercase text-[#2A7D34] mb-1">
-            ✓ Stamp awarded
+            ✓ +{result.stampCount ?? 1} stamp{(result.stampCount ?? 1) !== 1 ? 's' : ''} awarded
           </p>
           <div className="flex items-baseline gap-1.5">
             <span className="font-['Coiny'] text-[88px] text-[#FFB217] leading-none tracking-tight">

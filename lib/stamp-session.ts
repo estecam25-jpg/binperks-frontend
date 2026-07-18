@@ -31,13 +31,16 @@ export interface FoundMember {
 
 export interface StampResult {
   newTotalStamps: number
+  stampCount: number                                      // stamps awarded this visit (multiplier applied)
   couponIssued: boolean
   couponRedeemed: boolean
   couponValue: number
   memberFirstName: string
   memberLastName: string
   freeCouponExhausted: boolean
-  stampBlocked: boolean   // true when stamp was NOT awarded (free member, coupon used, >20 stamps)
+  stampBlocked: boolean                                   // true when stamp was NOT awarded
+  justLeveledUp: 'silver' | 'gold' | 'diamond' | null  // tier reached this visit
+  approachingLevelUp: 'silver' | 'gold' | 'diamond' | null // within 5 stamps of next tier
 }
 
 export interface RecentLookup {
