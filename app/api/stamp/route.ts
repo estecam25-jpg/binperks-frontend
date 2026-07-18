@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,7 +12,8 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createServerSupabaseClient()
-    const today = new Date().toISOString().split('T')[0]
+    const admin    = createAdminSupabaseClient()
+    const today    = new Date().toISOString().split('T')[0]
 
     // 0. Verify cashier exists, resolve merchant_id, and re-verify PIN with bcrypt.
     //    Never trust the merchantId supplied by the client. Re-checking the PIN
@@ -67,16 +69,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'already_stamped' }, { status: 409 })
     }
 
-    // 2. Get member current stamps and coupon_due
+    // 2. Get member current stamps, coupon_due, and subscription_status
     const { data: member, error: memberError } = await supabase
       .from('members')
-      .select('total_stamps, coupon_due')
+      .select('total_stamps, coupon_due, subscription_status')
       .eq('id', memberId)
       .single()
 
     if (memberError || !member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
+
+    // 2a. Check if free member has already used their one lifetime coupon.
+    //     Use admin client — rewards table has RLS that blocks anon reads.
+    //     Core Rule #12: free members get one $5 coupon lifetime, then must upgrade.
+    const { count: redeemedCount } = await admin
+      .from('rewards')
+      .select('*', { count: 'exact', head: true })
+      .eq('member_id', memberId)
+      .eq('status', 'redeemed')
+
+    const isFreeMemberCouponExhausted =
+      member.subscription_status === 'free' && (redeemedCount ?? 0) >= 1
 
     // 3. Calculate tier multiplier
     const totalStamps = member.total_stamps
@@ -129,7 +143,7 @@ export async function POST(req: NextRequest) {
     // 7. Check if coupon earned
     const oldCycle = totalStamps % 20
     const newCycle = newTotalStamps % 20
-    const couponIssued = newCycle < oldCycle || newCycle === 0
+    const couponEarned = newCycle < oldCycle || newCycle === 0
 
     // 8. Determine coupon value
     const couponValue =
@@ -137,6 +151,10 @@ export async function POST(req: NextRequest) {
       newTotalStamps >= 500  ? 12 :
       newTotalStamps >= 300  ? 10 :
       newTotalStamps >= 100  ? 7  : 5
+
+    // Only issue the coupon if the stamp threshold was crossed AND the member
+    // is eligible. Free members get exactly one lifetime coupon (Core Rule #12).
+    const couponIssued = couponEarned && !isFreeMemberCouponExhausted
 
     if (couponIssued) {
       await supabase.from('rewards').insert({
@@ -182,6 +200,7 @@ export async function POST(req: NextRequest) {
       couponIssued,
       couponRedeemed,
       couponValue,
+      freeCouponExhausted: isFreeMemberCouponExhausted,
     })
 
   } catch (err) {

@@ -36,6 +36,7 @@ export interface StampResult {
   couponValue: number
   memberFirstName: string
   memberLastName: string
+  freeCouponExhausted: boolean
 }
 
 export interface RecentLookup {

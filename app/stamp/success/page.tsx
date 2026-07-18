@@ -62,6 +62,7 @@ export default function SuccessPage() {
   const cyclePos = cyclePosition(result.newTotalStamps)
   const cycleDisplay = result.couponIssued ? 20 : cyclePos
   const remaining = result.couponIssued ? 20 : stampsToNextCoupon(result.newTotalStamps)
+  const exhausted = result.freeCouponExhausted
 
   function buildScriptParts(): { text: string; highlight?: boolean }[] {
     const name = result!.memberFirstName
@@ -86,6 +87,15 @@ export default function SuccessPage() {
         { text: ` and you earn another!"` },
       ]
     }
+    if (exhausted) {
+      return [
+        { text: `"You've been stamped, ` },
+        { text: name, highlight: true },
+        { text: `! You're collecting stamps — upgrade to ` },
+        { text: `VIP`, highlight: true },
+        { text: ` to keep earning coupons!"` },
+      ]
+    }
     return [
       { text: `"You've been stamped, ` },
       { text: name, highlight: true },
@@ -100,6 +110,7 @@ export default function SuccessPage() {
   }
 
   const progressLabel = () => {
+    if (exhausted) return <><strong className="text-[#1A1A2E]">Free coupon used</strong> — upgrade to VIP to keep earning</>
     if (result.couponIssued) return <><strong className="text-[#1A1A2E]">Coupon earned!</strong> New cycle starts on next visit</>
     if (result.couponRedeemed) return <>Coupon redeemed · <strong className="text-[#1A1A2E]">{remaining} more stamps</strong> to earn a <strong className="text-[#1A1A2E]">${tier.couponValue} coupon</strong></>
     return <><strong className="text-[#1A1A2E]">{remaining} more stamp{remaining !== 1 ? 's' : ''}</strong> to earn a <strong className="text-[#1A1A2E]">${tier.couponValue} coupon</strong></>
@@ -137,6 +148,19 @@ export default function SuccessPage() {
           </div>
         )}
 
+        {/* VIP upgrade nudge — shown when free member has used their one lifetime coupon */}
+        {exhausted && !result.couponRedeemed && (
+          <div className="w-full max-w-md bg-[#FFB217] rounded-2xl px-5 py-4 flex items-center gap-3.5">
+            <span className="text-3xl flex-shrink-0">⭐</span>
+            <div className="flex-1">
+              <p className="text-[15px] font-bold text-[#1A1A2E] leading-tight">Upgrade to VIP to keep earning</p>
+              <p className="text-[12px] text-[#1A1A2E]/70 font-medium mt-0.5">
+                {result.memberFirstName} has used their free lifetime coupon — stamps still count toward VIP upgrade
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl px-6 pb-6 pt-7 w-full max-w-md shadow-sm flex flex-col items-center gap-1.5">
           <p className="text-[11px] font-bold tracking-[0.1em] uppercase text-[#2A7D34] mb-1">
             ✓ Stamp awarded
@@ -169,13 +193,13 @@ export default function SuccessPage() {
         <div className="bg-white rounded-2xl px-5 py-4 w-full max-w-md shadow-sm">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-[12px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
-              Toward next coupon
+              {exhausted ? 'Free member — no new coupons' : 'Toward next coupon'}
             </span>
             <span className="text-[13px] font-bold text-[#1A1A2E]">{cycleDisplay} / 20</span>
           </div>
           <div className="h-2 rounded-full bg-[#EBEBF2] overflow-hidden mb-2">
             <div
-              className="h-full rounded-full bg-[#FFB217] transition-all duration-500"
+              className={`h-full rounded-full transition-all duration-500 ${exhausted ? 'bg-[#D1D1DC]' : 'bg-[#FFB217]'}`}
               style={{ width: `${progressWidth}%` }}
             />
           </div>

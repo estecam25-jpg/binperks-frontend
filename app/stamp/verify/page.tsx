@@ -74,12 +74,13 @@ export default function VerifyPage() {
       if (!res.ok) { setVerifyState('error'); return }
 
       stampResultSession.set({
-        newTotalStamps: data.newTotalStamps,
-        couponIssued:   data.couponIssued,
-        couponRedeemed: data.couponRedeemed,
-        couponValue:    data.couponValue,
-        memberFirstName: firstName,
-        memberLastName:  lastName,
+        newTotalStamps:       data.newTotalStamps,
+        couponIssued:         data.couponIssued,
+        couponRedeemed:       data.couponRedeemed,
+        couponValue:          data.couponValue,
+        memberFirstName:      firstName,
+        memberLastName:       lastName,
+        freeCouponExhausted:  data.freeCouponExhausted ?? false,
       })
 
       setRingProgress(100)
