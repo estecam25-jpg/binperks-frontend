@@ -1,7 +1,7 @@
 // --- RedemptionsTab ---
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 
 interface Redemption {
   id: string; couponValue: number; redeemedAt: string
@@ -284,6 +284,209 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
 
 // --- MarketingTab ---
 
+import type { RefObject } from 'react'
+
+function initials(name: string) {
+  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+}
+
+function QrImg({ url, size }: { url: string; size: number }) {
+  if (!url) return <div style={{ width: size, height: size, background: '#eee' }} />
+  const src = `https://api.qrserver.com/v1/create-qr-code/?size=${size * 2}x${size * 2}&data=${encodeURIComponent(url)}&format=png&margin=1`
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} width={size} height={size} alt="QR" crossOrigin="anonymous" style={{ display: 'block' }} />
+}
+
+/* ── off-screen material templates ──────────────────────────────── */
+
+function PosterTemplate({ brandColor, brandName, logoUrl, joinUrl }: {
+  brandColor: string; brandName: string; logoUrl: string | null; joinUrl: string
+}) {
+  return (
+    <div style={{
+      width: 816, height: 1056, background: brandColor,
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', gap: 28, fontFamily: 'Montserrat, sans-serif',
+      padding: '60px 48px',
+    }}>
+      {/* Logo / initials */}
+      <div style={{
+        width: 120, height: 120, borderRadius: '50%', background: 'white',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        overflow: 'hidden', flexShrink: 0,
+      }}>
+        {logoUrl
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={logoUrl} alt="" width={120} height={120} style={{ objectFit: 'cover', width: '100%', height: '100%' }} crossOrigin="anonymous" />
+          : <span style={{ fontFamily: 'Coiny, cursive', fontSize: 44, color: brandColor, lineHeight: 1 }}>{initials(brandName)}</span>
+        }
+      </div>
+      {/* Store name */}
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontFamily: 'Coiny, cursive', fontSize: 72, color: 'white', lineHeight: 1.1 }}>{brandName}</div>
+        <div style={{ fontSize: 26, color: 'rgba(255,255,255,0.8)', fontWeight: 700, marginTop: 8, letterSpacing: 2 }}>REWARDS PROGRAM</div>
+      </div>
+      {/* QR */}
+      <div style={{ background: 'white', padding: 20, borderRadius: 24 }}>
+        <QrImg url={joinUrl} size={280} />
+      </div>
+      {/* CTA */}
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 28, color: 'white', fontWeight: 800 }}>Scan to join &amp; earn rewards</div>
+        <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.65)', marginTop: 8 }}>Free to join · No app needed</div>
+      </div>
+      {/* Footer */}
+      <div style={{ position: 'absolute', bottom: 32, fontSize: 14, color: 'rgba(255,255,255,0.5)', fontWeight: 600, letterSpacing: 1 }}>
+        POWERED BY BINPERKS
+      </div>
+    </div>
+  )
+}
+
+function TableTentTemplate({ brandColor, brandName, joinUrl }: {
+  brandColor: string; brandName: string; joinUrl: string
+}) {
+  return (
+    <div style={{
+      width: 384, height: 576, background: 'white',
+      display: 'flex', flexDirection: 'column',
+      fontFamily: 'Montserrat, sans-serif', overflow: 'hidden',
+    }}>
+      {/* Color bar top */}
+      <div style={{ height: 12, background: brandColor, flexShrink: 0 }} />
+      {/* Content */}
+      <div style={{
+        flex: 1, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 20, padding: '32px 28px',
+      }}>
+        <div style={{ fontFamily: 'Coiny, cursive', fontSize: 42, color: '#1A1A2E', textAlign: 'center', lineHeight: 1.1 }}>
+          {brandName}
+        </div>
+        <div style={{ background: '#F5F5F8', padding: 16, borderRadius: 16 }}>
+          <QrImg url={joinUrl} size={180} />
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: brandColor }}>Scan to join BinPerks</div>
+          <div style={{ fontSize: 13, color: '#8E8EA8', fontWeight: 600, marginTop: 4 }}>Earn rewards every visit</div>
+        </div>
+      </div>
+      {/* Color bar bottom */}
+      <div style={{ height: 12, background: brandColor, flexShrink: 0 }} />
+    </div>
+  )
+}
+
+function WindowClingTemplate({ brandColor, brandName, joinUrl }: {
+  brandColor: string; brandName: string; joinUrl: string
+}) {
+  return (
+    <div style={{
+      width: 400, height: 400, background: 'white',
+      border: `6px solid ${brandColor}`, borderRadius: 24,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 16, fontFamily: 'Montserrat, sans-serif', padding: 28,
+    }}>
+      <div style={{ fontFamily: 'Coiny, cursive', fontSize: 34, color: brandColor, textAlign: 'center', lineHeight: 1.1 }}>
+        We&apos;re on BinPerks!
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: '#1A1A2E', textAlign: 'center' }}>{brandName}</div>
+      <div style={{ background: '#F5F5F8', padding: 12, borderRadius: 14 }}>
+        <QrImg url={joinUrl} size={160} />
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#8E8EA8', textAlign: 'center' }}>
+        Scan to earn loyalty rewards
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(142,142,168,0.6)', letterSpacing: 0.5 }}>
+        POWERED BY BINPERKS
+      </div>
+    </div>
+  )
+}
+
+function SocialTemplate({ brandColor, brandName, joinUrl }: {
+  brandColor: string; brandName: string; joinUrl: string
+}) {
+  return (
+    <div style={{
+      width: 1080, height: 1080, background: brandColor,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 36, fontFamily: 'Montserrat, sans-serif', padding: '80px 100px',
+    }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontFamily: 'Coiny, cursive', fontSize: 80, color: 'white', lineHeight: 1.1 }}>
+          Join our BinPerks
+        </div>
+        <div style={{ fontFamily: 'Coiny, cursive', fontSize: 80, color: 'rgba(255,255,255,0.85)', lineHeight: 1 }}>
+          Rewards Program!
+        </div>
+      </div>
+      <div style={{ fontSize: 30, fontWeight: 800, color: 'rgba(255,255,255,0.9)' }}>{brandName}</div>
+      <div style={{ background: 'white', padding: 28, borderRadius: 28 }}>
+        <QrImg url={joinUrl} size={320} />
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 26, fontWeight: 800, color: 'white' }}>Free to join · No app needed</div>
+        <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.65)', marginTop: 8, fontWeight: 600 }}>Earn rewards every visit you shop</div>
+      </div>
+    </div>
+  )
+}
+
+/* ── download helper ─────────────────────────────────────────────── */
+
+async function downloadMaterial(ref: RefObject<HTMLDivElement | null>, filename: string) {
+  if (!ref.current) return
+  const html2canvas = (await import('html2canvas')).default
+  const canvas = await html2canvas(ref.current, {
+    useCORS: true,
+    allowTaint: false,
+    scale: 1,
+    logging: false,
+  })
+  const link = document.createElement('a')
+  link.download = filename
+  link.href = canvas.toDataURL('image/png')
+  link.click()
+}
+
+/* ── MaterialCard ────────────────────────────────────────────────── */
+
+function MaterialCard({
+  title, description, previewScale, previewWidth, previewHeight, children, onDownload, downloading,
+}: {
+  title: string; description: string
+  previewScale: number; previewWidth: number; previewHeight: number
+  children: React.ReactNode; onDownload: () => void; downloading: boolean
+}) {
+  const scaledW = Math.round(previewWidth * previewScale)
+  const scaledH = Math.round(previewHeight * previewScale)
+  return (
+    <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-4">
+      <div>
+        <h3 className="font-['Coiny'] text-lg text-[#1A1A2E]">{title}</h3>
+        <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">{description}</p>
+      </div>
+      {/* Scaled preview */}
+      <div className="flex justify-center">
+        <div style={{ width: scaledW, height: scaledH, overflow: 'hidden', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
+          <div style={{ transform: `scale(${previewScale})`, transformOrigin: 'top left', width: previewWidth, height: previewHeight }}>
+            {children}
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={onDownload}
+        disabled={downloading}
+        className="w-full py-3.5 rounded-xl font-bold text-[14px] text-[#4A4B98] font-['Montserrat'] border-2 border-[#4A4B98] disabled:opacity-50 active:bg-indigo-50 transition-colors"
+      >
+        {downloading ? 'Generating…' : '⬇ Download PNG'}
+      </button>
+    </div>
+  )
+}
+
 export function MarketingTab({ storeId, stores }: { storeId: string | null; stores: { id: string; storeName: string; storeKey?: string; city: string; state: string }[] }) {
   const activeStore = storeId ? stores.find(s => s.id === storeId) : stores[0]
   const [copied, setCopied] = useState(false)
@@ -291,10 +494,19 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   const [memoSaving, setMemoSaving] = useState(false)
   const [memoSaved, setMemoSaved] = useState(false)
   const [memoLoading, setMemoLoading] = useState(true)
+  const [brandColor, setBrandColor] = useState('#4A4B98')
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState<string | null>(null)
+
+  const posterRef = useRef<HTMLDivElement>(null)
+  const tentRef   = useRef<HTMLDivElement>(null)
+  const clingRef  = useRef<HTMLDivElement>(null)
+  const socialRef = useRef<HTMLDivElement>(null)
 
   const joinUrl = activeStore?.storeKey
     ? `https://app.binperks.com/join/${activeStore.storeKey}`
     : ''
+  const brandName = activeStore?.storeName ?? 'BinPerks'
 
   const activeStoreId = storeId ?? stores[0]?.id
 
@@ -304,7 +516,11 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
     fetch(`/api/merchant/store?storeId=${activeStoreId}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d) setMemo(d.memberMemo ?? '')
+        if (d) {
+          setMemo(d.memberMemo ?? '')
+          setBrandColor(d.brandColor ?? '#4A4B98')
+          setLogoUrl(d.logoUrl ?? null)
+        }
         setMemoLoading(false)
       })
   }, [activeStoreId])
@@ -330,6 +546,20 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
     setMemoSaving(false)
     if (res.ok) { setMemoSaved(true); setTimeout(() => setMemoSaved(false), 3000) }
   }
+
+  async function handleDownload(key: string, ref: RefObject<HTMLDivElement | null>, filename: string) {
+    if (!joinUrl) return
+    setDownloading(key)
+    try {
+      await downloadMaterial(ref, filename)
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  const safeName = (activeStore?.storeName ?? 'store').replace(/\s+/g, '-').toLowerCase()
+
+  const materialProps = { brandColor, brandName, logoUrl, joinUrl }
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-12">
@@ -416,17 +646,74 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         </div>
       </div>
 
-      {/* Printable signage note */}
-      <div className="bg-indigo-50 border border-indigo-200 rounded-2xl px-5 py-4 flex items-start gap-3">
-        <span className="text-xl flex-shrink-0">🖨️</span>
-        <div>
-          <p className="text-[13px] font-bold text-[#4A4B98] mb-0.5">Printable signage</p>
-          <p className="text-[12px] text-[#4A4B98]/70 font-medium leading-snug">
-            Full-size printable QR code posters are coming in a future update.
-            For now, use the QR code download above.
-          </p>
-        </div>
+      {/* Marketing Materials */}
+      <div className="flex flex-col gap-1 px-1 pt-2">
+        <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Marketing materials</h2>
+        <p className="text-[12px] text-[#8E8EA8] font-medium">
+          Download print-ready and digital materials branded for your store.
+        </p>
       </div>
+
+      {/* Off-screen templates for capture */}
+      <div style={{ position: 'fixed', left: -9999, top: -9999, pointerEvents: 'none', zIndex: -1 }}>
+        <div ref={posterRef}><PosterTemplate {...materialProps} /></div>
+        <div ref={tentRef}><TableTentTemplate {...materialProps} /></div>
+        <div ref={clingRef}><WindowClingTemplate {...materialProps} /></div>
+        <div ref={socialRef}><SocialTemplate {...materialProps} /></div>
+      </div>
+
+      {/* Material 1 — QR Code Poster */}
+      <MaterialCard
+        title="QR Code Poster"
+        description="8.5×11 — print and hang at your register or entrance"
+        previewScale={0.31}
+        previewWidth={816}
+        previewHeight={1056}
+        onDownload={() => handleDownload('poster', posterRef, `binperks-poster-${safeName}.png`)}
+        downloading={downloading === 'poster'}
+      >
+        <PosterTemplate {...materialProps} />
+      </MaterialCard>
+
+      {/* Material 2 — Table Tent */}
+      <MaterialCard
+        title="Table Tent Card"
+        description="4×6 — fold and stand on your checkout counter"
+        previewScale={0.55}
+        previewWidth={384}
+        previewHeight={576}
+        onDownload={() => handleDownload('tent', tentRef, `binperks-tabletent-${safeName}.png`)}
+        downloading={downloading === 'tent'}
+      >
+        <TableTentTemplate {...materialProps} />
+      </MaterialCard>
+
+      {/* Material 3 — Window Cling */}
+      <MaterialCard
+        title="Window Cling"
+        description="Square — print on window cling paper and stick to your door"
+        previewScale={0.7}
+        previewWidth={400}
+        previewHeight={400}
+        onDownload={() => handleDownload('cling', clingRef, `binperks-windowcling-${safeName}.png`)}
+        downloading={downloading === 'cling'}
+      >
+        <WindowClingTemplate {...materialProps} />
+      </MaterialCard>
+
+      {/* Material 4 — Social Media Graphic */}
+      <MaterialCard
+        title="Social Media Graphic"
+        description="1080×1080 — share on Instagram, Facebook, or TikTok"
+        previewScale={0.27}
+        previewWidth={1080}
+        previewHeight={1080}
+        onDownload={() => handleDownload('social', socialRef, `binperks-social-${safeName}.png`)}
+        downloading={downloading === 'social'}
+      >
+        <SocialTemplate {...materialProps} />
+      </MaterialCard>
+
     </div>
   )
 }
