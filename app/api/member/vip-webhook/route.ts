@@ -7,8 +7,9 @@
  *
  * Configure in Stripe dashboard:
  *   Endpoint: https://app.binperks.com/api/member/vip-webhook
- *   Events:   checkout.session.completed, invoice.payment_failed,
- *             customer.subscription.deleted
+ *   Events:   checkout.session.completed, customer.subscription.created,
+ *             customer.subscription.updated, customer.subscription.deleted,
+ *             invoice.payment_failed
  *   Secret:   STRIPE_MEMBER_WEBHOOK_SECRET
  *
  * members has no Stripe columns (only subscription_status, vip_billing_cycle,
@@ -70,7 +71,29 @@ export async function POST(req: NextRequest) {
         })
         .eq('id', memberId)
 
-      console.log(`[member/vip-webhook] Member ${memberId} upgraded to VIP`)
+      console.log(`[member/vip-webhook] Member ${memberId} upgraded to VIP via checkout`)
+      break
+    }
+
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated': {
+      const subscription = event.data.object as Stripe.Subscription
+      if (subscription.metadata?.type !== 'vip_membership') break
+      const memberId = subscription.metadata?.memberId
+      if (!memberId) break
+
+      // Only upgrade when subscription is active (not canceled, past_due, etc.)
+      if (subscription.status !== 'active') break
+
+      await supabase
+        .from('members')
+        .update({
+          subscription_status: 'vip',
+          vip_billing_cycle:    'monthly',
+        })
+        .eq('id', memberId)
+
+      console.log(`[member/vip-webhook] Member ${memberId} set to VIP via ${event.type}`)
       break
     }
 

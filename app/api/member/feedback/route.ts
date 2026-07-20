@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { rating: rawRating, notes } = body as { rating?: string; notes?: string }
 
-  // Map 'bad' display label → 'mad' DB value
+  // Map 'bad' display label -> 'mad' DB value
   const rating = rawRating === 'bad' ? 'mad' : rawRating
   if (!rating || !VALID_RATINGS.includes(rating)) {
     return NextResponse.json({ error: 'Invalid rating' }, { status: 400 })
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
           from: 'BinPerks Feedback <noreply@feedback.binperks.com>',
           to: toAddresses,
           replyTo: 'support@binperks.com',
-          subject: `Member Feedback — ${rating.toUpperCase()} from ${storeName}`,
+          subject: `Member Feedback -- ${rating.toUpperCase()} from ${storeName}`,
           html: `
             <h2>New Member Feedback Received</h2>
             <p><strong>Store:</strong> ${storeName}</p>
