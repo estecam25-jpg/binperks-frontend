@@ -451,14 +451,38 @@ async function downloadMaterial(ref: RefObject<HTMLDivElement | null>, filename:
   link.click()
 }
 
+async function downloadMaterialAsPdf(
+  ref: RefObject<HTMLDivElement | null>,
+  filename: string,
+  widthIn: number,
+  heightIn: number,
+) {
+  if (!ref.current) return
+  const html2canvas = (await import('html2canvas')).default
+  const { jsPDF } = await import('jspdf')
+  const canvas = await html2canvas(ref.current, {
+    useCORS: true,
+    allowTaint: false,
+    scale: 1,
+    logging: false,
+  })
+  const orientation = widthIn >= heightIn ? 'landscape' : 'portrait'
+  const doc = new jsPDF({ orientation, unit: 'in', format: [widthIn, heightIn] })
+  doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, widthIn, heightIn)
+  doc.save(filename)
+}
+
 /* ── MaterialCard ────────────────────────────────────────────────── */
 
 function MaterialCard({
-  title, description, previewScale, previewWidth, previewHeight, children, onDownload, downloading,
+  title, description, previewScale, previewWidth, previewHeight, children,
+  onDownload, downloading, onDownloadPdf, downloadingPdf,
 }: {
   title: string; description: string
   previewScale: number; previewWidth: number; previewHeight: number
-  children: React.ReactNode; onDownload: () => void; downloading: boolean
+  children: React.ReactNode
+  onDownload: () => void; downloading: boolean
+  onDownloadPdf: () => void; downloadingPdf: boolean
 }) {
   const scaledW = Math.round(previewWidth * previewScale)
   const scaledH = Math.round(previewHeight * previewScale)
@@ -476,13 +500,22 @@ function MaterialCard({
           </div>
         </div>
       </div>
-      <button
-        onClick={onDownload}
-        disabled={downloading}
-        className="w-full py-3.5 rounded-xl font-bold text-[14px] text-[#4A4B98] font-['Montserrat'] border-2 border-[#4A4B98] disabled:opacity-50 active:bg-indigo-50 transition-colors"
-      >
-        {downloading ? 'Generating…' : '⬇ Download PNG'}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={onDownload}
+          disabled={downloading || downloadingPdf}
+          className="flex-1 py-3.5 rounded-xl font-bold text-[14px] text-[#4A4B98] font-['Montserrat'] border-2 border-[#4A4B98] disabled:opacity-50 active:bg-indigo-50 transition-colors"
+        >
+          {downloading ? 'Generating…' : '⬇ PNG'}
+        </button>
+        <button
+          onClick={onDownloadPdf}
+          disabled={downloading || downloadingPdf}
+          className="flex-1 py-3.5 rounded-xl font-bold text-[14px] text-white font-['Montserrat'] bg-[#4A4B98] disabled:opacity-50 active:opacity-80 transition-opacity"
+        >
+          {downloadingPdf ? 'Generating…' : '⬇ PDF'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -552,6 +585,22 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
     setDownloading(key)
     try {
       await downloadMaterial(ref, filename)
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  async function handleDownloadPdf(
+    key: string,
+    ref: RefObject<HTMLDivElement | null>,
+    filename: string,
+    widthIn: number,
+    heightIn: number,
+  ) {
+    if (!joinUrl) return
+    setDownloading(key)
+    try {
+      await downloadMaterialAsPdf(ref, filename, widthIn, heightIn)
     } finally {
       setDownloading(null)
     }
@@ -670,7 +719,9 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         previewWidth={816}
         previewHeight={1056}
         onDownload={() => handleDownload('poster', posterRef, `binperks-poster-${safeName}.png`)}
-        downloading={downloading === 'poster'}
+        downloading={downloading === 'poster-png'}
+        onDownloadPdf={() => handleDownloadPdf('poster-pdf', posterRef, `binperks-poster-${safeName}.pdf`, 8.5, 11)}
+        downloadingPdf={downloading === 'poster-pdf'}
       >
         <PosterTemplate {...materialProps} />
       </MaterialCard>
@@ -683,7 +734,9 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         previewWidth={384}
         previewHeight={576}
         onDownload={() => handleDownload('tent', tentRef, `binperks-tabletent-${safeName}.png`)}
-        downloading={downloading === 'tent'}
+        downloading={downloading === 'tent-png'}
+        onDownloadPdf={() => handleDownloadPdf('tent-pdf', tentRef, `binperks-tabletent-${safeName}.pdf`, 4, 6)}
+        downloadingPdf={downloading === 'tent-pdf'}
       >
         <TableTentTemplate {...materialProps} />
       </MaterialCard>
@@ -696,7 +749,9 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         previewWidth={400}
         previewHeight={400}
         onDownload={() => handleDownload('cling', clingRef, `binperks-windowcling-${safeName}.png`)}
-        downloading={downloading === 'cling'}
+        downloading={downloading === 'cling-png'}
+        onDownloadPdf={() => handleDownloadPdf('cling-pdf', clingRef, `binperks-windowcling-${safeName}.pdf`, 5, 5)}
+        downloadingPdf={downloading === 'cling-pdf'}
       >
         <WindowClingTemplate {...materialProps} />
       </MaterialCard>
@@ -709,7 +764,9 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         previewWidth={1080}
         previewHeight={1080}
         onDownload={() => handleDownload('social', socialRef, `binperks-social-${safeName}.png`)}
-        downloading={downloading === 'social'}
+        downloading={downloading === 'social-png'}
+        onDownloadPdf={() => handleDownloadPdf('social-pdf', socialRef, `binperks-social-${safeName}.pdf`, 6, 6)}
+        downloadingPdf={downloading === 'social-pdf'}
       >
         <SocialTemplate {...materialProps} />
       </MaterialCard>
