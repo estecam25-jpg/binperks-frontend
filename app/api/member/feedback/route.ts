@@ -89,9 +89,10 @@ export async function POST(req: NextRequest) {
         const toAddresses = ['support@binperks.com']
         if (merchantEmail) toAddresses.unshift(merchantEmail)
 
-        await resend.emails.send({
-          from: 'BinPerks Feedback <feedback@binperks.com>',
+        const { error: emailError } = await resend.emails.send({
+          from: 'BinPerks Feedback <onboarding@resend.dev>',
           to: toAddresses,
+          replyTo: 'support@binperks.com',
           subject: `Member Feedback — ${rating.toUpperCase()} from ${storeName}`,
           html: `
             <h2>New Member Feedback Received</h2>
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest) {
             <p style="color:#888;font-size:12px;">Submitted via BinPerks member app. Contact support@binperks.com with questions.</p>
           `,
         })
+        if (emailError) console.error('[/api/member/feedback] Resend error:', emailError)
       } catch (err) {
         console.error('[feedback] Resend email error:', err)
       }
