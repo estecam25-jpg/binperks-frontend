@@ -4,7 +4,7 @@
  * Member submits a rating ('wow' | 'meh' | 'mad') + optional notes.
  * 'bad' display label is mapped to 'mad' DB value here.
  *
- * For meh/mad WITH notes: fires GHL_FEEDBACK_WEBHOOK_URL (non-blocking).
+ * For meh/mad WITH notes: sends Resend email to merchant + support@binperks.com.
  *
  * Auth: Supabase session cookie.
  * Request body: { rating: 'wow'|'meh'|'mad'|'bad', notes?: string }
@@ -17,8 +17,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Resend } from 'resend'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 const VALID_RATINGS = ['wow', 'meh', 'mad']
 
@@ -65,9 +68,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to submit feedback' }, { status: 500 })
   }
 
-  // For meh/mad with notes: fire GHL webhook (non-blocking, fire and forget)
-  if ((rating === 'meh' || rating === 'mad') && notes?.trim() && process.env.GHL_FEEDBACK_WEBHOOK_URL) {
-    const webhookUrl = process.env.GHL_FEEDBACK_WEBHOOK_URL
+  // For meh/mad with notes: email merchant + support (non-blocking)
+  if ((rating === 'meh' || rating === 'mad') && notes?.trim() && process.env.RESEND_API_KEY) {
     const memberName = `${member.first_name} ${member.last_name}`
     const notesText = notes.trim()
     const storeId = member.home_store_id
@@ -81,19 +83,29 @@ export async function POST(req: NextRequest) {
             ? admin.from('merchants').select('owner_email').eq('id', merchantId).single()
             : Promise.resolve({ data: null, error: null }),
         ])
-        await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            memberName,
-            storeName:     store?.brand_name ?? '',
-            rating,
-            message:       notesText,
-            merchantEmail: (merchant as { owner_email?: string } | null)?.owner_email ?? '',
-          }),
+
+        const storeName = (store as { brand_name?: string } | null)?.brand_name ?? ''
+        const merchantEmail = (merchant as { owner_email?: string } | null)?.owner_email ?? ''
+        const toAddresses = ['support@binperks.com']
+        if (merchantEmail) toAddresses.unshift(merchantEmail)
+
+        await resend.emails.send({
+          from: 'BinPerks Feedback <feedback@binperks.com>',
+          to: toAddresses,
+          subject: `Member Feedback — ${rating.toUpperCase()} from ${storeName}`,
+          html: `
+            <h2>New Member Feedback Received</h2>
+            <p><strong>Store:</strong> ${storeName}</p>
+            <p><strong>Member:</strong> ${memberName}</p>
+            <p><strong>Rating:</strong> ${rating.toUpperCase()}</p>
+            <p><strong>Message:</strong></p>
+            <blockquote>${notesText}</blockquote>
+            <hr/>
+            <p style="color:#888;font-size:12px;">Submitted via BinPerks member app. Contact support@binperks.com with questions.</p>
+          `,
         })
       } catch (err) {
-        console.error('[feedback] GHL webhook error:', err)
+        console.error('[feedback] Resend email error:', err)
       }
     })()
   }
