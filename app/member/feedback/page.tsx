@@ -2,51 +2,48 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-
-type Rating = 'wow' | 'meh' | 'mad'
+import Image from 'next/image'
 
 interface StoreInfo {
   brandName: string
   brandColor: string
-  googleReviewUrl: string | null
-  facebookReviewUrl: string | null
+  logoUrl: string | null
 }
-
-const RATINGS: { value: Rating; emoji: string; label: string }[] = [
-  { value: 'wow', emoji: '🤩', label: 'Wow!' },
-  { value: 'meh', emoji: '😐', label: 'It was okay' },
-  { value: 'mad', emoji: '😠', label: 'Not great' },
-]
 
 export default function MemberFeedbackPage() {
   const router = useRouter()
   const [store, setStore] = useState<StoreInfo | null>(null)
   const [loading, setLoading] = useState(true)
-  const [rating, setRating] = useState<Rating | null>(null)
-  const [notes, setNotes] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/member/me').then(res => {
       if (res.status === 401) { router.replace('/member/login'); return null }
       return res.ok ? res.json() : null
     }).then(data => {
-      if (data?.store) setStore(data.store)
+      if (data?.store) setStore({
+        brandName: data.store.brandName,
+        brandColor: data.store.brandColor,
+        logoUrl: data.store.logoUrl ?? null,
+      })
       setLoading(false)
     })
   }, [router])
 
-  async function handleSubmit() {
-    if (!rating || submitting) return
-    setSubmitting(true)
-    const res = await fetch('/api/member/feedback', {
+  async function handleRating(display: 'wow' | 'meh' | 'bad') {
+    if (submitting) return
+    setSubmitting(display)
+    const dbRating = display === 'bad' ? 'mad' : display
+    await fetch('/api/member/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rating, notes: notes.trim() || undefined }),
-    })
-    setSubmitting(false)
-    if (res.ok) setSubmitted(true)
+      body: JSON.stringify({ rating: dbRating }),
+    }).catch(() => {})
+    if (display === 'wow') {
+      router.push('/member/feedback/wow')
+    } else {
+      router.push(`/member/feedback/form?rating=${display}`)
+    }
   }
 
   const brandColor = store?.brandColor ?? '#4A4B98'
@@ -63,96 +60,70 @@ export default function MemberFeedbackPage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
       <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: brandColor }}>
+        {store?.logoUrl && (
+          <div className="w-8 h-8 rounded-full bg-white overflow-hidden flex-shrink-0 shadow-sm">
+            <Image src={store.logoUrl} alt={brandName} width={32} height={32} className="object-cover w-full h-full" />
+          </div>
+        )}
         <span className="font-['Coiny'] text-xl leading-none text-white">{brandName}</span>
-        <span className="text-white/50 text-[10px] font-semibold tracking-widest uppercase ml-auto">
-          Powered by BinPerks
-        </span>
+        <span className="text-white/50 text-[10px] font-semibold tracking-widest uppercase ml-auto">Powered by BinPerks</span>
       </div>
 
-      <main className="flex-1 flex flex-col items-center px-4 py-10 gap-6 max-w-md mx-auto w-full">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-10 gap-8 max-w-md mx-auto w-full">
+        <div className="text-center">
+          <h1 className="font-['Coiny'] text-3xl text-[#1A1A2E]">How was your visit?</h1>
+          <p className="text-[14px] text-[#8E8EA8] font-medium mt-1">Tap to let us know</p>
+        </div>
 
-        {submitted ? (
-          <div className="w-full flex flex-col items-center text-center gap-4 pt-6">
-            <span className="text-4xl">{rating === 'wow' ? '🎉' : '🙏'}</span>
-            <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Thanks for letting us know</h1>
-
-            {rating === 'wow' && (store?.googleReviewUrl || store?.facebookReviewUrl) ? (
-              <>
-                <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
-                  Glad you had a great visit! Mind sharing it with a quick review?
-                </p>
-                <div className="flex flex-col gap-2.5 w-full">
-                  {store.googleReviewUrl && (
-                    <a href={store.googleReviewUrl} target="_blank" rel="noopener noreferrer"
-                      className="w-full py-4 rounded-2xl font-bold text-[15px] text-white font-['Montserrat'] text-center active:scale-[0.97] transition-all"
-                      style={{ backgroundColor: brandColor }}>
-                      Leave a Google review
-                    </a>
-                  )}
-                  {store.facebookReviewUrl && (
-                    <a href={store.facebookReviewUrl} target="_blank" rel="noopener noreferrer"
-                      className="w-full py-4 rounded-2xl font-semibold text-[14px] text-[#1A1A2E] font-['Montserrat'] text-center border-2 border-[#EBEBF2] active:border-[#1A1A2E] transition-colors">
-                      Leave a Facebook review
-                    </a>
-                  )}
-                </div>
-              </>
-            ) : rating === 'mad' ? (
-              <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
-                Your note was sent to {brandName} privately — they'll follow up if needed.
-              </p>
-            ) : (
-              <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
-                We'll pass this along to {brandName}.
-              </p>
+        <div className="w-full flex flex-col gap-4">
+          <button
+            onClick={() => handleRating('wow')}
+            disabled={!!submitting}
+            className="w-full rounded-2xl px-6 py-5 flex items-center gap-5 transition-opacity active:opacity-80 disabled:opacity-60"
+            style={{ backgroundColor: '#2A7D34' }}
+          >
+            <span className="text-5xl">😍</span>
+            <div className="flex flex-col items-start">
+              <span className="font-['Coiny'] text-2xl text-white leading-tight">WOW</span>
+              <span className="text-[13px] font-semibold text-white/75">Great experience!</span>
+            </div>
+            {submitting === 'wow' && (
+              <span className="ml-auto w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             )}
+          </button>
 
-            <button onClick={() => router.push('/member/dashboard')} className="text-[13px] font-semibold text-[#4A4B98] underline mt-2">
-              Back to dashboard
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="w-full text-center">
-              <h1 className="font-['Coiny'] text-3xl text-[#1A1A2E] mb-1">How was your visit?</h1>
-              <p className="text-[14px] text-[#8E8EA8] font-medium">Your feedback goes straight to {brandName}.</p>
+          <button
+            onClick={() => handleRating('meh')}
+            disabled={!!submitting}
+            className="w-full rounded-2xl px-6 py-5 flex items-center gap-5 transition-opacity active:opacity-80 disabled:opacity-60"
+            style={{ backgroundColor: '#FFB217' }}
+          >
+            <span className="text-5xl">😐</span>
+            <div className="flex flex-col items-start">
+              <span className="font-['Coiny'] text-2xl text-[#1A1A2E] leading-tight">MEH</span>
+              <span className="text-[13px] font-semibold text-[#1A1A2E]/60">It was okay</span>
             </div>
+            {submitting === 'meh' && (
+              <span className="ml-auto w-5 h-5 border-2 border-[#1A1A2E]/20 border-t-[#1A1A2E] rounded-full animate-spin" />
+            )}
+          </button>
 
-            <div className="w-full grid grid-cols-3 gap-2.5">
-              {RATINGS.map(r => (
-                <button
-                  key={r.value}
-                  onClick={() => setRating(r.value)}
-                  className={`
-                    flex flex-col items-center gap-1.5 py-5 rounded-2xl border-2 transition-all
-                    ${rating === r.value ? 'border-[#4A4B98] bg-indigo-50' : 'border-transparent bg-white'}
-                  `}
-                >
-                  <span className="text-3xl">{r.emoji}</span>
-                  <span className="text-[11px] font-bold text-[#1A1A2E]">{r.label}</span>
-                </button>
-              ))}
+          <button
+            onClick={() => handleRating('bad')}
+            disabled={!!submitting}
+            className="w-full rounded-2xl px-6 py-5 flex items-center gap-5 transition-opacity active:opacity-80 disabled:opacity-60"
+            style={{ backgroundColor: '#DA1212' }}
+          >
+            <span className="text-5xl">😤</span>
+            <div className="flex flex-col items-start">
+              <span className="font-['Coiny'] text-2xl text-white leading-tight">BAD</span>
+              <span className="text-[13px] font-semibold text-white/75">Not great</span>
             </div>
-
-            <textarea
-              rows={3}
-              placeholder="Anything you'd like to add? (optional)"
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              maxLength={500}
-              className="w-full px-4 py-3.5 rounded-2xl border-2 border-transparent bg-white outline-none focus:border-[#4A4B98] transition-colors text-[14px] font-medium text-[#1A1A2E] placeholder:text-[#D1D1DC] resize-none"
-            />
-
-            <button
-              onClick={handleSubmit}
-              disabled={!rating || submitting}
-              className="w-full py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide bg-[#4A4B98] disabled:opacity-40 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
-            >
-              {submitting && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-              {submitting ? 'Sending…' : 'Send Feedback'}
-            </button>
-          </>
-        )}
+            {submitting === 'bad' && (
+              <span className="ml-auto w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            )}
+          </button>
+        </div>
       </main>
     </div>
   )
