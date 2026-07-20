@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
         if (merchantEmail) toAddresses.unshift(merchantEmail)
 
         const { error: emailError } = await resend.emails.send({
-          from: 'BinPerks Feedback <onboarding@resend.dev>',
+          from: 'BinPerks Feedback <noreply@feedback.binperks.com>',
           to: toAddresses,
           replyTo: 'support@binperks.com',
           subject: `Member Feedback — ${rating.toUpperCase()} from ${storeName}`,
