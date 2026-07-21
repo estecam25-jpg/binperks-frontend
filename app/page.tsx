@@ -18,7 +18,7 @@ export default function HomePage() {
       </div>
 
       <div className="mt-auto pb-6 text-center">
-        <Link href="/admin" className="text-[10px] text-[#E0E0E0]">·</Link>
+        <Link href="/admin/login" className="text-[10px] text-[#E0E0E0]">·</Link>
       </div>
     </div>
   )
