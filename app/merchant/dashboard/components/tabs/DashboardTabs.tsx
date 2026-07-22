@@ -795,6 +795,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
   const [brandColor,    setBrandColor]    = useState('#4A4B98')
   const [fontFamily,    setFontFamily]    = useState('Google Sans')
   const [logoUrl,       setLogoUrl]       = useState<string | null>(null)
+  const [reviewUrl,     setReviewUrl]     = useState<string>('')
   const [logoUploading, setLogoUploading] = useState(false)
   const [brandSaving,   setBrandSaving]   = useState(false)
   const [brandSaved,    setBrandSaved]    = useState(false)
@@ -817,6 +818,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
           setBrandColor(d.brandColor ?? '#4A4B98')
           setFontFamily(d.fontFamily ?? 'Coiny')
           setLogoUrl(d.logoUrl ?? null)
+          setReviewUrl(d.reviewUrl ?? '')
         }
         setBrandLoading(false)
       })
@@ -857,7 +859,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
     const res = await fetch('/api/merchant/store', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId: activeStoreId, brandColor, fontFamily: fontFamily || null, logoUrl }),
+      body: JSON.stringify({ storeId: activeStoreId, brandColor, fontFamily: fontFamily || null, logoUrl, reviewUrl: reviewUrl || null }),
     })
     setBrandSaving(false)
     if (res.ok) { setBrandSaved(true); setTimeout(() => setBrandSaved(false), 3000) }
@@ -995,6 +997,21 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
               >
                 {stores.find(s => s.id === activeStoreId)?.storeName ?? 'Store Name Preview'}
               </div>
+            </div>
+
+            {/* Review URL */}
+            <div className="flex flex-col gap-2">
+              <label className="text-[13px] font-bold text-[#1A1A2E]">Google Review URL</label>
+              <input
+                type="url"
+                placeholder="https://g.page/r/your-review-link"
+                value={reviewUrl}
+                onChange={e => setReviewUrl(e.target.value)}
+                className="rounded-xl border border-[#EBEBF2] bg-[#F5F5F8] px-4 py-2.5 text-[13px] text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-[#4A4B98]/30 placeholder:text-[#D1D1DC]"
+              />
+              <p className="text-[11px] text-[#8E8EA8] font-medium">
+                Members will see a &ldquo;Leave a Review&rdquo; button after submitting feedback.
+              </p>
             </div>
 
             {/* Save branding */}
