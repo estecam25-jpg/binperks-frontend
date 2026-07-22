@@ -9,23 +9,23 @@
  * Response: { ok: true }
  */
 
-import { NextRequest, NextResponse } from \'next/server\'
-import { createServerSupabaseClient } from \'@/lib/supabase-server\'
-import { createAdminSupabaseClient } from \'@/lib/supabase-admin\'
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 export async function POST(_req: NextRequest) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    return NextResponse.json({ error: \'not_authenticated\' }, { status: 401 })
+    return NextResponse.json({ error: 'not_authenticated' }, { status: 401 })
   }
 
   const admin = createAdminSupabaseClient()
 
   const { data: member } = await admin
-    .from(\'members\')
-    .select(\'id\')
-    .eq(\'auth_user_id\', user.id)
+    .from('members')
+    .select('id')
+    .eq('auth_user_id', user.id)
     .single()
 
   if (!member) {
@@ -34,10 +34,10 @@ export async function POST(_req: NextRequest) {
 
   // Find most recent feedback record for this member
   const { data: latest } = await admin
-    .from(\'feedback\')
-    .select(\'id\')
-    .eq(\'member_id\', member.id)
-    .order(\'submitted_at\', { ascending: false })
+    .from('feedback')
+    .select('id')
+    .eq('member_id', member.id)
+    .order('submitted_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
@@ -46,16 +46,16 @@ export async function POST(_req: NextRequest) {
     // (migration: ALTER TABLE feedback ADD COLUMN IF NOT EXISTS review_clicked boolean DEFAULT false,
     //             ADD COLUMN IF NOT EXISTS review_clicked_at timestamptz)
     await admin
-      .from(\'feedback\')
+      .from('feedback')
       .update({
         review_clicked:    true,
         review_clicked_at: new Date().toISOString(),
       } as Record<string, unknown>)
-      .eq(\'id\', latest.id)
+      .eq('id', latest.id)
       .throwOnError()
       .then(() => {}, (err) => {
         // Columns may not exist yet — log and continue
-        console.warn(\'[review-click] Could not update review_clicked:\', err?.message)
+        console.warn('[review-click] Could not update review_clicked:', err?.message)
       })
   }
 
