@@ -28,6 +28,12 @@ function normalizePhone(formatted: string): string {
   return formatted.replace(/\D/g, '')
 }
 
+function maskPhone(formatted: string): string {
+  const digits = formatted.replace(/\D/g, '')
+  if (digits.length !== 10) return formatted
+  return `(${digits.slice(0, 3)}) ***-${digits.slice(6)}`
+}
+
 type LookupState = 'idle' | 'loading' | 'found' | 'not_found' | 'inactive'
 
 export default function LookupPage() {
@@ -243,7 +249,7 @@ export default function LookupPage() {
                     {foundMember.firstName} {foundMember.lastName}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
-                    <TierBadge totalStamps={foundMember.totalStamps} />
+                    <TierBadge totalStamps={foundMember.totalStamps} subscriptionStatus={foundMember.subscriptionStatus} />
                     <span className="text-[12px] font-semibold text-[#8E8EA8]">
                       {foundMember.totalStamps} stamps
                     </span>
@@ -297,7 +303,7 @@ export default function LookupPage() {
                   <span className="flex-1 text-[14px] font-semibold text-[#1A1A2E]">
                     {entry.firstName} {entry.lastName}
                   </span>
-                  <span className="text-[12px] text-[#8E8EA8] font-medium">{entry.formattedPhone}</span>
+                  <span className="text-[12px] text-[#8E8EA8] font-medium">{maskPhone(entry.formattedPhone)}</span>
                 </button>
               ))}
             </div>

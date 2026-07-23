@@ -3,7 +3,8 @@ import type { TierName } from '@/lib/tiers'
 
 interface TierBadgeProps {
   totalStamps: number
-  tierName?: TierName   // pass 'Free' explicitly for free/Starter members
+  tierName?: TierName        // pass 'Free' explicitly for free/Starter members
+  subscriptionStatus?: string // if 'free', always renders Starter regardless of stamp count
   className?: string
 }
 
@@ -15,8 +16,8 @@ const BADGE_STYLES: Record<TierName, string> = {
   Diamond: 'bg-indigo-50 text-indigo-700',
 }
 
-export default function TierBadge({ totalStamps, tierName, className = '' }: TierBadgeProps) {
-  const tier = tierName ?? getTier(totalStamps).name
+export default function TierBadge({ totalStamps, tierName, subscriptionStatus, className = '' }: TierBadgeProps) {
+  const tier: TierName = subscriptionStatus === 'free' ? 'Free' : (tierName ?? getTier(totalStamps).name)
   return (
     <span
       className={`

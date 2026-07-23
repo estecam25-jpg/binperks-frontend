@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import TierBadge from '@/components/stamp/TierBadge'
 import { cashierSession, storeSession, foundMemberSession, stampResultSession, signOutCashier, type StampResult } from '@/lib/stamp-session'
-import { getTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
+import { getTier, cyclePosition, stampsToNextCoupon, TIER_DISPLAY_NAMES } from '@/lib/tiers'
 
 export default function SuccessPage() {
   const router = useRouter()
@@ -106,6 +106,8 @@ export default function SuccessPage() {
   function buildScriptParts(): { text: string; highlight?: boolean }[] {
     const name = result!.memberFirstName
     const cv = result!.couponValue
+    const tierLabel = !result!.isVip ? TIER_DISPLAY_NAMES['Free'] : TIER_DISPLAY_NAMES[tier.name]
+    const storeName = store.name
     if (leveledUp === 'silver') return [
       { text: `"🥈 Congratulations ` },
       { text: name, highlight: true },
@@ -171,13 +173,17 @@ export default function SuccessPage() {
     }
     if (result!.couponRedeemed) {
       return [
-        { text: `"You've been stamped, ` },
+        { text: `"Thank you ` },
         { text: name, highlight: true },
+        { text: ` for being a ` },
+        { text: `BinPerks ${tierLabel} member`, highlight: true },
         { text: `! Your ` },
         { text: `$${cv} coupon`, highlight: true },
         { text: ` was applied today — ` },
         { text: `${remaining} more stamp${remaining !== 1 ? 's' : ''}`, highlight: true },
-        { text: ` and you earn another!"` },
+        { text: ` and you earn another at ` },
+        { text: storeName, highlight: true },
+        { text: `!"` },
       ]
     }
     if (exhausted) {
@@ -190,15 +196,17 @@ export default function SuccessPage() {
       ]
     }
     return [
-      { text: `"You've been stamped, ` },
+      { text: `"Thank you ` },
       { text: name, highlight: true },
-      { text: `! You have ` },
-      { text: `${cycleDisplay} stamp${cycleDisplay !== 1 ? 's' : ''}`, highlight: true },
-      { text: ` — ` },
-      { text: `${remaining} more`, highlight: true },
+      { text: ` for being a ` },
+      { text: `BinPerks ${tierLabel} member`, highlight: true },
+      { text: `! I'm awarding you a stamp today — ` },
+      { text: `${remaining} more stamp${remaining !== 1 ? 's' : ''}`, highlight: true },
       { text: ` and you earn a ` },
       { text: `$${tier.couponValue} coupon`, highlight: true },
-      { text: `."` },
+      { text: ` at ` },
+      { text: storeName, highlight: true },
+      { text: `!"` },
     ]
   }
 

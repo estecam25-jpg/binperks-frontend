@@ -115,7 +115,7 @@ export default function MemberViewPage() {
               {member.firstName} {member.lastName}
             </p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <TierBadge totalStamps={member.totalStamps} tierName={member.subscriptionStatus !== 'vip' ? 'Free' : undefined} />
+              <TierBadge totalStamps={member.totalStamps} subscriptionStatus={member.subscriptionStatus} />
             </div>
           </div>
         </div>
