@@ -118,7 +118,7 @@ export async function PATCH(req: NextRequest) {
   const user = await verifyAdmin()
   if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
-  const { merchantId, action } = await req.json() as { merchantId?: string; action?: 'activate' | 'deactivate' }
+  const { merchantId, action } = await req.json() as { merchantId?: string; action?: 'activate' | 'deactivate' | 'approve_w9' | 'reject_w9' }
   if (!merchantId || !action) return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
 
   const admin = createAdminSupabaseClient()
