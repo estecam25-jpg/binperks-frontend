@@ -50,6 +50,8 @@ export default function AdminDashboardPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [blacklistTarget, setBlacklistTarget] = useState<Member | null>(null)
   const [blacklistReason, setBlacklistReason] = useState('')
+  const [merchantSearch, setMerchantSearch] = useState('')
+  const [merchantStatus, setMerchantStatus] = useState<'all' | 'active' | 'deactivated'>('all')
 
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
@@ -114,6 +116,15 @@ export default function AdminDashboardPage() {
     setActionLoading(null)
   }
 
+  const filteredMerchants = merchants.filter(m => {
+    const q = merchantSearch.trim().toLowerCase()
+    const matchesSearch = !q ||
+      (m.company_name ?? '').toLowerCase().includes(q) ||
+      (m.owner_email ?? '').toLowerCase().includes(q)
+    const matchesStatus = merchantStatus === 'all' || m.billing_status === merchantStatus
+    return matchesSearch && matchesStatus
+  })
+
   if (!authed) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-[#1A1A2E]">
@@ -169,11 +180,33 @@ export default function AdminDashboardPage() {
         {/* Merchant list */}
         <section>
           <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] mb-3">Merchants</h2>
+
+          {/* Search + filter */}
+          <div className="flex gap-2 mb-3">
+            <input
+              value={merchantSearch}
+              onChange={e => setMerchantSearch(e.target.value)}
+              placeholder="Search by name or email"
+              className="flex-1 px-4 py-3 rounded-xl bg-white border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-semibold text-[#1A1A2E] placeholder:text-[#C0C0D0] transition-colors"
+            />
+            <select
+              value={merchantStatus}
+              onChange={e => setMerchantStatus(e.target.value as 'all' | 'active' | 'deactivated')}
+              className="px-3 py-3 rounded-xl bg-white border-2 border-transparent focus:border-[#4A4B98] outline-none text-[13px] font-bold text-[#1A1A2E] transition-colors"
+            >
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="deactivated">Deactivated</option>
+            </select>
+          </div>
+
           <div className="flex flex-col gap-2">
-            {merchants.length === 0 && (
-              <p className="text-[13px] text-[#8E8EA8] font-medium px-1">No merchants yet.</p>
+            {filteredMerchants.length === 0 && (
+              <p className="text-[13px] text-[#8E8EA8] font-medium px-1">
+                {merchants.length === 0 ? 'No merchants yet.' : 'No merchants match your search.'}
+              </p>
             )}
-            {merchants.map(m => (
+            {filteredMerchants.map(m => (
               <div key={m.id} className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
