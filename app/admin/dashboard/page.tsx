@@ -21,6 +21,7 @@ interface Merchant {
   created_at: string; stampsThisWeek: number; totalMembers: number
   vipMembers: number; vipConversionPct: number
   w9Status: string | null
+  onboardingComplete: number
 }
 interface Store {
   id: string; brand_name: string; canonical_key: string; is_active: boolean
@@ -83,7 +84,7 @@ function MerchantCard({
           <div className="flex items-center gap-1.5 flex-wrap">
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="text-[14px] font-bold text-[#1A1A2E] truncate">{m.company_name || m.name}</p>
-              {!m.w9Status && <span title="W-9 not submitted" className="text-[13px]">📋</span>}
+              {!m.w9Status && <span title="W-9 not submitted" className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">No W-9</span>}
             </div>
             {atRisk  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">At Risk</span>}
             {pending && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pending</span>}
@@ -108,6 +109,18 @@ function MerchantCard({
           </div>
         ))}
       </div>
+      {/* Onboarding progress */}
+      {m.onboardingComplete < 100 && (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-bold text-[#8E8EA8] uppercase tracking-wide">Onboarding</p>
+            <p className="text-[10px] font-bold text-[#8E8EA8]">{m.onboardingComplete}%</p>
+          </div>
+          <div className="w-full h-1.5 bg-[#F5F5F8] rounded-full overflow-hidden">
+            <div className="h-full rounded-full bg-[#FFB217]" style={{ width: m.onboardingComplete + '%' }} />
+          </div>
+        </div>
+      )}
       <div className="flex gap-2">
         <button onClick={() => onAction(m.id, 'activate')}
           disabled={!!actionLoading || m.billing_status === 'active'}

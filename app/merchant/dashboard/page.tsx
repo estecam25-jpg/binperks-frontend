@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import MerchantNav, { type TabId, type Store } from './components/MerchantNav'
 import OverviewTab from './components/tabs/OverviewTab'
 import MembersTab from './components/tabs/MembersTab'
-import { RedemptionsTab, PerksTab, MarketingTab, SettingsTab } from './components/tabs/DashboardTabs'
+import { RedemptionsTab, PerksTab, MarketingTab, SettingsTab, GettingStartedTab } from './components/tabs/DashboardTabs'
 
 function DashboardShell() {
   const router = useRouter()
@@ -14,6 +14,7 @@ function DashboardShell() {
   const [companyName, setCompanyName] = useState('')
   const [stores, setStores] = useState<Store[]>([])
   const [loading, setLoading] = useState(true)
+  const [onboardingPct, setOnboardingPct] = useState(100)
 
   // Tab and store from URL params — enables deep linking + back button
   const activeTab = (searchParams.get('tab') as TabId) || 'overview'
@@ -33,17 +34,19 @@ function DashboardShell() {
   }
 
   useEffect(() => {
-    fetch('/api/merchant/dashboard')
-      .then(res => {
+    Promise.all([
+      fetch('/api/merchant/dashboard').then(res => {
         if (res.status === 401) { router.replace('/merchant/login'); return null }
         return res.json()
-      })
-      .then(data => {
-        if (!data) return
-        setCompanyName(data.merchant?.companyName ?? '')
-        setStores(data.stores ?? [])
-        setLoading(false)
-      })
+      }),
+      fetch('/api/merchant/onboarding').then(r => r.ok ? r.json() : null),
+    ]).then(([data, onboarding]) => {
+      if (!data) return
+      setCompanyName(data.merchant?.companyName ?? '')
+      setStores(data.stores ?? [])
+      if (onboarding) setOnboardingPct(Math.round((onboarding.completedCount / 13) * 100))
+      setLoading(false)
+    })
   }, [router])
 
   if (loading) {
@@ -66,9 +69,13 @@ function DashboardShell() {
         activeTab={activeTab}
         onStoreChange={setStore}
         onTabChange={setTab}
+        showStart={onboardingPct < 100}
       />
 
       <div className="flex-1 max-w-2xl mx-auto w-full">
+        {activeTab === 'start' && (
+          <GettingStartedTab storeId={activeStoreId} />
+        )}
         {activeTab === 'overview' && (
           <OverviewTab storeId={activeStoreId} />
         )}

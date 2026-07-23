@@ -585,6 +585,10 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
     setDownloading(key)
     try {
       await downloadMaterial(ref, filename)
+      if (activeStoreId) {
+        fetch('/api/merchant/store', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId: activeStoreId, marketingDownloaded: true }) }).catch(() => {})
+      }
     } finally {
       setDownloading(null)
     }
@@ -601,6 +605,10 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
     setDownloading(key)
     try {
       await downloadMaterialAsPdf(ref, filename, widthIn, heightIn)
+      if (activeStoreId) {
+        fetch('/api/merchant/store', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId: activeStoreId, marketingDownloaded: true }) }).catch(() => {})
+      }
     } finally {
       setDownloading(null)
     }
@@ -1235,6 +1243,131 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
           support@binperks.com
         </a>
       </p>
+    </div>
+  )
+}
+
+
+// --- GettingStartedTab ---
+
+interface OnboardingItem {
+  id: string; label: string; completed: boolean; binPerks: boolean
+}
+
+export function GettingStartedTab({ storeId }: { storeId: string | null }) {
+  const [items,          setItems]          = useState<OnboardingItem[]>([])
+  const [completedCount, setCompletedCount] = useState(0)
+  const [loading,        setLoading]        = useState(true)
+  const [confirming,     setConfirming]     = useState(false)
+  const [confirmed,      setConfirmed]      = useState(false)
+
+  useEffect(() => {
+    fetch('/api/merchant/onboarding')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) { setItems(d.items ?? []); setCompletedCount(d.completedCount ?? 0) }
+        setLoading(false)
+      })
+  }, [])
+
+  async function handleConfirmTraining() {
+    setConfirming(true)
+    const res = await fetch('/api/merchant/onboarding', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'confirm_training' }),
+    })
+    if (res.ok) {
+      setConfirmed(true)
+      setItems(prev => prev.map(i => i.id === 'cashier_training' ? { ...i, completed: true } : i))
+      setCompletedCount(c => c + 1)
+    }
+    setConfirming(false)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-3 p-4 pb-12">
+        {[...Array(6)].map((_, i) => <div key={i} className="h-12 bg-white rounded-2xl animate-pulse" />)}
+      </div>
+    )
+  }
+
+  const pct = Math.round((completedCount / 13) * 100)
+  const allDone = completedCount >= 13
+  const binPerksItems = items.filter(i => i.binPerks)
+  const merchantItems = items.filter(i => !i.binPerks)
+
+  return (
+    <div className="flex flex-col gap-4 p-4 pb-16">
+
+      {/* Header + progress */}
+      <div className="bg-[#1A1A2E] rounded-2xl px-5 py-5 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-['Coiny'] text-2xl text-white">Getting Started</h2>
+          <span className="font-['Coiny'] text-2xl text-[#FFB217]">{completedCount}/13</span>
+        </div>
+        <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: pct + '%', backgroundColor: pct === 100 ? '#4ade80' : '#FFB217' }}
+          />
+        </div>
+        {allDone && (
+          <p className="text-[13px] font-bold text-green-400">
+            🎉 You&apos;re all set! Your BinPerks loyalty program is live.
+          </p>
+        )}
+      </div>
+
+      {/* BinPerks sets up */}
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-[#EBEBF2] bg-[#F5F5F8]">
+          <p className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
+            BinPerks sets this up for you
+          </p>
+        </div>
+        <div className="divide-y divide-[#EBEBF2]">
+          {binPerksItems.map(item => (
+            <div key={item.id} className="px-5 py-3.5 flex items-center gap-3">
+              <span className="text-[18px] flex-shrink-0">{item.completed ? '✅' : '⬜'}</span>
+              <p className={`text-[13px] font-semibold flex-1 ${item.completed ? 'text-[#8E8EA8] line-through' : 'text-[#1A1A2E]'}`}>
+                {item.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Merchant responsibility */}
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-[#EBEBF2] bg-[#F5F5F8]">
+          <p className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
+            Your responsibility
+          </p>
+        </div>
+        <div className="divide-y divide-[#EBEBF2]">
+          {merchantItems.map(item => (
+            <div key={item.id} className="px-5 py-3.5 flex items-center gap-3">
+              <span className="text-[18px] flex-shrink-0">{item.completed ? '✅' : '⬜'}</span>
+              <div className="flex-1">
+                <p className={`text-[13px] font-semibold ${item.completed ? 'text-[#8E8EA8] line-through' : 'text-[#1A1A2E]'}`}>
+                  {item.label}
+                </p>
+              </div>
+              {item.id === 'cashier_training' && !item.completed && (
+                <button
+                  onClick={handleConfirmTraining}
+                  disabled={confirming || confirmed}
+                  className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-[#4A4B98] text-white text-[11px] font-bold disabled:opacity-50"
+                >
+                  {confirming ? '…' : 'Mark done'}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
     </div>
   )
 }

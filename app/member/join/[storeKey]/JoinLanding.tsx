@@ -73,6 +73,15 @@ export default function JoinLanding({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Track first join page visit for merchant onboarding checklist
+  useEffect(() => {
+    if (!storeId) return
+    fetch('/api/merchant/store', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId, joinPageVisited: true }),
+    }).catch(() => {})
+  }, [storeId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load custom Google Font for headings if set
   useEffect(() => {
     if (!fontFamily) return

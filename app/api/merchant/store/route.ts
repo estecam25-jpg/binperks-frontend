@@ -66,15 +66,17 @@ export async function PATCH(req: NextRequest) {
   if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {
-    storeId:     string
-    brandColor?: string
-    fontFamily?: string | null
-    logoUrl?:    string | null
-    memberMemo?: string | null
-    reviewUrl?:  string | null
+    storeId:            string
+    brandColor?:        string
+    fontFamily?:        string | null
+    logoUrl?:           string | null
+    memberMemo?:        string | null
+    reviewUrl?:         string | null
+    marketingDownloaded?: boolean
+    joinPageVisited?:   boolean
   }
 
-  const { storeId, brandColor, fontFamily, logoUrl, memberMemo, reviewUrl } = body
+  const { storeId, brandColor, fontFamily, logoUrl, memberMemo, reviewUrl, marketingDownloaded, joinPageVisited } = body
   if (!storeId) return NextResponse.json({ error: 'storeId required' }, { status: 400 })
 
   // Validate hex color if provided
@@ -106,6 +108,8 @@ export async function PATCH(req: NextRequest) {
   if (logoUrl     !== undefined)  updates.logo_url            = logoUrl ?? null
   if (memberMemo  !== undefined)  updates.member_memo         = memberMemo ?? null
   if (reviewUrl   !== undefined)  updates.google_review_url   = reviewUrl ?? null
+  if (marketingDownloaded)        updates.marketing_downloaded_at = new Date().toISOString()
+  if (joinPageVisited)            updates.join_page_visited_at    = new Date().toISOString()
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })

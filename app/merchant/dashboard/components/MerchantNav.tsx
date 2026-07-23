@@ -8,9 +8,9 @@ interface Store {
   state: string
 }
 
-type TabId = 'overview' | 'members' | 'redemptions' | 'perks' | 'marketing' | 'settings'
+type TabId = 'start' | 'overview' | 'members' | 'redemptions' | 'perks' | 'marketing' | 'settings'
 
-const TABS: { id: TabId; label: string; icon: string }[] = [
+const BASE_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'overview',     label: 'Overview',     icon: '📊' },
   { id: 'members',      label: 'Members',      icon: '👥' },
   { id: 'redemptions',  label: 'Redemptions',  icon: '🎟️' },
@@ -26,11 +26,15 @@ interface MerchantNavProps {
   activeTab: TabId
   onStoreChange: (storeId: string | null) => void
   onTabChange: (tab: TabId) => void
+  showStart?: boolean
 }
 
 export default function MerchantNav({
   companyName, stores, activeStoreId, activeTab, onStoreChange, onTabChange,
 }: MerchantNavProps) {
+  const TABS = showStart
+    ? [{ id: 'start' as TabId, label: 'Get Started', icon: '🚀' }, ...BASE_TABS]
+    : BASE_TABS
   const isMulti = stores.length > 1
 
   return (

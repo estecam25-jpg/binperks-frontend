@@ -17,13 +17,17 @@ export async function GET() {
   const admin = createAdminSupabaseClient()
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [merchantsResult, stampEvents, allMembers, w9Records] = await Promise.all([
+  const [merchantsResult, stampEvents, allMembers, w9Records, allStores, allPerks, allStaff, allStamps] = await Promise.all([
     admin.from('merchants')
       .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at')
       .order('created_at', { ascending: false }),
     admin.from('stamp_events').select('merchant_id, stamp_count').gte('awarded_at', sevenDaysAgo),
     admin.from('members').select('merchant_id, subscription_status'),
     admin.from('merchant_w9').select('merchant_id, status'),
+    admin.from('stores').select('merchant_id, logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at'),
+    admin.from('perks').select('merchant_id, is_active, member_type').eq('is_active', true),
+    admin.from('staff_users').select('merchant_id').eq('is_active', true),
+    admin.from('stamp_events').select('merchant_id'),
   ])
 
   // Aggregate stamps per merchant this week
@@ -37,6 +41,47 @@ export async function GET() {
   const w9ByMerchant: Record<string, string> = {}
   for (const w of (w9Records.data ?? [])) {
     if (w.merchant_id) w9ByMerchant[w.merchant_id] = w.status
+  }
+
+  // Onboarding data per merchant
+  const storesByMerchant: Record<string, typeof allStores.data> = {}
+  for (const s of (allStores.data ?? [])) {
+    if (!storesByMerchant[s.merchant_id]) storesByMerchant[s.merchant_id] = []
+    storesByMerchant[s.merchant_id]!.push(s)
+  }
+  const freePerksByMerchant: Record<string, number> = {}
+  const vipPerksByMerchant: Record<string, number> = {}
+  for (const p of (allPerks.data ?? [])) {
+    if (!p.merchant_id) continue
+    if (p.member_type === 'free') freePerksByMerchant[p.merchant_id] = (freePerksByMerchant[p.merchant_id] || 0) + 1
+    if (p.member_type === 'vip')  vipPerksByMerchant[p.merchant_id]  = (vipPerksByMerchant[p.merchant_id] || 0) + 1
+  }
+  const staffByMerchant: Record<string, number> = {}
+  for (const s of (allStaff.data ?? [])) {
+    if (s.merchant_id) staffByMerchant[s.merchant_id] = (staffByMerchant[s.merchant_id] || 0) + 1
+  }
+  const stampedMerchants = new Set((allStamps.data ?? []).map((s: { merchant_id: string }) => s.merchant_id))
+
+  function calcOnboarding(m: { id: string; billing_status: string }) {
+    const w9 = w9ByMerchant[m.id] ?? null
+    const mStores = storesByMerchant[m.id] ?? []
+    const primary = mStores[0]
+    const checks = [
+      !!w9 && w9 !== 'rejected',
+      w9 === 'approved',
+      mStores.length > 0,
+      m.billing_status === 'active',
+      !!(primary?.logo_url && primary?.brand_color && primary?.font_family),
+      mStores.some(s => !!s.google_review_url),
+      (freePerksByMerchant[m.id] ?? 0) >= 1,
+      (vipPerksByMerchant[m.id]  ?? 0) >= 3,
+      (staffByMerchant[m.id]     ?? 0) > 0,
+      mStores.some(s => !!s.marketing_downloaded_at),
+      stampedMerchants.has(m.id),
+      true,
+      mStores.some(s => !!s.cashier_training_confirmed_at),
+    ]
+    return Math.round(checks.filter(Boolean).length / 13 * 100)
   }
 
   // Aggregate member counts per merchant
@@ -60,6 +105,7 @@ export async function GET() {
       vipMembers:        vip,
       vipConversionPct:  total > 0 ? Math.round(vip / total * 100) : 0,
       w9Status:          w9ByMerchant[m.id] ?? null,
+      onboardingComplete: calcOnboarding(m),
     }
   })
 
