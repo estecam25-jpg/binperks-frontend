@@ -1,129 +1,414 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
 const ADMIN_EMAIL = 'enina@estecam.com'
 
+// ── Types ─────────────────────────────────────────────────────────────────
+
 interface Stats {
   starterMembers: number; totalVip: number; totalStamps: number
   couponsIssued: number; couponsRedeemed: number; activeMerchantCount: number
-  merchantMrr: number; memberMrr: number
+  merchantMrr: number; memberMrr: number; totalMrr: number
+  newMembersThisMonth: number; newMerchantsThisMonth: number
+  mrrGrowthThisMonth: number; vipConversionRate: number; referralConversionRate: number
 }
 interface Merchant {
   id: string; name: string; owner_email: string; company_name: string
-  billing_status: string; subscription_status: string; location_count: number; created_at: string
+  billing_status: string; subscription_status: string; location_count: number
+  created_at: string; stampsThisWeek: number; totalMembers: number
+  vipMembers: number; vipConversionPct: number
+}
+interface Store {
+  id: string; brand_name: string; canonical_key: string; is_active: boolean
+  merchantName: string; totalMembers: number; vipMembers: number
+  vipConversionPct: number; stampsThisWeek: number
+  uniqueVisitorsLast30Days: number; engagementRate: number
 }
 interface Member {
   id: string; first_name: string; last_name: string; phone: string; email: string
-  subscription_status: string; total_stamps: number; is_blacklisted: boolean; created_at: string
-  storeName: string
+  subscription_status: string; total_stamps: number; is_blacklisted: boolean
+  created_at: string; storeName: string
 }
+interface AlertItem { id: string; message: string; detail?: string }
+interface Alerts { critical: AlertItem[]; warning: AlertItem[]; good: AlertItem[] }
+type TabId = 'overview' | 'merchants' | 'stores' | 'members' | 'alerts'
 
-function tierLabel(m: Member) {
-  if (m.subscription_status !== 'vip') return '🪨 Starter'
-  if (m.total_stamps >= 2000) return '💎 Diamond'
-  if (m.total_stamps >= 750)  return '🥇 Gold'
-  if (m.total_stamps >= 200)  return '🥈 Silver'
-  return '🥉 Bronze'
-}
+// ── Module-level helper components ────────────────────────────────────────
 
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+function StatCard({ label, value, sub, accent }: {
+  label: string; value: string | number; sub?: string; accent?: boolean
+}) {
   return (
-    <div className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-1">
-      <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8]">{label}</p>
-      <p className="font-['Coiny'] text-3xl text-[#1A1A2E] leading-none">{value}</p>
-      {sub && <p className="text-[11px] text-[#8E8EA8] font-medium">{sub}</p>}
+    <div className={`rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-1 ${accent ? 'bg-[#1A1A2E]' : 'bg-white'}`}>
+      <p className={`text-[10px] font-bold tracking-[0.1em] uppercase ${accent ? 'text-white/50' : 'text-[#8E8EA8]'}`}>{label}</p>
+      <p className={`font-['Coiny'] text-3xl leading-none ${accent ? 'text-[#FFB217]' : 'text-[#1A1A2E]'}`}>{value}</p>
+      {sub && <p className={`text-[11px] font-medium ${accent ? 'text-white/60' : 'text-[#8E8EA8]'}`}>{sub}</p>}
     </div>
   )
 }
 
+function TierBadge({ status, stamps }: { status: string; stamps: number }) {
+  const t =
+    status !== 'vip'    ? { label: '🪸 Starter', bg: 'bg-gray-100 text-gray-600' } :
+    stamps >= 2000      ? { label: '💎 Diamond', bg: 'bg-purple-100 text-purple-700' } :
+    stamps >= 750       ? { label: '🥇 Gold',    bg: 'bg-yellow-100 text-yellow-700' } :
+    stamps >= 200       ? { label: '🥈 Silver',  bg: 'bg-slate-100 text-slate-600' }  :
+                          { label: '🥉 Bronze',  bg: 'bg-orange-100 text-orange-700' }
+  return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.bg}`}>{t.label}</span>
+}
+
+function Spinner() {
+  return <div className="flex justify-center py-12"><span className="w-8 h-8 border-[3px] border-[#EBEBF2] border-t-[#4A4B98] rounded-full animate-spin" /></div>
+}
+
+function MerchantCard({
+  m, onAction, actionLoading,
+}: {
+  m: Merchant
+  onAction: (id: string, action: 'activate' | 'deactivate') => Promise<void>
+  actionLoading: string | null
+}) {
+  const atRisk  = m.billing_status === 'active' && m.stampsThisWeek === 0 && m.totalMembers > 0
+  const pending = !m.billing_status || m.billing_status === 'pending'
+  const failed  = m.billing_status === 'payment_failed'
+  const border  = atRisk || failed ? 'border-l-[3px] border-l-[#DA1212]' : pending ? 'border-l-[3px] border-l-[#FFB217]' : ''
+  return (
+    <div className={`bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3 ${border}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-[14px] font-bold text-[#1A1A2E] truncate">{m.company_name || m.name}</p>
+            {atRisk  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">At Risk</span>}
+            {pending && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pending</span>}
+            {failed  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Failed Payment</span>}
+          </div>
+          <p className="text-[11px] text-[#8E8EA8] font-medium truncate">{m.owner_email}</p>
+        </div>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
+          m.billing_status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+        }`}>{m.billing_status ?? 'pending'}</span>
+      </div>
+      <div className="grid grid-cols-4 gap-1 text-center">
+        {[
+          { v: String(m.location_count ?? 1), l: 'stores' },
+          { v: String(m.totalMembers),         l: 'members' },
+          { v: String(m.stampsThisWeek),       l: 'stamps/wk' },
+          { v: m.vipConversionPct + '%',       l: 'VIP rate' },
+        ].map(({ v, l }) => (
+          <div key={l}>
+            <p className="text-[12px] font-bold text-[#1A1A2E]">{v}</p>
+            <p className="text-[9px] text-[#8E8EA8] font-medium">{l}</p>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={() => onAction(m.id, 'activate')}
+          disabled={!!actionLoading || m.billing_status === 'active'}
+          className="flex-1 py-2 rounded-xl text-[12px] font-bold bg-[#2A7D34] text-white disabled:opacity-40">
+          {actionLoading === m.id + 'activate' ? '…' : 'Activate'}
+        </button>
+        <button onClick={() => onAction(m.id, 'deactivate')}
+          disabled={!!actionLoading || m.billing_status === 'deactivated'}
+          className="flex-1 py-2 rounded-xl text-[12px] font-bold bg-[#DA1212] text-white disabled:opacity-40">
+          {actionLoading === m.id + 'deactivate' ? '…' : 'Deactivate'}
+        </button>
+      </div>
+      <p className="text-[10px] text-[#C0C0D0] font-medium">Joined {new Date(m.created_at).toLocaleDateString()}</p>
+    </div>
+  )
+}
+
+function StoreCard({ s }: { s: Store }) {
+  const eng = s.engagementRate
+  const engColor = eng >= 50 ? 'text-green-700' : eng >= 20 ? 'text-yellow-700' : 'text-red-700'
+  const engBg    = eng >= 50 ? 'bg-green-50'   : eng >= 20 ? 'bg-yellow-50'   : 'bg-red-50'
+  const engEmoji = eng >= 50 ? '🟢' : eng >= 20 ? '🟡' : '🔴'
+  return (
+    <div className={`bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3 ${!s.is_active ? 'opacity-50' : ''}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-bold text-[#1A1A2E]">{s.brand_name}</p>
+          <p className="text-[10px] font-mono text-[#8E8EA8]">{s.canonical_key}</p>
+          <p className="text-[11px] text-[#8E8EA8] font-medium">{s.merchantName}</p>
+        </div>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+          {s.is_active ? 'active' : 'inactive'}
+        </span>
+      </div>
+      <div className="grid grid-cols-4 gap-1 text-center">
+        <div>
+          <p className="text-[13px] font-bold text-[#1A1A2E]">{s.totalMembers}</p>
+          <p className="text-[9px] text-[#8E8EA8] font-medium">members</p>
+        </div>
+        <div>
+          <p className="text-[13px] font-bold text-[#4A4B98]">{s.vipConversionPct}%</p>
+          <p className="text-[9px] text-[#8E8EA8] font-medium">VIP rate</p>
+        </div>
+        <div>
+          <p className="text-[13px] font-bold text-[#1A1A2E]">{s.stampsThisWeek}</p>
+          <p className="text-[9px] text-[#8E8EA8] font-medium">stamps/wk</p>
+        </div>
+        <div className={`rounded-lg py-1 ${engBg}`}>
+          <p className={`text-[12px] font-bold ${engColor}`}>{engEmoji} {eng}%</p>
+          <p className="text-[9px] text-[#8E8EA8] font-medium">engage</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────
+
 export default function AdminDashboardPage() {
   const router = useRouter()
-  const [authed, setAuthed] = useState(false)
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [authed,      setAuthed]     = useState(false)
+  const [tab,         setTab]        = useState<TabId>('overview')
+  const [loadedTabs,  setLoadedTabs] = useState<Set<TabId>>(new Set())
+  const [tabLoading,  setTabLoading] = useState<TabId | null>('overview')
+
+  const [stats,     setStats]     = useState<Stats | null>(null)
   const [merchants, setMerchants] = useState<Merchant[]>([])
-  const [members, setMembers] = useState<Member[]>([])
-  const [search, setSearch] = useState('')
-  const [searching, setSearching] = useState(false)
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [blacklistTarget, setBlacklistTarget] = useState<Member | null>(null)
-  const [blacklistReason, setBlacklistReason] = useState('')
+  const [stores,    setStores]    = useState<Store[]>([])
+  const [members,   setMembers]   = useState<Member[]>([])
+  const [alerts,    setAlerts]    = useState<Alerts | null>(null)
+
   const [merchantSearch, setMerchantSearch] = useState('')
   const [merchantStatus, setMerchantStatus] = useState<'all' | 'active' | 'deactivated'>('all')
+  const [memberSearch,   setMemberSearch]   = useState('')
+  const [memberSearching, setMemberSearching] = useState(false)
 
+  const [actionLoading,   setActionLoading]   = useState<string | null>(null)
+  const [blacklistTarget, setBlacklistTarget] = useState<Member | null>(null)
+  const [blacklistReason, setBlacklistReason] = useState('')
+
+  // Auth check
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
-      if (!user || user.email !== ADMIN_EMAIL) {
-        router.replace('/admin/login')
-        return
-      }
+      if (!user || user.email !== ADMIN_EMAIL) { router.replace('/admin/login'); return }
       setAuthed(true)
     })
   }, [router])
 
-  const loadData = useCallback(async () => {
-    const [statsRes, merchantsRes] = await Promise.all([
-      fetch('/api/admin/stats'),
-      fetch('/api/admin/merchants'),
-    ])
-    if (statsRes.ok) setStats(await statsRes.json())
-    if (merchantsRes.ok) {
-      const d = await merchantsRes.json()
-      setMerchants(d.merchants ?? [])
-    }
+  // Lazy load per tab
+  const loadOverview  = useCallback(async () => {
+    setTabLoading('overview')
+    const res = await fetch('/api/admin/stats')
+    if (res.ok) setStats(await res.json())
+    setTabLoading(null); setLoadedTabs(p => new Set([...p, 'overview']))
+  }, [])
+
+  const loadMerchants = useCallback(async () => {
+    setTabLoading('merchants')
+    const res = await fetch('/api/admin/merchants')
+    if (res.ok) { const d = await res.json(); setMerchants(d.merchants ?? []) }
+    setTabLoading(null); setLoadedTabs(p => new Set([...p, 'merchants']))
+  }, [])
+
+  const loadStores = useCallback(async () => {
+    setTabLoading('stores')
+    const res = await fetch('/api/admin/stores')
+    if (res.ok) { const d = await res.json(); setStores(d.stores ?? []) }
+    setTabLoading(null); setLoadedTabs(p => new Set([...p, 'stores']))
+  }, [])
+
+  const loadAlerts = useCallback(async () => {
+    setTabLoading('alerts')
+    const res = await fetch('/api/admin/alerts')
+    if (res.ok) setAlerts(await res.json())
+    setTabLoading(null); setLoadedTabs(p => new Set([...p, 'alerts']))
   }, [])
 
   useEffect(() => {
-    if (authed) loadData()
-  }, [authed, loadData])
+    if (!authed) return
+    if (tab === 'overview'  && !loadedTabs.has('overview'))  loadOverview()
+    if (tab === 'merchants' && !loadedTabs.has('merchants')) loadMerchants()
+    if (tab === 'stores'    && !loadedTabs.has('stores'))    loadStores()
+    if (tab === 'alerts'    && !loadedTabs.has('alerts'))    loadAlerts()
+  }, [tab, authed, loadedTabs, loadOverview, loadMerchants, loadStores, loadAlerts])
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault()
-    if (!search.trim()) return
-    setSearching(true)
-    const res = await fetch(`/api/admin/members?search=${encodeURIComponent(search.trim())}`)
-    if (res.ok) {
-      const d = await res.json()
-      setMembers(d.members ?? [])
-    }
-    setSearching(false)
+  const filteredMerchants = useMemo(() => merchants.filter(m => {
+    const q = merchantSearch.trim().toLowerCase()
+    return (!q || (m.company_name ?? '').toLowerCase().includes(q) || (m.owner_email ?? '').toLowerCase().includes(q))
+        && (merchantStatus === 'all' || m.billing_status === merchantStatus)
+  }), [merchants, merchantSearch, merchantStatus])
+
+  async function handleMerchantAction(id: string, action: 'activate' | 'deactivate') {
+    setActionLoading(id + action)
+    await fetch('/api/admin/merchants', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ merchantId: id, action }),
+    })
+    await loadMerchants()
+    setActionLoading(null)
   }
 
-  async function handleMerchantAction(merchantId: string, action: 'activate' | 'deactivate') {
-    setActionLoading(merchantId + action)
-    await fetch('/api/admin/merchants', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ merchantId, action }),
-    })
-    await loadData()
-    setActionLoading(null)
+  async function handleMemberSearch(e: React.FormEvent) {
+    e.preventDefault()
+    if (!memberSearch.trim()) return
+    setMemberSearching(true)
+    const res = await fetch('/api/admin/members?search=' + encodeURIComponent(memberSearch.trim()))
+    if (res.ok) { const d = await res.json(); setMembers(d.members ?? []) }
+    setMemberSearching(false)
   }
 
   async function handleBlacklist() {
     if (!blacklistTarget || !blacklistReason.trim()) return
     setActionLoading('blacklist')
     await fetch('/api/admin/members', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memberId: blacklistTarget.id, reason: blacklistReason.trim() }),
     })
     setMembers(prev => prev.map(m => m.id === blacklistTarget.id ? { ...m, is_blacklisted: true } : m))
-    setBlacklistTarget(null)
-    setBlacklistReason('')
-    setActionLoading(null)
+    setBlacklistTarget(null); setBlacklistReason(''); setActionLoading(null)
   }
 
-  const filteredMerchants = merchants.filter(m => {
-    const q = merchantSearch.trim().toLowerCase()
-    const matchesSearch = !q ||
-      (m.company_name ?? '').toLowerCase().includes(q) ||
-      (m.owner_email ?? '').toLowerCase().includes(q)
-    const matchesStatus = merchantStatus === 'all' || m.billing_status === merchantStatus
-    return matchesSearch && matchesStatus
-  })
+  // ── Tab renders ──────────────────────────────────────────────────────────
+
+  function renderOverview() {
+    if (tabLoading === 'overview') return <Spinner />
+    const s = stats
+    return (
+      <div className="flex flex-col gap-4">
+        <StatCard label="Total MRR" accent
+          value={s ? '$' + (s.totalMrr).toFixed(2) : '—'}
+          sub="merchant + member subscriptions combined" />
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard label="Merchant MRR" value={s ? '$' + s.merchantMrr.toFixed(2) : '—'} sub="store subscriptions" />
+          <StatCard label="Member MRR"   value={s ? '$' + s.memberMrr.toFixed(2)   : '—'} sub="VIP memberships" />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard label="Active" value={s?.activeMerchantCount ?? '—'} sub="merchants" />
+          <StatCard label="Starter" value={s?.starterMembers ?? '—'} sub="free tier" />
+          <StatCard label="VIP" value={s?.totalVip ?? '—'} sub="paid tier" />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard label="New Members" value={s?.newMembersThisMonth ?? '—'} sub="this month" />
+          <StatCard label="New Merchants" value={s?.newMerchantsThisMonth ?? '—'} sub="this month" />
+          <StatCard label="VIP Rate" value={s ? s.vipConversionRate.toFixed(1) + '%' : '—'} sub="of all members" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard label="MRR Growth" value={s ? '+$' + s.mrrGrowthThisMonth.toFixed(2) : '—'} sub="new this month" />
+          <StatCard label="Coupons" value={s ? s.couponsIssued + ' / ' + s.couponsRedeemed : '—'} sub="issued / redeemed" />
+        </div>
+      </div>
+    )
+  }
+
+  function renderMerchants() {
+    if (tabLoading === 'merchants') return <Spinner />
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-2">
+          <input value={merchantSearch} onChange={e => setMerchantSearch(e.target.value)}
+            placeholder="Search name or email"
+            className="flex-1 px-4 py-3 rounded-xl bg-white border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-semibold text-[#1A1A2E] placeholder:text-[#C0C0D0]" />
+          <select value={merchantStatus} onChange={e => setMerchantStatus(e.target.value as 'all' | 'active' | 'deactivated')}
+            className="px-3 py-3 rounded-xl bg-white border-2 border-transparent text-[13px] font-bold text-[#1A1A2E] outline-none">
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="deactivated">Deactivated</option>
+          </select>
+        </div>
+        {filteredMerchants.length === 0 && (
+          <p className="text-[13px] text-[#8E8EA8] font-medium px-1">
+            {merchants.length === 0 ? 'No merchants yet.' : 'No merchants match your filters.'}
+          </p>
+        )}
+        {filteredMerchants.map(m => (
+          <MerchantCard key={m.id} m={m} onAction={handleMerchantAction} actionLoading={actionLoading} />
+        ))}
+      </div>
+    )
+  }
+
+  function renderStores() {
+    if (tabLoading === 'stores') return <Spinner />
+    return (
+      <div className="flex flex-col gap-3">
+        {stores.length === 0 && <p className="text-[13px] text-[#8E8EA8] font-medium">No stores found.</p>}
+        {stores.map(s => <StoreCard key={s.id} s={s} />)}
+      </div>
+    )
+  }
+
+  function renderMembers() {
+    return (
+      <div className="flex flex-col gap-3">
+        <form onSubmit={handleMemberSearch} className="flex gap-2">
+          <input value={memberSearch} onChange={e => setMemberSearch(e.target.value)}
+            placeholder="Phone or email"
+            className="flex-1 px-4 py-3 rounded-xl bg-white border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-semibold text-[#1A1A2E] placeholder:text-[#C0C0D0]" />
+          <button type="submit" disabled={memberSearching || !memberSearch.trim()}
+            className="px-5 py-3 rounded-xl font-bold text-[14px] text-white bg-[#1A1A2E] disabled:opacity-40">
+            {memberSearching ? '…' : 'Search'}
+          </button>
+        </form>
+        {members.length === 0 && (
+          <p className="text-[13px] text-[#8E8EA8] font-medium text-center py-8">Search by phone or email to find a member.</p>
+        )}
+        {members.map(m => (
+          <div key={m.id} className={`bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2 ${m.is_blacklisted ? 'opacity-60 border-2 border-[#DA1212]' : ''}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-bold text-[#1A1A2E]">{m.first_name} {m.last_name}</p>
+                <p className="text-[11px] text-[#8E8EA8] font-medium">{m.phone} · {m.email}</p>
+                <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">{m.total_stamps} stamps · {m.storeName}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <TierBadge status={m.subscription_status} stamps={m.total_stamps} />
+                {m.is_blacklisted && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">blacklisted</span>}
+              </div>
+            </div>
+            {!m.is_blacklisted && (
+              <button onClick={() => setBlacklistTarget(m)}
+                className="w-full py-2 rounded-xl text-[12px] font-bold text-[#DA1212] border-2 border-[#DA1212]">
+                Blacklist member
+              </button>
+            )}
+            <p className="text-[10px] text-[#C0C0D0] font-medium">Joined {new Date(m.created_at).toLocaleDateString()}</p>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  function renderAlerts() {
+    if (tabLoading === 'alerts') return <Spinner />
+    if (!alerts) return <p className="text-[13px] text-[#8E8EA8]">No data.</p>
+    const sections = [
+      { key: 'critical', title: '🔴 Critical',  items: alerts.critical, hBg: 'bg-red-50',    hText: 'text-red-700',    border: 'border-red-100' },
+      { key: 'warning',  title: '🟡 Warning',   items: alerts.warning,  hBg: 'bg-yellow-50', hText: 'text-yellow-700', border: 'border-yellow-100' },
+      { key: 'good',     title: '🟢 Good News', items: alerts.good,     hBg: 'bg-green-50',  hText: 'text-green-700',  border: 'border-green-100' },
+    ]
+    return (
+      <div className="flex flex-col gap-4">
+        {sections.map(sec => (
+          <div key={sec.key} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div className={`px-4 py-3 border-b ${sec.hBg} ${sec.border}`}>
+              <h3 className={`font-bold text-[13px] ${sec.hText}`}>{sec.title} ({sec.items.length})</h3>
+            </div>
+            {sec.items.length === 0 ? (
+              <p className="text-[12px] text-[#8E8EA8] font-medium px-4 py-3">None right now.</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-[#EBEBF2]">
+                {sec.items.map(a => (
+                  <div key={a.id} className="px-4 py-3">
+                    <p className="text-[13px] font-semibold text-[#1A1A2E]">{a.message}</p>
+                    {a.detail && <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">{a.detail}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  // ── Render guard + layout ────────────────────────────────────────────────
 
   if (!authed) {
     return (
@@ -133,6 +418,14 @@ export default function AdminDashboardPage() {
     )
   }
 
+  const TABS: { id: TabId; label: string }[] = [
+    { id: 'overview',  label: 'Overview' },
+    { id: 'merchants', label: 'Merchants' },
+    { id: 'stores',    label: 'Stores' },
+    { id: 'members',   label: 'Members' },
+    { id: 'alerts',    label: 'Alerts' },
+  ]
+
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
       {/* Header */}
@@ -141,167 +434,35 @@ export default function AdminDashboardPage() {
           <span className="font-['Coiny'] text-2xl text-white tracking-wide">BinPerks</span>
           <span className="ml-2 text-[11px] font-bold tracking-widest uppercase text-[#FFB217]">Admin</span>
         </div>
-        <button
-          onClick={() => createClient().auth.signOut().then(() => router.replace('/admin/login'))}
-          className="text-[12px] font-semibold text-white/50 hover:text-white/80 transition-colors"
-        >
+        <button onClick={() => createClient().auth.signOut().then(() => router.replace('/admin/login'))}
+          className="text-[12px] font-semibold text-white/50 hover:text-white/80 transition-colors">
           Sign out
         </button>
       </div>
 
-      <main className="flex-1 flex flex-col gap-6 px-4 py-6 max-w-2xl mx-auto w-full pb-16">
-
-        {/* Overview cards */}
-        <section>
-          <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] mb-3">Overview</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard label="Active Merchants" value={stats?.activeMerchantCount ?? '—'} />
-            <StatCard label="Total Stamps" value={stats ? stats.totalStamps.toLocaleString() : '—'} />
-            <StatCard label="Starter Members" value={stats?.starterMembers ?? '—'} sub="free tier" />
-            <StatCard label="VIP Members" value={stats?.totalVip ?? '—'} sub="paid tier" />
-            <StatCard
-              label="Merchant MRR"
-              value={stats ? `$${stats.merchantMrr.toFixed(2)}` : '—'}
-              sub="store subscriptions"
-            />
-            <StatCard
-              label="Member MRR"
-              value={stats ? `$${stats.memberMrr.toFixed(2)}` : '—'}
-              sub="VIP memberships"
-            />
-            <StatCard
-              label="Coupons"
-              value={stats ? `${stats.couponsIssued} / ${stats.couponsRedeemed}` : '—'}
-              sub="issued / redeemed"
-            />
-          </div>
-        </section>
-
-        {/* Merchant list */}
-        <section>
-          <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] mb-3">Merchants</h2>
-
-          {/* Search + filter */}
-          <div className="flex gap-2 mb-3">
-            <input
-              value={merchantSearch}
-              onChange={e => setMerchantSearch(e.target.value)}
-              placeholder="Search by name or email"
-              className="flex-1 px-4 py-3 rounded-xl bg-white border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-semibold text-[#1A1A2E] placeholder:text-[#C0C0D0] transition-colors"
-            />
-            <select
-              value={merchantStatus}
-              onChange={e => setMerchantStatus(e.target.value as 'all' | 'active' | 'deactivated')}
-              className="px-3 py-3 rounded-xl bg-white border-2 border-transparent focus:border-[#4A4B98] outline-none text-[13px] font-bold text-[#1A1A2E] transition-colors"
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="deactivated">Deactivated</option>
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            {filteredMerchants.length === 0 && (
-              <p className="text-[13px] text-[#8E8EA8] font-medium px-1">
-                {merchants.length === 0 ? 'No merchants yet.' : 'No merchants match your search.'}
-              </p>
-            )}
-            {filteredMerchants.map(m => (
-              <div key={m.id} className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[14px] font-bold text-[#1A1A2E] truncate">{m.company_name || m.name}</p>
-                    <p className="text-[11px] text-[#8E8EA8] font-medium truncate">{m.owner_email}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      m.billing_status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {m.billing_status ?? 'pending'}
-                    </span>
-                    <span className="text-[10px] text-[#8E8EA8] font-medium">{m.location_count ?? 1} loc</span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleMerchantAction(m.id, 'activate')}
-                    disabled={!!actionLoading || m.billing_status === 'active'}
-                    className="flex-1 py-2 rounded-xl text-[12px] font-bold bg-[#2A7D34] text-white disabled:opacity-40 transition-opacity"
-                  >
-                    {actionLoading === m.id + 'activate' ? '…' : 'Activate'}
-                  </button>
-                  <button
-                    onClick={() => handleMerchantAction(m.id, 'deactivate')}
-                    disabled={!!actionLoading || m.billing_status === 'deactivated'}
-                    className="flex-1 py-2 rounded-xl text-[12px] font-bold bg-[#DA1212] text-white disabled:opacity-40 transition-opacity"
-                  >
-                    {actionLoading === m.id + 'deactivate' ? '…' : 'Deactivate'}
-                  </button>
-                </div>
-                <p className="text-[10px] text-[#C0C0D0] font-medium">
-                  Joined {new Date(m.created_at).toLocaleDateString()}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Member search */}
-        <section>
-          <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] mb-3">Member search</h2>
-          <form onSubmit={handleSearch} className="flex gap-2 mb-3">
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Phone or email"
-              className="flex-1 px-4 py-3 rounded-xl bg-white border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-semibold text-[#1A1A2E] placeholder:text-[#C0C0D0] transition-colors"
-            />
-            <button
-              type="submit"
-              disabled={searching || !search.trim()}
-              className="px-5 py-3 rounded-xl font-bold text-[14px] text-white bg-[#1A1A2E] disabled:opacity-40 transition-opacity"
-            >
-              {searching ? '…' : 'Search'}
+      {/* Tab nav */}
+      <div className="bg-white border-b border-[#EBEBF2] px-2">
+        <div className="flex overflow-x-auto">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={'px-4 py-3 text-[13px] font-bold whitespace-nowrap border-b-2 transition-colors ' + (
+                tab === t.id
+                  ? 'border-[#4A4B98] text-[#4A4B98]'
+                  : 'border-transparent text-[#8E8EA8] hover:text-[#1A1A2E]'
+              )}>
+              {t.label}
             </button>
-          </form>
+          ))}
+        </div>
+      </div>
 
-          <div className="flex flex-col gap-2">
-            {members.map(m => (
-              <div key={m.id} className={`bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2 ${m.is_blacklisted ? 'opacity-60 border-2 border-[#DA1212]' : ''}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[14px] font-bold text-[#1A1A2E]">{m.first_name} {m.last_name}</p>
-                    <p className="text-[11px] text-[#8E8EA8] font-medium">{m.phone} · {m.email}</p>
-                    <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
-                      {tierLabel(m)} · {m.total_stamps} stamps · {m.storeName}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      m.subscription_status === 'vip' ? 'bg-[#4A4B98] text-white' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {m.subscription_status}
-                    </span>
-                    {m.is_blacklisted && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">blacklisted</span>
-                    )}
-                  </div>
-                </div>
-                {!m.is_blacklisted && (
-                  <button
-                    onClick={() => setBlacklistTarget(m)}
-                    className="w-full py-2 rounded-xl text-[12px] font-bold text-[#DA1212] border-2 border-[#DA1212] transition-opacity active:opacity-70"
-                  >
-                    Blacklist member
-                  </button>
-                )}
-                <p className="text-[10px] text-[#C0C0D0] font-medium">
-                  Joined {new Date(m.created_at).toLocaleDateString()}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
+      {/* Content */}
+      <main className="flex-1 px-4 py-6 max-w-2xl mx-auto w-full pb-16">
+        {tab === 'overview'  && renderOverview()}
+        {tab === 'merchants' && renderMerchants()}
+        {tab === 'stores'    && renderStores()}
+        {tab === 'members'   && renderMembers()}
+        {tab === 'alerts'    && renderAlerts()}
       </main>
 
       {/* Blacklist modal */}
@@ -312,27 +473,19 @@ export default function AdminDashboardPage() {
               Blacklist {blacklistTarget.first_name} {blacklistTarget.last_name}?
             </h3>
             <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
-              This will block the member from using BinPerks. A reason is required.
+              This blocks the member from BinPerks. A reason is required.
             </p>
-            <textarea
-              value={blacklistReason}
-              onChange={e => setBlacklistReason(e.target.value)}
-              placeholder="Reason for blacklisting…"
-              rows={3}
-              className="w-full rounded-xl border-2 border-[#EBEBF2] px-4 py-3 text-[14px] font-medium text-[#1A1A2E] placeholder-[#C5C5D5] resize-none outline-none focus:border-[#DA1212] transition-colors"
+            <textarea value={blacklistReason} onChange={e => setBlacklistReason(e.target.value)}
+              placeholder="Reason for blacklisting…" rows={3}
+              className="w-full rounded-xl border-2 border-[#EBEBF2] px-4 py-3 text-[14px] font-medium text-[#1A1A2E] placeholder-[#C5C5D5] resize-none outline-none focus:border-[#DA1212]"
             />
             <div className="flex gap-2">
-              <button
-                onClick={() => { setBlacklistTarget(null); setBlacklistReason('') }}
-                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-[#8E8EA8] border-2 border-[#EBEBF2]"
-              >
+              <button onClick={() => { setBlacklistTarget(null); setBlacklistReason('') }}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-[#8E8EA8] border-2 border-[#EBEBF2]">
                 Cancel
               </button>
-              <button
-                onClick={handleBlacklist}
-                disabled={!blacklistReason.trim() || actionLoading === 'blacklist'}
-                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-white bg-[#DA1212] disabled:opacity-40"
-              >
+              <button onClick={handleBlacklist} disabled={!blacklistReason.trim() || actionLoading === 'blacklist'}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-white bg-[#DA1212] disabled:opacity-40">
                 {actionLoading === 'blacklist' ? '…' : 'Blacklist'}
               </button>
             </div>
