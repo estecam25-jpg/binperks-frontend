@@ -172,8 +172,8 @@ export default function MerchantApplyPage() {
             </div>
 
             <Field
-              label="Business / LLC name"
-              hint='The legal umbrella — e.g. "XYZ Liquidation LLC" or "Deals R Us Inc."'
+              label="Legal Business Name"
+              hint="Enter your LLC, Corp, or sole proprietor legal name exactly as registered (e.g. 'Acme Bins LLC')"
               error={err('companyName')}
             >
               <input type="text" placeholder="XYZ Liquidation LLC"
@@ -211,8 +211,8 @@ export default function MerchantApplyPage() {
             </div>
 
             <Field
-              label="Store name"
-              hint='How customers know this location — e.g. "Acme Bins Downtown"'
+              label="Store Name (DBA)"
+              hint="The name your customers know you by (e.g. 'Deal Daze')"
               error={err('storeName')}
             >
               <input type="text" placeholder="Acme Bins Prosperous"

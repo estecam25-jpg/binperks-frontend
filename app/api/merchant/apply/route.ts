@@ -179,6 +179,7 @@ export async function POST(req: NextRequest) {
       customer:   stripeCustomer.id,
       line_items: lineItems,
       payment_method_types: ['card'],
+      allow_promotion_codes: true,
       subscription_data: {
         metadata: {
           merchantId:    merchant.id,
@@ -209,6 +210,21 @@ export async function POST(req: NextRequest) {
           companyName,
         }),
       }).catch(err => console.error('[/api/merchant/apply] GHL webhook error:', err))
+    }
+
+    // 8. Fire merchant welcome SMS (fire-and-forget — separate from "merchant created" notification).
+    const welcomeWebhook = process.env.GHL_MERCHANT_WELCOME_WEBHOOK_URL
+    if (welcomeWebhook) {
+      fetch(welcomeWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email:       normalizedEmail,
+          phone,
+          companyName,
+          firstName,
+        }),
+      }).catch(err => console.error('[/api/merchant/apply] GHL welcome webhook error:', err))
     }
 
     return NextResponse.json({

@@ -21,15 +21,13 @@ export async function GET() {
 
   const admin = createAdminSupabaseClient()
 
-  const [w9, stores, activePerks, staff, stampCheck] = await Promise.all([
-    admin.from('merchant_w9').select('status').eq('merchant_id', merchant.id).maybeSingle(),
+  const [stores, activePerks, staff, stampCheck] = await Promise.all([
     admin.from('stores').select('logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at').eq('merchant_id', merchant.id),
     admin.from('perks').select('member_type').eq('merchant_id', merchant.id).eq('is_active', true),
     admin.from('staff_users').select('id').eq('merchant_id', merchant.id).eq('is_active', true),
     admin.from('stamp_events').select('id').eq('merchant_id', merchant.id).limit(1),
   ])
 
-  const w9Status       = w9.data?.status ?? null
   const storeList      = stores.data ?? []
   const primaryStore   = storeList[0]
   const perks          = activePerks.data ?? []
@@ -43,25 +41,24 @@ export async function GET() {
   const trainingConfirmed = storeList.some(s => !!s.cashier_training_confirmed_at)
 
   const items = [
-    // BinPerks sets up (1-4)
-    { id: 'w9_submitted',      label: 'W-9 submitted',                    completed: !!w9Status && w9Status !== 'rejected',       binPerks: true  },
-    { id: 'w9_approved',       label: 'W-9 approved',                     completed: w9Status === 'approved',                      binPerks: true  },
-    { id: 'store_provisioned', label: 'Store provisioned',                 completed: storeList.length > 0,                         binPerks: true  },
-    { id: 'activated',         label: 'Merchant account activated',        completed: merchant.billing_status === 'active',         binPerks: true  },
-    // Merchant responsibility (5-13)
-    { id: 'brand_configured',  label: 'Brand configured (logo, color, font)', completed: brandConfigured,                          binPerks: false },
-    { id: 'review_url',        label: 'Google Review URL added',           completed: reviewUrlSet,                                 binPerks: false },
-    { id: 'free_perks',        label: 'Free member perk added',            completed: freePerksCount >= 1,                         binPerks: false },
-    { id: 'vip_perks',         label: 'VIP perks added (3+ required)',     completed: vipPerksCount >= 3,                           binPerks: false },
-    { id: 'cashier_pin',       label: 'Cashier PIN created',               completed: staffCount > 0,                               binPerks: false },
-    { id: 'mkt_downloaded',    label: 'Marketing materials downloaded',    completed: mktDownloaded,                                binPerks: false },
-    { id: 'stamp_tested',      label: 'Stamp tool tested',                 completed: stampsTested,                                 binPerks: false },
-    { id: 'login_confirmed',   label: 'Merchant dashboard login confirmed', completed: true,                                        binPerks: false },
-    { id: 'cashier_training',  label: 'Cashier training completed',        completed: trainingConfirmed,                            binPerks: false },
+    // BinPerks sets up (1-3)
+    { id: 'agreement_signed',  label: 'Merchant Agreement + W-9 signed (via HelloSign)', completed: false, binPerks: true,  note: 'Coming soon — BinPerks will email your agreement shortly after signup' },
+    { id: 'store_provisioned', label: 'Store provisioned',                                completed: storeList.length > 0,                        binPerks: true  },
+    { id: 'activated',         label: 'Merchant account activated',                       completed: merchant.billing_status === 'active',        binPerks: true  },
+    // Merchant responsibility (4-12)
+    { id: 'brand_configured',  label: 'Brand configured (logo, color, font)',             completed: brandConfigured,                             binPerks: false },
+    { id: 'review_url',        label: 'Google Review URL added',                          completed: reviewUrlSet,                                binPerks: false },
+    { id: 'free_perks',        label: 'Free member perk added',                          completed: freePerksCount >= 1,                         binPerks: false },
+    { id: 'vip_perks',         label: 'VIP perks added (3+ required)',                   completed: vipPerksCount >= 3,                          binPerks: false },
+    { id: 'cashier_pin',       label: 'Cashier PIN created',                             completed: staffCount > 0,                              binPerks: false },
+    { id: 'mkt_downloaded',    label: 'Marketing materials downloaded',                  completed: mktDownloaded,                               binPerks: false },
+    { id: 'stamp_tested',      label: 'Stamp tool tested',                               completed: stampsTested,                                binPerks: false },
+    { id: 'login_confirmed',   label: 'Merchant dashboard login confirmed',               completed: true,                                        binPerks: false },
+    { id: 'cashier_training',  label: 'Cashier training completed',                      completed: trainingConfirmed,                           binPerks: false },
   ]
 
   const completedCount = items.filter(i => i.completed).length
-  return NextResponse.json({ items, completedCount, total: 13 })
+  return NextResponse.json({ items, completedCount, total: items.length })
 }
 
 export async function PATCH(req: NextRequest) {
