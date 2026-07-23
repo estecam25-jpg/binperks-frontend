@@ -19,20 +19,30 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminSupabaseClient()
 
-  // Search by phone or email (partial match)
+  // Search by phone or email (partial match); join stores for display name
   const { data, error } = await admin
     .from('members')
     .select(`
       id, first_name, last_name, phone, email,
       subscription_status, total_stamps, is_blacklisted, created_at,
-      stores:home_store_id ( brand_name )
+      stores:home_store_id ( display_name, canonical_key )
     `)
     .or(`phone.ilike.%${search}%,email.ilike.%${search}%`)
     .order('created_at', { ascending: false })
     .limit(20)
 
   if (error) return NextResponse.json({ error: 'query_failed' }, { status: 500 })
-  return NextResponse.json({ members: data ?? [] })
+
+  // Normalize store name — Supabase returns join as array
+  const members = (data ?? []).map(m => {
+    const storesArr = m.stores as { display_name?: string; canonical_key?: string }[] | null
+    return {
+      ...m,
+      storeName: storesArr?.[0]?.display_name ?? 'No Store',
+    }
+  })
+
+  return NextResponse.json({ members })
 }
 
 export async function PATCH(req: NextRequest) {
@@ -46,9 +56,9 @@ export async function PATCH(req: NextRequest) {
 
   const admin = createAdminSupabaseClient()
   const { error } = await admin.from('members').update({
-    is_blacklisted: true,
+    is_blacklisted:   true,
     blacklist_reason: reason.trim(),
-    blacklisted_at: new Date().toISOString(),
+    blacklisted_at:   new Date().toISOString(),
   }).eq('id', memberId)
 
   if (error) return NextResponse.json({ error: 'update_failed' }, { status: 500 })

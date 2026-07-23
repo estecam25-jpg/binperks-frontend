@@ -41,28 +41,36 @@ export async function PATCH(req: NextRequest) {
       .single()
     if (fetchErr || !merchant) return NextResponse.json({ error: 'merchant_not_found' }, { status: 404 })
 
-    await admin.from('merchants').update({
-      billing_status: 'active',
-      subscription_status: 'active',
-    }).eq('id', merchantId)
+    // Activate merchant + all their stores
+    await Promise.all([
+      admin.from('merchants').update({
+        billing_status:      'active',
+        subscription_status: 'active',
+      }).eq('id', merchantId),
+      admin.from('stores').update({ is_active: true }).eq('merchant_id', merchantId),
+    ])
 
     // Fire GHL activated webhook (non-blocking)
     if (process.env.GHL_MERCHANT_ACTIVATED_WEBHOOK_URL) {
       fetch(process.env.GHL_MERCHANT_ACTIVATED_WEBHOOK_URL, {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          merchantId: merchant.id,
-          firstName: merchant.name ?? '',
-          phone: '',
-          email: merchant.owner_email ?? '',
-          companyName: merchant.company_name ?? '',
+          merchantId:   merchant.id,
+          firstName:    merchant.name ?? '',
+          phone:        '',
+          email:        merchant.owner_email ?? '',
+          companyName:  merchant.company_name ?? '',
           dashboardUrl: 'https://app.binperks.com/merchant/dashboard',
         }),
       }).catch(err => console.error('[admin/merchants] GHL webhook error:', err))
     }
   } else {
-    await admin.from('merchants').update({ billing_status: 'deactivated' }).eq('id', merchantId)
+    // Deactivate merchant + all their stores
+    await Promise.all([
+      admin.from('merchants').update({ billing_status: 'deactivated' }).eq('id', merchantId),
+      admin.from('stores').update({ is_active: false }).eq('merchant_id', merchantId),
+    ])
   }
 
   return NextResponse.json({ ok: true })

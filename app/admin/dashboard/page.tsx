@@ -7,8 +7,9 @@ import { createClient } from '@/lib/supabase'
 const ADMIN_EMAIL = 'enina@estecam.com'
 
 interface Stats {
-  totalMembers: number; totalVip: number; totalStamps: number
-  couponsIssued: number; couponsRedeemed: number; activeMerchantCount: number; mrr: number
+  starterMembers: number; totalVip: number; totalStamps: number
+  couponsIssued: number; couponsRedeemed: number; activeMerchantCount: number
+  merchantMrr: number; memberMrr: number
 }
 interface Merchant {
   id: string; name: string; owner_email: string; company_name: string
@@ -17,7 +18,7 @@ interface Merchant {
 interface Member {
   id: string; first_name: string; last_name: string; phone: string; email: string
   subscription_status: string; total_stamps: number; is_blacklisted: boolean; created_at: string
-  stores: { brand_name: string }[] | null
+  storeName: string
 }
 
 function tierLabel(m: Member) {
@@ -127,7 +128,7 @@ export default function AdminDashboardPage() {
       <div className="bg-[#1A1A2E] px-5 py-4 flex items-center justify-between">
         <div>
           <span className="font-['Coiny'] text-2xl text-white tracking-wide">BinPerks</span>
-          <span className="ml-2 text-[11px] font-bold tracking-widest uppercase text-[#FFB217]">⚡ God Mode</span>
+          <span className="ml-2 text-[11px] font-bold tracking-widest uppercase text-[#FFB217]">Admin</span>
         </div>
         <button
           onClick={() => createClient().auth.signOut().then(() => router.replace('/admin/login'))}
@@ -144,18 +145,23 @@ export default function AdminDashboardPage() {
           <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] mb-3">Overview</h2>
           <div className="grid grid-cols-2 gap-3">
             <StatCard label="Active Merchants" value={stats?.activeMerchantCount ?? '—'} />
-            <StatCard label="Total Members" value={stats?.totalMembers ?? '—'} />
-            <StatCard label="VIP Members" value={stats?.totalVip ?? '—'} />
             <StatCard label="Total Stamps" value={stats ? stats.totalStamps.toLocaleString() : '—'} />
+            <StatCard label="Starter Members" value={stats?.starterMembers ?? '—'} sub="free tier" />
+            <StatCard label="VIP Members" value={stats?.totalVip ?? '—'} sub="paid tier" />
+            <StatCard
+              label="Merchant MRR"
+              value={stats ? `$${stats.merchantMrr.toFixed(2)}` : '—'}
+              sub="store subscriptions"
+            />
+            <StatCard
+              label="Member MRR"
+              value={stats ? `$${stats.memberMrr.toFixed(2)}` : '—'}
+              sub="VIP memberships"
+            />
             <StatCard
               label="Coupons"
               value={stats ? `${stats.couponsIssued} / ${stats.couponsRedeemed}` : '—'}
               sub="issued / redeemed"
-            />
-            <StatCard
-              label="MRR"
-              value={stats ? `$${stats.mrr.toFixed(2)}` : '—'}
-              sub="active subscriptions"
             />
           </div>
         </section>
@@ -234,7 +240,7 @@ export default function AdminDashboardPage() {
                     <p className="text-[14px] font-bold text-[#1A1A2E]">{m.first_name} {m.last_name}</p>
                     <p className="text-[11px] text-[#8E8EA8] font-medium">{m.phone} · {m.email}</p>
                     <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
-                      {tierLabel(m)} · {m.total_stamps} stamps · {Array.isArray(m.stores) && m.stores.length > 0 ? m.stores[0].brand_name : 'No store'}
+                      {tierLabel(m)} · {m.total_stamps} stamps · {m.storeName}
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">

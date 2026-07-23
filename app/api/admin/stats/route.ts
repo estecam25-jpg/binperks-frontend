@@ -14,14 +14,14 @@ export async function GET(req: NextRequest) {
   const admin = createAdminSupabaseClient()
 
   const [
-    { count: totalMembers },
+    { count: starterMembers },
     { count: totalVip },
     { data: stampSum },
     { count: couponsIssued },
     { count: couponsRedeemed },
     { data: merchants },
   ] = await Promise.all([
-    admin.from('members').select('*', { count: 'exact', head: true }),
+    admin.from('members').select('*', { count: 'exact', head: true }).eq('subscription_status', 'free'),
     admin.from('members').select('*', { count: 'exact', head: true }).eq('subscription_status', 'vip'),
     admin.from('stamp_events').select('stamp_count').throwOnError(),
     admin.from('rewards').select('*', { count: 'exact', head: true }).eq('status', 'earned'),
@@ -32,18 +32,20 @@ export async function GET(req: NextRequest) {
   const totalStamps = (stampSum ?? []).reduce((sum: number, r: { stamp_count: number }) => sum + (r.stamp_count ?? 0), 0)
 
   const activeMerchants = (merchants ?? []).filter(m => m.subscription_status === 'active')
-  const mrr = activeMerchants.reduce((sum, m) => {
+  const merchantMrr = activeMerchants.reduce((sum, m) => {
     const locs = Math.max(1, m.location_count ?? 1)
     return sum + 299.99 + (locs - 1) * 79.99
   }, 0)
+  const memberMrr = (totalVip ?? 0) * 29.99
 
   return NextResponse.json({
-    totalMembers: totalMembers ?? 0,
-    totalVip: totalVip ?? 0,
+    starterMembers:     starterMembers ?? 0,
+    totalVip:           totalVip ?? 0,
     totalStamps,
-    couponsIssued: couponsIssued ?? 0,
-    couponsRedeemed: couponsRedeemed ?? 0,
+    couponsIssued:      couponsIssued ?? 0,
+    couponsRedeemed:    couponsRedeemed ?? 0,
     activeMerchantCount: activeMerchants.length,
-    mrr: Math.round(mrr * 100) / 100,
+    merchantMrr:        Math.round(merchantMrr * 100) / 100,
+    memberMrr:          Math.round(memberMrr * 100) / 100,
   })
 }

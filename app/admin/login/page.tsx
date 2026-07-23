@@ -38,7 +38,7 @@ export default function AdminLoginPage() {
         <div className="text-center">
           <div className="font-['Coiny'] text-5xl text-white tracking-wide">BinPerks</div>
           <div className="text-[11px] font-bold tracking-[0.2em] uppercase text-[#FFB217] mt-1">
-            ⚡ God Mode
+            Admin Dashboard
           </div>
         </div>
 
