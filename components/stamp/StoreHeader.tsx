@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import { headerTextColor, storeInitials } from '@/lib/branding'
 
 interface StoreHeaderProps {
@@ -21,11 +20,10 @@ export default function StoreHeader({ storeName, brandColor, logoUrl }: StoreHea
       <div className="flex items-center gap-2.5">
         <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
           {logoUrl ? (
-            <Image
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
               src={logoUrl}
               alt={`${storeName} logo`}
-              width={40}
-              height={40}
               className="object-cover w-full h-full"
             />
           ) : (

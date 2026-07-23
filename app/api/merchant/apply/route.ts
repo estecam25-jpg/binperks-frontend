@@ -11,8 +11,10 @@
  *   4. Insert stores row for the first location (is_active: false until paid)
  *   5. Create Stripe customer
  *   6. Create Stripe checkout session (subscription)
- *   7. Notify GHL (fire-and-forget, skipped if webhook URL isn't configured)
+ *   7. Notify GHL merchant-created webhook (fire-and-forget, skipped if URL isn't configured)
  *   8. Return { checkoutUrl, merchantId }
+ *
+ * Note: GHL_MERCHANT_CREATED_WEBHOOK_URL handles the welcome SMS — no separate welcome webhook needed.
  *
  * On Stripe webhook (checkout.session.completed) — see /api/merchant/webhook:
  *   - Update merchant: subscription_status='active', stripe_subscription_id, billing_status='active'
@@ -195,21 +197,6 @@ export async function POST(req: NextRequest) {
           companyName,
         }),
       }).catch(err => console.error('[/api/merchant/apply] GHL webhook error:', err))
-    }
-
-    // 8. Fire merchant welcome SMS (fire-and-forget — separate from "merchant created" notification).
-    const welcomeWebhook = process.env.GHL_MERCHANT_WELCOME_WEBHOOK_URL
-    if (welcomeWebhook) {
-      fetch(welcomeWebhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email:       normalizedEmail,
-          phone,
-          companyName,
-          firstName,
-        }),
-      }).catch(err => console.error('[/api/merchant/apply] GHL welcome webhook error:', err))
     }
 
     return NextResponse.json({
