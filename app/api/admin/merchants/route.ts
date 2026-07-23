@@ -17,12 +17,13 @@ export async function GET() {
   const admin = createAdminSupabaseClient()
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [merchantsResult, stampEvents, allMembers] = await Promise.all([
+  const [merchantsResult, stampEvents, allMembers, w9Records] = await Promise.all([
     admin.from('merchants')
       .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at')
       .order('created_at', { ascending: false }),
     admin.from('stamp_events').select('merchant_id, stamp_count').gte('awarded_at', sevenDaysAgo),
     admin.from('members').select('merchant_id, subscription_status'),
+    admin.from('merchant_w9').select('merchant_id, status'),
   ])
 
   // Aggregate stamps per merchant this week
@@ -30,6 +31,12 @@ export async function GET() {
   for (const s of (stampEvents.data ?? [])) {
     if (!s.merchant_id) continue
     stampsByMerchant[s.merchant_id] = (stampsByMerchant[s.merchant_id] || 0) + (s.stamp_count ?? 0)
+  }
+
+  // W-9 status per merchant
+  const w9ByMerchant: Record<string, string> = {}
+  for (const w of (w9Records.data ?? [])) {
+    if (w.merchant_id) w9ByMerchant[w.merchant_id] = w.status
   }
 
   // Aggregate member counts per merchant
@@ -52,6 +59,7 @@ export async function GET() {
       totalMembers:      total,
       vipMembers:        vip,
       vipConversionPct:  total > 0 ? Math.round(vip / total * 100) : 0,
+      w9Status:          w9ByMerchant[m.id] ?? null,
     }
   })
 

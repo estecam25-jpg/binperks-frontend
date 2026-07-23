@@ -20,6 +20,7 @@ interface Merchant {
   billing_status: string; subscription_status: string; location_count: number
   created_at: string; stampsThisWeek: number; totalMembers: number
   vipMembers: number; vipConversionPct: number
+  w9Status: string | null
 }
 interface Store {
   id: string; brand_name: string; canonical_key: string; is_active: boolean
@@ -80,7 +81,10 @@ function MerchantCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <p className="text-[14px] font-bold text-[#1A1A2E] truncate">{m.company_name || m.name}</p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-[14px] font-bold text-[#1A1A2E] truncate">{m.company_name || m.name}</p>
+              {!m.w9Status && <span title="W-9 not submitted" className="text-[13px]">📋</span>}
+            </div>
             {atRisk  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">At Risk</span>}
             {pending && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pending</span>}
             {failed  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Failed Payment</span>}
