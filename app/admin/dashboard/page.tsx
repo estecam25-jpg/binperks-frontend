@@ -67,11 +67,13 @@ function Spinner() {
 }
 
 function MerchantCard({
-  m, onAction, actionLoading,
+  m, onAction, actionLoading, onW9Action, onW9Reject,
 }: {
   m: Merchant
   onAction: (id: string, action: 'activate' | 'deactivate') => Promise<void>
   actionLoading: string | null
+  onW9Action: (id: string, action: 'approve_w9') => void
+  onW9Reject: (id: string) => void
 }) {
   const atRisk  = m.billing_status === 'active' && m.stampsThisWeek === 0 && m.totalMembers > 0
   const pending = !m.billing_status || m.billing_status === 'pending'
@@ -82,10 +84,7 @@ function MerchantCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="text-[14px] font-bold text-[#1A1A2E] truncate">{m.company_name || m.name}</p>
-              {!m.w9Status && <span title="W-9 not submitted" className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">No W-9</span>}
-            </div>
+            <p className="text-[14px] font-bold text-[#1A1A2E] truncate">{m.company_name || m.name}</p>
             {atRisk  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">At Risk</span>}
             {pending && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pending</span>}
             {failed  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Failed Payment</span>}
@@ -109,6 +108,40 @@ function MerchantCard({
           </div>
         ))}
       </div>
+      {/* W-9 status */}
+      <div className="border border-[#EBEBF2] rounded-xl px-3 py-2.5 flex flex-col gap-2">
+        {!m.w9Status && (
+          <p className="text-[12px] font-semibold text-[#8E8EA8]">⬜ W-9 not submitted</p>
+        )}
+        {m.w9Status === 'approved' && (
+          <p className="text-[12px] font-semibold text-green-700">✅ W-9 Approved</p>
+        )}
+        {m.w9Status === 'rejected' && (
+          <p className="text-[12px] font-semibold text-red-700">❌ W-9 Rejected</p>
+        )}
+        {m.w9Status === 'pending' && (
+          <>
+            <p className="text-[12px] font-bold text-[#FFB217]">📋 W-9 Pending Review</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onW9Action(m.id, 'approve_w9')}
+                disabled={!!actionLoading}
+                className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-green-600 text-white disabled:opacity-40"
+              >
+                {actionLoading === m.id + 'approve_w9' ? '…' : 'Approve W-9'}
+              </button>
+              <button
+                onClick={() => onW9Reject(m.id)}
+                disabled={!!actionLoading}
+                className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-[#DA1212] text-white disabled:opacity-40"
+              >
+                Reject W-9
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* Onboarding progress */}
       {m.onboardingComplete < 100 && (
         <div className="flex flex-col gap-1">
@@ -200,6 +233,8 @@ export default function AdminDashboardPage() {
   const [actionLoading,   setActionLoading]   = useState<string | null>(null)
   const [blacklistTarget, setBlacklistTarget] = useState<Member | null>(null)
   const [blacklistReason, setBlacklistReason] = useState('')
+  const [w9RejectTarget,  setW9RejectTarget]  = useState<string | null>(null)  // merchantId
+  const [w9RejectNotes,   setW9RejectNotes]   = useState('')
 
   // Auth check
   useEffect(() => {
@@ -257,6 +292,16 @@ export default function AdminDashboardPage() {
     await fetch('/api/admin/merchants', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ merchantId: id, action }),
+    })
+    await loadMerchants()
+    setActionLoading(null)
+  }
+
+  async function handleW9Action(merchantId: string, action: 'approve_w9' | 'reject_w9', notes?: string) {
+    setActionLoading(merchantId + action)
+    await fetch('/api/admin/merchants', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ merchantId, action, notes }),
     })
     await loadMerchants()
     setActionLoading(null)
@@ -335,7 +380,7 @@ export default function AdminDashboardPage() {
           </p>
         )}
         {filteredMerchants.map(m => (
-          <MerchantCard key={m.id} m={m} onAction={handleMerchantAction} actionLoading={actionLoading} />
+          <MerchantCard key={m.id} m={m} onAction={handleMerchantAction} actionLoading={actionLoading} onW9Action={handleW9Action} onW9Reject={(id) => { setW9RejectTarget(id); setW9RejectNotes('') }} />
         ))}
       </div>
     )
@@ -481,6 +526,43 @@ export default function AdminDashboardPage() {
         {tab === 'members'   && renderMembers()}
         {tab === 'alerts'    && renderAlerts()}
       </main>
+
+      {/* W-9 Reject modal */}
+      {w9RejectTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center px-4 z-50">
+          <div className="bg-white rounded-3xl px-6 py-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl">
+            <h3 className="font-['Coiny'] text-xl text-[#1A1A2E]">Reject W-9?</h3>
+            <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
+              The merchant will be asked to re-upload their W-9. Add a reason below (optional but recommended).
+            </p>
+            <textarea
+              value={w9RejectNotes}
+              onChange={e => setW9RejectNotes(e.target.value)}
+              placeholder="e.g. Signature missing, wrong form version…"
+              rows={3}
+              className="w-full rounded-xl border-2 border-[#EBEBF2] px-4 py-3 text-[14px] font-medium text-[#1A1A2E] placeholder-[#C5C5D5] resize-none outline-none focus:border-[#DA1212]"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setW9RejectTarget(null); setW9RejectNotes('') }}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-[#8E8EA8] border-2 border-[#EBEBF2]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await handleW9Action(w9RejectTarget, 'reject_w9', w9RejectNotes || undefined)
+                  setW9RejectTarget(null); setW9RejectNotes('')
+                }}
+                disabled={actionLoading === w9RejectTarget + 'reject_w9'}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-white bg-[#DA1212] disabled:opacity-40"
+              >
+                {actionLoading === w9RejectTarget + 'reject_w9' ? '…' : 'Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Blacklist modal */}
       {blacklistTarget && (

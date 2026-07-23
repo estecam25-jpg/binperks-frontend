@@ -122,6 +122,16 @@ export async function PATCH(req: NextRequest) {
 
   const admin = createAdminSupabaseClient()
 
+  if (action === 'approve_w9' || action === 'reject_w9') {
+    const status = action === 'approve_w9' ? 'approved' : 'rejected'
+    const { error } = await admin
+      .from('merchant_w9')
+      .update({ status, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('merchant_id', merchantId)
+    if (error) return NextResponse.json({ error: 'update_failed' }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  }
+
   if (action === 'activate') {
     const { data: merchant, error: fetchErr } = await admin
       .from('merchants').select('id, name, owner_email, company_name').eq('id', merchantId).single()
