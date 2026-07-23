@@ -31,6 +31,7 @@ interface MerchantNavProps {
 
 export default function MerchantNav({
   companyName, stores, activeStoreId, activeTab, onStoreChange, onTabChange,
+  showStart = false,
 }: MerchantNavProps) {
   const TABS = showStart
     ? [{ id: 'start' as TabId, label: 'Get Started', icon: '🚀' }, ...BASE_TABS]
