@@ -64,11 +64,12 @@ export async function POST(req: Request) {
   const { error: dbError } = await admin
     .from('merchant_w9')
     .upsert({
-      merchant_id: merchant.id,
-      pdf_path: pdfPath,
-      status: 'pending',
+      merchant_id:  merchant.id,
+      pdf_path:     pdfPath,
+      status:       'pending',
       submitted_at: now,
-      updated_at: now,
+      reviewed_at:  null,          // reset on re-upload
+      updated_at:   now,
     }, { onConflict: 'merchant_id' })
 
   if (dbError) {

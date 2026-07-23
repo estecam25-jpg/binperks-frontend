@@ -27,6 +27,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { Redis } from '@upstash/redis'
 
 const APP_URL = 'https://app.binperks.com'
 
@@ -208,6 +209,40 @@ export async function POST(req: NextRequest) {
           referralUrl: finalReferralUrl,
         }),
       }).catch(err => console.error('[/api/join/create] GHL webhook error:', err))
+    }
+
+    // 7. Generate magic link and send via GHL so new member can go straight to dashboard.
+    //    Fire-and-forget — never block the signup response on this.
+    const magicLinkWebhook = process.env.GHL_MAGIC_LINK_WEBHOOK_URL
+    if (magicLinkWebhook) {
+      ;(async () => {
+        try {
+          const APP_BASE = process.env.NEXT_PUBLIC_APP_URL ?? APP_URL
+          const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+            type: 'magiclink',
+            email,
+            options: { redirectTo: APP_BASE + '/auth/callback?next=/member/dashboard' },
+          })
+          if (linkError || !linkData) {
+            console.error('[/api/join/create] generateLink error:', linkError); return
+          }
+          // Shorten via Upstash Redis (same pattern as /api/member/login)
+          const redis = new Redis({
+            url: process.env.KV_REST_API_URL!,
+            token: process.env.KV_REST_API_TOKEN!,
+          })
+          const code = Math.random().toString(36).substring(2, 10)
+          await redis.set('token:' + code, linkData.properties.hashed_token, { ex: 65 * 60 })
+          const shortUrl = APP_BASE + '/s/' + code
+          await fetch(magicLinkWebhook, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ memberId, phone, firstName, magicLink: shortUrl }),
+          })
+        } catch (err) {
+          console.error('[/api/join/create] magic link error:', err)
+        }
+      })()
     }
 
     return NextResponse.json({
