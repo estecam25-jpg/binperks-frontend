@@ -122,20 +122,29 @@ function MerchantCard({
         {m.w9?.status === 'pending' && (
           <>
             <p className="text-[12px] font-bold text-[#FFB217]">📋 W-9 Pending Review</p>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 flex-wrap">
+              <button
+                onClick={async () => {
+                  const res = await fetch('/api/admin/merchants?action=w9_url&merchantId=' + m.id)
+                  if (res.ok) { const d = await res.json(); window.open(d.url, '_blank') }
+                }}
+                className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-[#1A1A2E] text-white min-w-[80px]"
+              >
+                📄 View W-9
+              </button>
               <button
                 onClick={() => onW9Action(m.id, 'approve_w9')}
                 disabled={!!actionLoading}
-                className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-green-600 text-white disabled:opacity-40"
+                className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-green-600 text-white disabled:opacity-40 min-w-[80px]"
               >
-                {actionLoading === m.id + 'approve_w9' ? '…' : 'Approve W-9'}
+                {actionLoading === m.id + 'approve_w9' ? '…' : 'Approve'}
               </button>
               <button
                 onClick={() => onW9Reject(m.id)}
                 disabled={!!actionLoading}
-                className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-[#DA1212] text-white disabled:opacity-40"
+                className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-[#DA1212] text-white disabled:opacity-40 min-w-[80px]"
               >
-                Reject W-9
+                Reject
               </button>
             </div>
           </>
@@ -227,6 +236,7 @@ export default function AdminDashboardPage() {
 
   const [merchantSearch, setMerchantSearch] = useState('')
   const [merchantStatus, setMerchantStatus] = useState<'all' | 'active' | 'deactivated'>('all')
+  const [merchantW9Filter, setMerchantW9Filter] = useState<'all' | 'pending' | 'none' | 'approved' | 'rejected'>('all')
   const [memberSearch,   setMemberSearch]   = useState('')
   const [memberSearching, setMemberSearching] = useState(false)
 
@@ -283,9 +293,17 @@ export default function AdminDashboardPage() {
 
   const filteredMerchants = useMemo(() => merchants.filter(m => {
     const q = merchantSearch.trim().toLowerCase()
+    const w9s = m.w9?.status ?? null
+    const w9ok =
+      merchantW9Filter === 'all'      ? true :
+      merchantW9Filter === 'pending'  ? w9s === 'pending' :
+      merchantW9Filter === 'none'     ? !w9s :
+      merchantW9Filter === 'approved' ? w9s === 'approved' :
+      merchantW9Filter === 'rejected' ? w9s === 'rejected' : true
     return (!q || (m.company_name ?? '').toLowerCase().includes(q) || (m.owner_email ?? '').toLowerCase().includes(q))
         && (merchantStatus === 'all' || m.billing_status === merchantStatus)
-  }), [merchants, merchantSearch, merchantStatus])
+        && w9ok
+  }), [merchants, merchantSearch, merchantStatus, merchantW9Filter])
 
   async function handleMerchantAction(id: string, action: 'activate' | 'deactivate') {
     setActionLoading(id + action)
@@ -361,18 +379,33 @@ export default function AdminDashboardPage() {
 
   function renderMerchants() {
     if (tabLoading === 'merchants') return <Spinner />
+    const statusTabs: { v: 'all'|'active'|'deactivated'; l: string }[] = [
+      { v: 'all', l: 'All' }, { v: 'active', l: 'Active' }, { v: 'deactivated', l: 'Deactivated' },
+    ]
+    const w9Tabs: { v: 'all'|'pending'|'none'|'approved'|'rejected'; l: string }[] = [
+      { v: 'all', l: 'All W-9s' }, { v: 'pending', l: '⏳ Pending' },
+      { v: 'none', l: '⬜ Not submitted' }, { v: 'approved', l: '✅ Approved' }, { v: 'rejected', l: '❌ Rejected' },
+    ]
+    const tabCls = (active: boolean) =>
+      'px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ' +
+      (active ? 'bg-[#4A4B98] text-white' : 'bg-white text-[#8E8EA8]')
     return (
       <div className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <input value={merchantSearch} onChange={e => setMerchantSearch(e.target.value)}
-            placeholder="Search name or email"
-            className="flex-1 px-4 py-3 rounded-xl bg-white border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-semibold text-[#1A1A2E] placeholder:text-[#C0C0D0]" />
-          <select value={merchantStatus} onChange={e => setMerchantStatus(e.target.value as 'all' | 'active' | 'deactivated')}
-            className="px-3 py-3 rounded-xl bg-white border-2 border-transparent text-[13px] font-bold text-[#1A1A2E] outline-none">
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="deactivated">Deactivated</option>
-          </select>
+        {/* Search */}
+        <input value={merchantSearch} onChange={e => setMerchantSearch(e.target.value)}
+          placeholder="Search name or email"
+          className="px-4 py-3 rounded-xl bg-white border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-semibold text-[#1A1A2E] placeholder:text-[#C0C0D0]" />
+        {/* Status filter */}
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+          {statusTabs.map(t => (
+            <button key={t.v} onClick={() => setMerchantStatus(t.v)} className={tabCls(merchantStatus === t.v)}>{t.l}</button>
+          ))}
+        </div>
+        {/* W-9 filter */}
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+          {w9Tabs.map(t => (
+            <button key={t.v} onClick={() => setMerchantW9Filter(t.v)} className={tabCls(merchantW9Filter === t.v)}>{t.l}</button>
+          ))}
         </div>
         {filteredMerchants.length === 0 && (
           <p className="text-[13px] text-[#8E8EA8] font-medium px-1">
@@ -380,7 +413,9 @@ export default function AdminDashboardPage() {
           </p>
         )}
         {filteredMerchants.map(m => (
-          <MerchantCard key={m.id} m={m} onAction={handleMerchantAction} actionLoading={actionLoading} onW9Action={handleW9Action} onW9Reject={(id) => { setW9RejectTarget(id); setW9RejectNotes('') }} />
+          <MerchantCard key={m.id} m={m} onAction={handleMerchantAction} actionLoading={actionLoading}
+            onW9Action={handleW9Action}
+            onW9Reject={(id) => { setW9RejectTarget(id); setW9RejectNotes('') }} />
         ))}
       </div>
     )

@@ -10,11 +10,23 @@ async function verifyAdmin() {
   return user?.email === ADMIN_EMAIL ? user : null
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await verifyAdmin()
   if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const admin = createAdminSupabaseClient()
+  // Signed URL for a merchant's W-9 PDF
+  const url = new URL(req.url)
+  const action  = url.searchParams.get('action')
+  const mIdParam = url.searchParams.get('merchantId')
+  if (action === 'w9_url' && mIdParam) {
+    const { data, error } = await admin.storage
+      .from('merchant-w9')
+      .createSignedUrl(mIdParam + '/w9.pdf', 3600)
+    if (error || !data?.signedUrl) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    return NextResponse.json({ url: data.signedUrl })
+  }
+
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [merchantsResult, stampEvents, allMembers, w9Records, allStores, allPerks, allStaff, allStamps] = await Promise.all([
