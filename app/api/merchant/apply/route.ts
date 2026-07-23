@@ -31,7 +31,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { calculateMonthlyTotal, MERCHANT_BASE_PRICE, MERCHANT_EXTRA_LOCATION_PRICE } from '@/lib/merchant-signup-session'
+import { calculateMonthlyTotal } from '@/lib/merchant-signup-session'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 
@@ -141,36 +141,21 @@ export async function POST(req: NextRequest) {
       created_at:        new Date().toISOString(),
     })
 
-    // 5. Build Stripe line items
-    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
-      {
-        price_data: {
-          currency: 'usd',
-          recurring: { interval: 'month' },
-          product_data: {
-            name: 'BinPerks — First Location',
-            description: `Loyalty platform for ${storeName}`,
-          },
-          unit_amount: Math.round(MERCHANT_BASE_PRICE * 100),
-        },
-        quantity: 1,
-      },
-    ]
+    // 5. Build Stripe line items using catalog price IDs (required for coupons/promotions to apply)
+    const isTest = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test')
 
-    if (count > 1) {
-      lineItems.push({
-        price_data: {
-          currency: 'usd',
-          recurring: { interval: 'month' },
-          product_data: {
-            name: 'BinPerks — Additional Locations',
-            description: `${count - 1} additional location${count - 1 > 1 ? 's' : ''} at $79.99/mo each`,
-          },
-          unit_amount: Math.round(MERCHANT_EXTRA_LOCATION_PRICE * 100),
-        },
-        quantity: count - 1,
-      })
-    }
+    const basePriceId = isTest
+      ? process.env.STRIPE_MERCHANT_PRICE_ID_TEST
+      : process.env.STRIPE_MERCHANT_PRICE_ID
+
+    const additionalPriceId = isTest
+      ? process.env.STRIPE_MERCHANT_ADDITIONAL_PRICE_ID_TEST
+      : process.env.STRIPE_MERCHANT_ADDITIONAL_PRICE_ID
+
+    const lineItems = [
+      { price: basePriceId, quantity: 1 },
+      ...(count > 1 ? [{ price: additionalPriceId, quantity: count - 1 }] : []),
+    ]
 
     // 6. Create Stripe checkout session
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
