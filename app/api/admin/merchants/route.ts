@@ -23,7 +23,7 @@ export async function GET() {
       .order('created_at', { ascending: false }),
     admin.from('stamp_events').select('merchant_id, stamp_count').gte('awarded_at', sevenDaysAgo),
     admin.from('members').select('merchant_id, subscription_status'),
-    admin.from('merchant_w9').select('merchant_id, status'),
+    admin.from('merchant_w9').select('merchant_id, status, submitted_at, reviewed_at'),
     admin.from('stores').select('merchant_id, logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at'),
     admin.from('perks').select('merchant_id, is_active, member_type').eq('is_active', true),
     admin.from('staff_users').select('merchant_id').eq('is_active', true),
@@ -38,9 +38,10 @@ export async function GET() {
   }
 
   // W-9 status per merchant
-  const w9ByMerchant: Record<string, string> = {}
+  type W9Row = { merchant_id: string; status: string; submitted_at: string | null; reviewed_at: string | null }
+  const w9ByMerchant: Record<string, W9Row> = {}
   for (const w of (w9Records.data ?? [])) {
-    if (w.merchant_id) w9ByMerchant[w.merchant_id] = w.status
+    if (w.merchant_id) w9ByMerchant[w.merchant_id] = w as W9Row
   }
 
   // Onboarding data per merchant
@@ -67,8 +68,8 @@ export async function GET() {
     const mStores = storesByMerchant[m.id] ?? []
     const primary = mStores[0]
     const checks = [
-      !!w9 && w9 !== 'rejected',
-      w9 === 'approved',
+      !!w9 && w9.status !== 'rejected',
+      w9?.status === 'approved',
       mStores.length > 0,
       m.billing_status === 'active',
       !!(primary?.logo_url && primary?.brand_color && primary?.font_family),
@@ -104,7 +105,7 @@ export async function GET() {
       totalMembers:      total,
       vipMembers:        vip,
       vipConversionPct:  total > 0 ? Math.round(vip / total * 100) : 0,
-      w9Status:          w9ByMerchant[m.id] ?? null,
+      w9:                w9ByMerchant[m.id] ?? null,
       onboardingComplete: calcOnboarding(m),
     }
   })

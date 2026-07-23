@@ -20,7 +20,7 @@ interface Merchant {
   billing_status: string; subscription_status: string; location_count: number
   created_at: string; stampsThisWeek: number; totalMembers: number
   vipMembers: number; vipConversionPct: number
-  w9Status: string | null
+  w9: { merchant_id: string; status: string; submitted_at: string | null; reviewed_at: string | null } | null
   onboardingComplete: number
 }
 interface Store {
@@ -110,16 +110,16 @@ function MerchantCard({
       </div>
       {/* W-9 status */}
       <div className="border border-[#EBEBF2] rounded-xl px-3 py-2.5 flex flex-col gap-2">
-        {!m.w9Status && (
+        {!m.w9?.status && (
           <p className="text-[12px] font-semibold text-[#8E8EA8]">⬜ W-9 not submitted</p>
         )}
-        {m.w9Status === 'approved' && (
+        {m.w9?.status === 'approved' && (
           <p className="text-[12px] font-semibold text-green-700">✅ W-9 Approved</p>
         )}
-        {m.w9Status === 'rejected' && (
+        {m.w9?.status === 'rejected' && (
           <p className="text-[12px] font-semibold text-red-700">❌ W-9 Rejected</p>
         )}
-        {m.w9Status === 'pending' && (
+        {m.w9?.status === 'pending' && (
           <>
             <p className="text-[12px] font-bold text-[#FFB217]">📋 W-9 Pending Review</p>
             <div className="flex gap-2">
