@@ -45,7 +45,7 @@ function MerchantLoginContent() {
   async function handleCodeSubmit(e: React.FormEvent) {
     e.preventDefault()
     const code = confirmCode.trim()
-    if (code.length < 6) return
+    if (code.length < 1) return
     setStatus('verifying')
 
     const res = await fetch('/api/merchant/verify-code', {
