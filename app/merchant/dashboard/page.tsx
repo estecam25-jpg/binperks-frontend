@@ -49,6 +49,9 @@ function DashboardShell() {
       if (onboarding) setOnboardingPct(Math.round((onboarding.completedCount / onboarding.total) * 100))
       const isPending = data.merchant?.billingStatus === 'pending' && !data.merchant?.hasSubscription
       setAbandonedCheckout(isPending)
+      if (data.stores?.length === 1 && !searchParams.get('store')) {
+        setStore(data.stores[0].id)
+      }
       setLoading(false)
     })
   }, [router])
