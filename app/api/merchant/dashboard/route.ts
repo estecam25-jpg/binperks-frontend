@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
 
   const { data: stores } = await admin
     .from('stores')
-    .select('id, display_name, canonical_key, city, state, is_active, fiscal_week_start')
+    .select('id, display_name, canonical_key, city, state, is_active, fiscal_week_start, brand_color, logo_url')
     .eq('merchant_id', merchant.id)
     .order('created_at')
 
@@ -85,9 +85,9 @@ export async function GET(req: NextRequest) {
         hasSubscription: !!merchant.stripe_subscription_id,
       },
       stores: [],
-      stats: null,
+      stats:           null,
       fiscalWeekChart: [],
-      recentMembers: [],
+      recentMembers:   [],
     })
   }
 
@@ -195,12 +195,14 @@ export async function GET(req: NextRequest) {
       hasSubscription: !!merchant.stripe_subscription_id,
     },
     stores: stores.map(s => ({
-      id:        s.id,
-      storeName: s.display_name,
-      storeKey:  s.canonical_key,
-      city:      s.city,
-      state:     s.state,
-      isActive:  s.is_active,
+      id:         s.id,
+      storeName:  s.display_name,
+      storeKey:   s.canonical_key,
+      city:       s.city,
+      state:      s.state,
+      isActive:   s.is_active,
+      brandColor: s.brand_color ?? null,
+      logoUrl:    s.logo_url ?? null,
     })),
     stats: {
       totalMembers:            totalMembersRes.count ?? 0,

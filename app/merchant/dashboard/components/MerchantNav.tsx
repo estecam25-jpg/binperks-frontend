@@ -6,6 +6,8 @@ interface Store {
   storeKey: string    // canonical_key — used to build the /join/[storeKey] URL
   city: string
   state: string
+  brandColor?: string | null
+  logoUrl?: string | null
 }
 
 type TabId = 'start' | 'overview' | 'members' | 'redemptions' | 'perks' | 'marketing' | 'settings'
@@ -27,21 +29,28 @@ interface MerchantNavProps {
   onStoreChange: (storeId: string | null) => void
   onTabChange: (tab: TabId) => void
   showStart?: boolean
+  brandColor?: string | null
+  logoUrl?: string | null
 }
 
 export default function MerchantNav({
   companyName, stores, activeStoreId, activeTab, onStoreChange, onTabChange,
-  showStart = false,
+  showStart = false, brandColor, logoUrl,
 }: MerchantNavProps) {
   const TABS = showStart
     ? [{ id: 'start' as TabId, label: 'Get Started', icon: '🚀' }, ...BASE_TABS]
     : BASE_TABS
   const isMulti = stores.length > 1
+  const navBg = brandColor || '#1A1A2E'
 
   return (
-    <div className="bg-[#1A1A2E] sticky top-0 z-20">
+    <div className="sticky top-0 z-20" style={{ backgroundColor: navBg }}>
       {/* Top bar */}
       <div className="px-4 py-3 flex items-center gap-3">
+        {logoUrl && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={logoUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+        )}
         <span className="font-['Coiny'] text-xl text-white leading-none flex-1 truncate">
           {companyName}
         </span>

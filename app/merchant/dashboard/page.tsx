@@ -22,6 +22,11 @@ function DashboardShell() {
   const activeTab = (searchParams.get('tab') as TabId) || 'overview'
   const activeStoreId = searchParams.get('store') || null  // null = all locations
 
+  // Branding: derive from active store in the already-fetched stores array
+  const activeStore = stores.find(s => s.id === activeStoreId) ?? null
+  const activeBrandColor = activeStore?.brandColor ?? null
+  const activeLogoUrl = activeStore?.logoUrl ?? null
+
   function setTab(tab: TabId) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('tab', tab)
@@ -49,9 +54,18 @@ function DashboardShell() {
       if (onboarding) setOnboardingPct(Math.round((onboarding.completedCount / onboarding.total) * 100))
       const isPending = data.merchant?.billingStatus === 'pending' && !data.merchant?.hasSubscription
       setAbandonedCheckout(isPending)
-      if (data.stores?.length === 1 && !searchParams.get('store')) {
-        setStore(data.stores[0].id)
+
+      // Fix 1: auto-select the only store on first load.
+      // Use window.location.replace (hard redirect) so the URL updates reliably
+      // before React re-renders — router.replace inside useEffect races with
+      // searchParams and doesn't always reflect in the same render cycle.
+      if (data.stores?.length === 1 && !window.location.search.includes('store=')) {
+        const params = new URLSearchParams(window.location.search)
+        params.set('store', data.stores[0].id)
+        window.location.replace(`/merchant/dashboard?${params}`)
+        return  // don't setLoading(false) — the page is about to reload
       }
+
       setLoading(false)
     })
   }, [router])
@@ -110,6 +124,8 @@ function DashboardShell() {
         onStoreChange={setStore}
         onTabChange={setTab}
         showStart={onboardingPct < 100}
+        brandColor={activeBrandColor}
+        logoUrl={activeLogoUrl}
       />
 
       <div className="flex-1 max-w-2xl mx-auto w-full">
