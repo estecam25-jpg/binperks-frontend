@@ -24,10 +24,10 @@ function DashboardShell() {
   // auto-select can update it immediately without a full-page navigation.
   const [activeStoreId, setActiveStoreId] = useState<string | null>(searchParams.get('store'))
 
-  // Branding: derive from active store in the already-fetched stores array
-  const activeStore = stores.find(s => s.id === activeStoreId) ?? null
-  const activeBrandColor = activeStore?.brandColor ?? null
-  const activeLogoUrl = activeStore?.logoUrl ?? null
+  // Branding: explicit state so it updates in the same render as stores load
+  const [activeBrandColor, setActiveBrandColor] = useState<string>('#4A4B98')
+  const [activeLogoUrl, setActiveLogoUrl] = useState<string | null>(null)
+  const [activeStoreName, setActiveStoreName] = useState<string>('')
 
   function setTab(tab: TabId) {
     const params = new URLSearchParams(searchParams.toString())
@@ -40,6 +40,13 @@ function DashboardShell() {
     if (storeId) params.set('store', storeId)
     else params.delete('store')
     router.replace(`/merchant/dashboard?${params}`)
+    // Sync branding when merchant manually switches location
+    const picked = stores.find(s => s.id === storeId)
+    if (picked) {
+      setActiveBrandColor(picked.brandColor ?? '#4A4B98')
+      setActiveLogoUrl(picked.logoUrl ?? null)
+      setActiveStoreName(picked.storeName ?? '')
+    }
   }
 
   useEffect(() => {
@@ -56,6 +63,14 @@ function DashboardShell() {
       if (onboarding) setOnboardingPct(Math.round((onboarding.completedCount / onboarding.total) * 100))
       const isPending = data.merchant?.billingStatus === 'pending' && !data.merchant?.hasSubscription
       setAbandonedCheckout(isPending)
+
+      // Set branding immediately from the first (or only) store
+      if (data.stores?.length > 0) {
+        const firstStore = data.stores[0]
+        setActiveBrandColor(firstStore.brandColor ?? '#4A4B98')
+        setActiveLogoUrl(firstStore.logoUrl ?? null)
+        setActiveStoreName(firstStore.storeName ?? '')
+      }
 
       // Auto-select the only store on first load.
       // Use history.replaceState to update the URL without a page reload, then
