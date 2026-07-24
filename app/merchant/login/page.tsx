@@ -8,8 +8,10 @@ function MerchantLoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const inputRef = useRef<HTMLInputElement>(null)
+  const codeRef = useRef<HTMLInputElement>(null)
   const [email, setEmail] = useState('')
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'not_found' | 'error'>('idle')
+  const [confirmCode, setConfirmCode] = useState('')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'verifying' | 'code_error' | 'error'>('idle')
   const [authError, setAuthError] = useState(false)
 
   useEffect(() => {
@@ -22,6 +24,11 @@ function MerchantLoginContent() {
     if (searchParams.get('error') === 'auth') setAuthError(true)
   }, [router, searchParams])
 
+  // Focus code input when code entry step appears
+  useEffect(() => {
+    if (status === 'sent') codeRef.current?.focus()
+  }, [status])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!email.includes('@')) return
@@ -30,14 +37,31 @@ function MerchantLoginContent() {
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithOtp({
       email: email.toLowerCase().trim(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/merchant/dashboard`,
-      },
     })
 
-    // Supabase returns success even if email doesn't exist (security)
-    // so we always show "check your email"
     setStatus(error ? 'error' : 'sent')
+  }
+
+  async function handleCodeSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const code = confirmCode.trim()
+    if (code.length < 6) return
+    setStatus('verifying')
+
+    const res = await fetch('/api/merchant/verify-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.toLowerCase().trim(), code }),
+    })
+
+    if (res.ok) {
+      // Full-page navigation so cookies set by the server are picked up
+      window.location.href = '/merchant/dashboard'
+    } else {
+      setStatus('code_error')
+      setConfirmCode('')
+      codeRef.current?.focus()
+    }
   }
 
   const canSubmit = email.includes('@') && status !== 'sending'
@@ -57,19 +81,19 @@ function MerchantLoginContent() {
       <div className="flex-1 flex flex-col items-center px-4 -mt-8 pb-12">
         <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl px-6 pt-6 pb-7 flex flex-col gap-5">
 
-          {status !== 'sent' ? (
+          {status !== 'sent' && status !== 'verifying' && status !== 'code_error' ? (
             <>
               <div>
                 <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-0.5">Sign in to your dashboard</h2>
                 <p className="text-[13px] text-[#8E8EA8] font-medium">
-                  Enter your email and we'll send a sign-in link.
+                  Enter your email and we&apos;ll send a sign-in code.
                 </p>
               </div>
 
               {authError && (
                 <div className="p-3.5 bg-orange-50 border border-orange-200 rounded-xl">
                   <p className="text-[13px] font-semibold text-orange-800 leading-snug">
-                    That sign-in link expired or was already used. Enter your email below to get a new one.
+                    That sign-in code expired or was already used. Enter your email below to get a new one.
                   </p>
                 </div>
               )}
@@ -100,7 +124,7 @@ function MerchantLoginContent() {
                   {status === 'sending' && (
                     <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   )}
-                  {status === 'sending' ? 'Sending link…' : 'Send Sign-In Link'}
+                  {status === 'sending' ? 'Sending code…' : 'Send Sign-In Code'}
                 </button>
               </form>
 
@@ -115,29 +139,66 @@ function MerchantLoginContent() {
               </p>
             </>
           ) : (
-            /* Sent state */
-            <div className="flex flex-col items-center gap-4 py-3 text-center">
-              <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center text-3xl">
-                📧
+            /* Code entry step */
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col items-center gap-3 pt-2 text-center">
+                <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center text-3xl">
+                  📧
+                </div>
+                <div>
+                  <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-1">Check your email</h2>
+                  <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
+                    We sent a 6-digit code to{' '}
+                    <strong className="text-[#1A1A2E]">{email}</strong>.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-1">Check your email</h2>
-                <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
-                  We sent a sign-in link to <strong className="text-[#1A1A2E]">{email}</strong>.
-                  Tap it to open your dashboard.
+
+              <form onSubmit={handleCodeSubmit} className="flex flex-col gap-3">
+                <input
+                  ref={codeRef}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  placeholder="123456"
+                  value={confirmCode}
+                  onChange={e => {
+                    setConfirmCode(e.target.value.replace(/\D/g, ''))
+                    if (status === 'code_error') setStatus('sent')
+                  }}
+                  className="w-full px-4 py-4 rounded-2xl border-2 border-transparent bg-[#F5F5F8] font-['Montserrat'] text-[24px] font-bold text-[#1A1A2E] tracking-[0.3em] text-center placeholder:text-[#D1D1DC] placeholder:font-normal placeholder:tracking-normal outline-none focus:bg-white focus:border-[#4A4B98] transition-colors"
+                />
+
+                {status === 'code_error' && (
+                  <p className="text-[12px] font-semibold text-[#DA1212] text-center">
+                    That code is incorrect or expired. Try again or request a new one.
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={confirmCode.length < 6 || status === 'verifying'}
+                  className="w-full py-[18px] rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] bg-[#4A4B98] disabled:opacity-35 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
+                >
+                  {status === 'verifying' && (
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  )}
+                  {status === 'verifying' ? 'Signing in…' : 'Sign In'}
+                </button>
+              </form>
+
+              <div className="bg-[#F5F5F8] rounded-xl px-4 py-3">
+                <p className="text-[12px] text-[#8E8EA8] font-medium text-center">
+                  Don&apos;t see it? Check your spam folder. The code expires in 60 minutes.
                 </p>
               </div>
-              <div className="bg-[#F5F5F8] rounded-xl px-4 py-3 w-full">
-                <p className="text-[12px] text-[#8E8EA8] font-medium">
-                  Don't see it? Check your spam folder.
-                  The link expires in 1 hour.
-                </p>
-              </div>
+
               <button
-                onClick={() => setStatus('idle')}
-                className="text-[13px] font-semibold text-[#8E8EA8] underline"
+                onClick={() => { setStatus('idle'); setConfirmCode('') }}
+                className="text-[13px] font-semibold text-[#8E8EA8] underline text-center"
               >
-                Use a different email
+                Use a different email or resend code
               </button>
             </div>
           )}
