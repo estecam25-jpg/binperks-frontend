@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     const {
       firstName, lastName, email, phone, website,
       companyName, storeName, address, city, state, zip,
-      locationCount,
+      locationCount, binCount,
     } = body
 
     // Basic validation
@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
       timezone:          'America/New_York',  // BinPerks admin updates during provisioning
       brand_color:       '#4A4B98',           // BinPerks admin updates during provisioning
       fiscal_week_start: 'friday',
+      bin_count:         binCount ? Number(binCount) : null,
       is_active:         false,               // activated after payment + provisioning
       created_at:        new Date().toISOString(),
     })

@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
   // Get merchant
   const { data: merchant } = await admin
     .from('merchants')
-    .select('id, company_name, location_count')
+    .select('id, company_name, location_count, billing_status, stripe_subscription_id')
     .eq('auth_user_id', user.id)
     .single()
 
@@ -187,9 +187,11 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     merchant: {
-      id:            merchant.id,
-      companyName:   merchant.company_name,
-      locationCount: merchant.location_count,
+      id:                   merchant.id,
+      companyName:          merchant.company_name,
+      locationCount:        merchant.location_count,
+      billingStatus:        merchant.billing_status,
+      hasSubscription:      !!merchant.stripe_subscription_id,
     },
     stores: stores.map(s => ({
       id:        s.id,

@@ -28,6 +28,9 @@ export interface MerchantSignupForm {
 
   // Branch trigger
   locationCount: number    // 1 → Page 3A, 2+ → Page 3B
+
+  // First store details
+  binCount: number         // number of bins at the first location
 }
 
 export interface MerchantSignupResult {

@@ -22,10 +22,11 @@ interface Merchant {
   vipMembers: number; vipConversionPct: number
   w9: { merchant_id: string; status: string; submitted_at: string | null; reviewed_at: string | null } | null
   onboardingComplete: number
+  abandonedCheckout: boolean
 }
 interface Store {
   id: string; brand_name: string; canonical_key: string; is_active: boolean
-  merchantName: string; totalMembers: number; vipMembers: number
+  merchantName: string; binCount: number | null; totalMembers: number; vipMembers: number
   vipConversionPct: number; stampsThisWeek: number
   uniqueVisitorsLast30Days: number; engagementRate: number
 }
@@ -75,19 +76,21 @@ function MerchantCard({
   onW9Action: (id: string, action: 'approve_w9') => void
   onW9Reject: (id: string) => void
 }) {
-  const atRisk  = m.billing_status === 'active' && m.stampsThisWeek === 0 && m.totalMembers > 0
-  const pending = !m.billing_status || m.billing_status === 'pending'
-  const failed  = m.billing_status === 'payment_failed'
-  const border  = atRisk || failed ? 'border-l-[3px] border-l-[#DA1212]' : pending ? 'border-l-[3px] border-l-[#FFB217]' : ''
+  const atRisk   = m.billing_status === 'active' && m.stampsThisWeek === 0 && m.totalMembers > 0
+  const pending  = !m.billing_status || m.billing_status === 'pending'
+  const failed   = m.billing_status === 'payment_failed'
+  const abandoned = m.abandonedCheckout
+  const border   = atRisk || failed ? 'border-l-[3px] border-l-[#DA1212]' : pending ? 'border-l-[3px] border-l-[#FFB217]' : ''
   return (
     <div className={`bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3 ${border}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="text-[14px] font-bold text-[#1A1A2E] truncate">{m.company_name || m.name}</p>
-            {atRisk  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">At Risk</span>}
-            {pending && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pending</span>}
-            {failed  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Failed Payment</span>}
+            {atRisk    && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">At Risk</span>}
+            {abandoned && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">🔴 Abandoned Checkout</span>}
+            {pending && !abandoned && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pending</span>}
+            {failed    && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Failed Payment</span>}
           </div>
           <p className="text-[11px] text-[#8E8EA8] font-medium truncate">{m.owner_email}</p>
         </div>
@@ -191,7 +194,7 @@ function StoreCard({ s }: { s: Store }) {
         <div className="flex-1 min-w-0">
           <p className="text-[14px] font-bold text-[#1A1A2E]">{s.brand_name}</p>
           <p className="text-[10px] font-mono text-[#8E8EA8]">{s.canonical_key}</p>
-          <p className="text-[11px] text-[#8E8EA8] font-medium">{s.merchantName}</p>
+          <p className="text-[11px] text-[#8E8EA8] font-medium">{s.merchantName}{s.binCount != null ? ` · ${s.binCount} bins` : ''}</p>
         </div>
         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
           {s.is_active ? 'active' : 'inactive'}
@@ -303,6 +306,11 @@ export default function AdminDashboardPage() {
     return (!q || (m.company_name ?? '').toLowerCase().includes(q) || (m.owner_email ?? '').toLowerCase().includes(q))
         && (merchantStatus === 'all' || m.billing_status === merchantStatus)
         && w9ok
+  }).sort((a, b) => {
+    // Abandoned checkouts float to top
+    if (a.abandonedCheckout && !b.abandonedCheckout) return -1
+    if (!a.abandonedCheckout && b.abandonedCheckout) return 1
+    return 0
   }), [merchants, merchantSearch, merchantStatus, merchantW9Filter])
 
   async function handleMerchantAction(id: string, action: 'activate' | 'deactivate') {

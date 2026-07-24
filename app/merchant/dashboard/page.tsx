@@ -15,6 +15,8 @@ function DashboardShell() {
   const [stores, setStores] = useState<Store[]>([])
   const [loading, setLoading] = useState(true)
   const [onboardingPct, setOnboardingPct] = useState(100)
+  const [abandonedCheckout, setAbandonedCheckout] = useState(false)
+  const [resuming, setResuming] = useState(false)
 
   // Tab and store from URL params — enables deep linking + back button
   const activeTab = (searchParams.get('tab') as TabId) || 'overview'
@@ -44,7 +46,9 @@ function DashboardShell() {
       if (!data) return
       setCompanyName(data.merchant?.companyName ?? '')
       setStores(data.stores ?? [])
-      if (onboarding) setOnboardingPct(Math.round((onboarding.completedCount / 13) * 100))
+      if (onboarding) setOnboardingPct(Math.round((onboarding.completedCount / onboarding.total) * 100))
+      const isPending = data.merchant?.billingStatus === 'pending' && !data.merchant?.hasSubscription
+      setAbandonedCheckout(isPending)
       setLoading(false)
     })
   }, [router])
@@ -60,8 +64,41 @@ function DashboardShell() {
     )
   }
 
+  async function handleResumeCheckout() {
+    setResuming(true)
+    const res = await fetch('/api/merchant/resume-checkout', { method: 'POST' })
+    if (res.ok) {
+      const d = await res.json()
+      window.location.href = d.url
+    } else {
+      setResuming(false)
+    }
+  }
+
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
+      {abandonedCheckout && (
+        <div className="bg-amber-50 border-b-2 border-amber-300 px-5 py-4 flex flex-col gap-2.5">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl flex-shrink-0">⚠️</span>
+            <div className="flex-1">
+              <p className="text-[15px] font-bold text-[#1A1A2E] leading-tight">
+                Complete your BinPerks subscription to get started.
+              </p>
+              <p className="text-[13px] text-[#8E8EA8] font-medium mt-0.5">
+                Your account is set up but payment wasn&apos;t completed.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleResumeCheckout}
+            disabled={resuming}
+            className="w-full py-3.5 rounded-xl font-bold text-[14px] text-white bg-[#4A4B98] disabled:opacity-60 active:scale-[0.98] transition-all"
+          >
+            {resuming ? 'Redirecting…' : 'Complete Payment →'}
+          </button>
+        </div>
+      )}
       <MerchantNav
         companyName={companyName}
         stores={stores}

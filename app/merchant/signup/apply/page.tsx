@@ -24,6 +24,7 @@ function validate(f: MerchantSignupForm): FormErrors {
   if (!f.state)              e.state     = 'Required'
   if (!f.zip.trim())         e.zip       = 'Required'
   if (!f.locationCount || f.locationCount < 1) e.locationCount = 'Required'
+  if (!f.binCount || f.binCount < 1) e.binCount = 'Required — enter the number of bins'
   return e
 }
 
@@ -70,6 +71,7 @@ export default function MerchantApplyPage() {
     companyName: '',
     storeName: '', address: '', city: '', state: '', zip: '', country: 'US',
     locationCount: 1,
+    binCount: 0,
   })
 
   useEffect(() => {
@@ -220,6 +222,23 @@ export default function MerchantApplyPage() {
                 onChange={e => update('storeName', e.target.value)}
                 onBlur={() => touch('storeName')}
                 className={inputClass(!!err('storeName'))} />
+            </Field>
+
+            <Field
+              label="Number of Bins"
+              hint="How many bins does this location have? (e.g. 200)"
+              error={err('binCount')}
+            >
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="e.g. 150"
+                min={1}
+                value={form.binCount || ''}
+                onChange={e => update('binCount', Number(e.target.value))}
+                onBlur={() => touch('binCount')}
+                className={inputClass(!!err('binCount'))}
+              />
             </Field>
 
             <Field label="Street address">

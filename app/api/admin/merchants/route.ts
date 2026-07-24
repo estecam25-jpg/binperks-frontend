@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   const [merchantsResult, stampEvents, allMembers, w9Records, allStores, allPerks, allStaff, allStamps] = await Promise.all([
     admin.from('merchants')
-      .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at')
+      .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at, stripe_subscription_id')
       .order('created_at', { ascending: false }),
     admin.from('stamp_events').select('merchant_id, stamp_count').gte('awarded_at', sevenDaysAgo),
     admin.from('members').select('merchant_id, subscription_status'),
@@ -119,6 +119,7 @@ export async function GET(req: NextRequest) {
       vipConversionPct:  total > 0 ? Math.round(vip / total * 100) : 0,
       w9:                w9ByMerchant[m.id] ?? null,
       onboardingComplete: calcOnboarding(m),
+      abandonedCheckout: m.billing_status === 'pending' && !m.stripe_subscription_id,
     }
   })
 

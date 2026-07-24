@@ -16,7 +16,7 @@ export async function GET() {
   const thirtyDaysAgoDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
   const [storesResult, merchantsResult, allMembers, recentStamps, recentVisits] = await Promise.all([
-    admin.from('stores').select('id, brand_name, canonical_key, is_active, merchant_id').order('canonical_key'),
+    admin.from('stores').select('id, brand_name, canonical_key, is_active, merchant_id, bin_count').order('canonical_key'),
     admin.from('merchants').select('id, company_name, name'),
     admin.from('members').select('home_store_id, subscription_status'),
     admin.from('stamp_events').select('store_id, stamp_count').gte('awarded_at', sevenDaysAgo),
@@ -63,6 +63,7 @@ export async function GET() {
       canonical_key:            s.canonical_key ?? '',
       is_active:                s.is_active ?? false,
       merchantName:             merchantById[s.merchant_id] ?? '',
+      binCount:                 s.bin_count ?? null,
       totalMembers:             total,
       vipMembers:               vip,
       vipConversionPct:         total > 0 ? Math.round(vip / total * 100) : 0,

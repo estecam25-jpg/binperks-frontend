@@ -912,6 +912,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
   const [fontFamily,    setFontFamily]    = useState('Google Sans')
   const [logoUrl,       setLogoUrl]       = useState<string | null>(null)
   const [reviewUrl,     setReviewUrl]     = useState<string>('')
+  const [binCount,      setBinCount]      = useState<string>('')
   const [logoUploading, setLogoUploading] = useState(false)
   const [brandSaving,   setBrandSaving]   = useState(false)
   const [brandSaved,    setBrandSaved]    = useState(false)
@@ -935,6 +936,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
           setFontFamily(d.fontFamily ?? 'Coiny')
           setLogoUrl(d.logoUrl ?? null)
           setReviewUrl(d.reviewUrl ?? '')
+          setBinCount(d.binCount != null ? String(d.binCount) : '')
         }
         setBrandLoading(false)
       })
@@ -975,7 +977,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
     const res = await fetch('/api/merchant/store', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId: activeStoreId, brandColor, fontFamily: fontFamily || null, logoUrl, reviewUrl: reviewUrl || null }),
+      body: JSON.stringify({ storeId: activeStoreId, brandColor, fontFamily: fontFamily || null, logoUrl, reviewUrl: reviewUrl || null, binCount: binCount ? Number(binCount) : null }),
     })
     setBrandSaving(false)
     if (res.ok) { setBrandSaved(true); setTimeout(() => setBrandSaved(false), 3000) }
@@ -1127,6 +1129,23 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
               />
               <p className="text-[11px] text-[#8E8EA8] font-medium">
                 Members will see a &ldquo;Leave a Review&rdquo; button after submitting feedback.
+              </p>
+            </div>
+
+            {/* Bin count */}
+            <div className="flex flex-col gap-2">
+              <label className="text-[13px] font-bold text-[#1A1A2E]">Number of Bins</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                placeholder="e.g. 150"
+                value={binCount}
+                onChange={e => setBinCount(e.target.value)}
+                className="rounded-xl border border-[#EBEBF2] bg-[#F5F5F8] px-4 py-2.5 text-[13px] text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-[#4A4B98]/30 placeholder:text-[#D1D1DC]"
+              />
+              <p className="text-[11px] text-[#8E8EA8] font-medium">
+                Update if your bin count changes.
               </p>
             </div>
 
