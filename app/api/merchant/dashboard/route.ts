@@ -9,14 +9,14 @@
  *
  * Response:
  * {
- *   merchant: { id, companyName, locationCount },
+ *   merchant: { id, companyName, locationCount, billingStatus, hasSubscription },
  *   stores: [{ id, storeName, storeKey, city, state, isActive }],
  *   stats: {
  *     totalMembers, stampsToday, couponsRedeemedThisWeek, referralsThisWeek,
  *     newMembersThisWeek
  *   },
- *   fiscalWeekChart: [{ date, dayLabel, stampCount }],  // 7 days, Friday–Thursday
- *   recentMembers: [{ id, firstName, lastName, tier, totalStamps, lastVisit }]
+ *   fiscalWeekChart: [{ date, dayLabel, stampCount }],
+ *   recentMembers: [{ id, firstName, lastName, tier, totalStamps, joinedAt }]
  * }
  */
 
@@ -30,7 +30,7 @@ function getFiscalWeekRange(fiscalWeekStart: string = 'friday') {
     sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
     thursday: 4, friday: 5, saturday: 6,
   }
-  const startDay = dayMap[fiscalWeekStart.toLowerCase()] ?? 5 // default Friday
+  const startDay = dayMap[fiscalWeekStart.toLowerCase()] ?? 5
 
   const now = new Date()
   const todayDay = now.getDay()
@@ -58,7 +58,6 @@ export async function GET(req: NextRequest) {
   // CRITICAL RLS RULE).
   const admin = createAdminSupabaseClient()
 
-  // Get merchant
   const { data: merchant } = await admin
     .from('merchants')
     .select('id, company_name, location_count, billing_status, stripe_subscription_id')
@@ -69,7 +68,6 @@ export async function GET(req: NextRequest) {
 
   const storeIdParam = new URL(req.url).searchParams.get('storeId')
 
-  // Get all stores for this merchant
   const { data: stores } = await admin
     .from('stores')
     .select('id, display_name, canonical_key, city, state, is_active, fiscal_week_start')
@@ -77,10 +75,21 @@ export async function GET(req: NextRequest) {
     .order('created_at')
 
   if (!stores?.length) {
-    return NextResponse.json({ merchant, stores: [], stats: null, fiscalWeekChart: [], recentMembers: [] })
+    return NextResponse.json({
+      merchant: {
+        id: merchant.id,
+        companyName: merchant.company_name,
+        locationCount: merchant.location_count,
+        billingStatus: merchant.billing_status,
+        hasSubscription: !!merchant.stripe_subscription_id,
+      },
+      stores: [],
+      stats: null,
+      fiscalWeekChart: [],
+      recentMembers: [],
+    })
   }
 
-  // Scope to one store or all
   const storeIds = storeIdParam
     ? stores.filter(s => s.id === storeIdParam).map(s => s.id)
     : stores.map(s => s.id)
@@ -92,7 +101,6 @@ export async function GET(req: NextRequest) {
   const { weekStart, weekEnd } = getFiscalWeekRange(fiscalWeekStart)
   const todayStr = new Date().toISOString().split('T')[0]
 
-  // Run stats queries in parallel
   const [
     totalMembersRes,
     stampsTodayRes,
@@ -102,7 +110,6 @@ export async function GET(req: NextRequest) {
     fiscalChartRes,
     recentMembersRes,
   ] = await Promise.all([
-    // Total active members across scoped stores
     admin
       .from('members')
       .select('id', { count: 'exact', head: true })
@@ -110,14 +117,12 @@ export async function GET(req: NextRequest) {
       .eq('status', 'active')
       .in('home_store_id', storeIds),
 
-    // Stamps today
     admin
       .from('visits')
       .select('id', { count: 'exact', head: true })
       .in('store_id', storeIds)
       .eq('date', todayStr),
 
-    // Coupons redeemed this fiscal week
     admin
       .from('rewards')
       .select('id', { count: 'exact', head: true })
@@ -126,21 +131,18 @@ export async function GET(req: NextRequest) {
       .gte('redeemed_at', weekStart.toISOString())
       .lte('redeemed_at', weekEnd.toISOString()),
 
-    // Referrals this week
     admin
       .from('referrals')
       .select('id', { count: 'exact', head: true })
       .eq('merchant_id', merchant.id)
       .gte('created_at', weekStart.toISOString()),
 
-    // New members this week
     admin
       .from('members')
       .select('id', { count: 'exact', head: true })
       .in('home_store_id', storeIds)
       .gte('created_at', weekStart.toISOString()),
 
-    // Fiscal week chart — stamp counts per day
     admin
       .from('visits')
       .select('date')
@@ -148,7 +150,6 @@ export async function GET(req: NextRequest) {
       .gte('date', weekStart.toISOString().split('T')[0])
       .lte('date', weekEnd.toISOString().split('T')[0]),
 
-    // Recent members (10 most recent)
     admin
       .from('members')
       .select('id, first_name, last_name, total_stamps, created_at')
@@ -159,7 +160,6 @@ export async function GET(req: NextRequest) {
       .limit(10),
   ])
 
-  // Build fiscal week chart (7 days)
   const chartDays: { date: string; dayLabel: string; stampCount: number }[] = []
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart)
@@ -187,11 +187,11 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     merchant: {
-      id:                   merchant.id,
-      companyName:          merchant.company_name,
-      locationCount:        merchant.location_count,
-      billingStatus:        merchant.billing_status,
-      hasSubscription:      !!merchant.stripe_subscription_id,
+      id:              merchant.id,
+      companyName:     merchant.company_name,
+      locationCount:   merchant.location_count,
+      billingStatus:   merchant.billing_status,
+      hasSubscription: !!merchant.stripe_subscription_id,
     },
     stores: stores.map(s => ({
       id:        s.id,
@@ -213,4 +213,3 @@ export async function GET(req: NextRequest) {
     fiscalWeekStart,
   })
 }
-
