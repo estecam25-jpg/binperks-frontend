@@ -64,7 +64,8 @@ export async function GET(req: NextRequest) {
     .eq('auth_user_id', user.id)
     .single()
 
-  if (!merchant) return NextResponse.json({ error: 'Merchant not found' }, { status: 404 })
+  console.log('[merchant/dashboard] user.id:', user?.id)
+  if (!merchant) return NextResponse.json({ error: 'Merchant not found', userId: user?.id }, { status: 404 })
 
   const storeIdParam = new URL(req.url).searchParams.get('storeId')
 
