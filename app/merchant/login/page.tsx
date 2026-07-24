@@ -160,7 +160,7 @@ function MerchantLoginContent() {
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  maxLength={6}
+                  maxLength={8}
                   placeholder="123456"
                   value={confirmCode}
                   onChange={e => {
@@ -178,7 +178,7 @@ function MerchantLoginContent() {
 
                 <button
                   type="submit"
-                  disabled={confirmCode.length < 6 || status === 'verifying'}
+                  disabled={confirmCode.length < 8 || status === 'verifying'}
                   className="w-full py-[18px] rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] bg-[#4A4B98] disabled:opacity-35 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
                 >
                   {status === 'verifying' && (
