@@ -148,7 +148,7 @@ function MerchantLoginContent() {
                 <div>
                   <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-1">Check your email</h2>
                   <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
-                    We sent a 6-digit code to{' '}
+                    We sent an 8-digit code to{' '}
                     <strong className="text-[#1A1A2E]">{email}</strong>.
                   </p>
                 </div>
@@ -161,7 +161,7 @@ function MerchantLoginContent() {
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={8}
-                  placeholder="123456"
+                  placeholder="12345678"
                   value={confirmCode}
                   onChange={e => {
                     setConfirmCode(e.target.value.replace(/\D/g, ''))
