@@ -20,7 +20,9 @@ function DashboardShell() {
 
   // Tab and store from URL params — enables deep linking + back button
   const activeTab = (searchParams.get('tab') as TabId) || 'overview'
-  const activeStoreId = searchParams.get('store') || null  // null = all locations
+  // activeStoreId is local state (not just derived from searchParams) so the
+  // auto-select can update it immediately without a full-page navigation.
+  const [activeStoreId, setActiveStoreId] = useState<string | null>(searchParams.get('store'))
 
   // Branding: derive from active store in the already-fetched stores array
   const activeStore = stores.find(s => s.id === activeStoreId) ?? null
@@ -55,15 +57,14 @@ function DashboardShell() {
       const isPending = data.merchant?.billingStatus === 'pending' && !data.merchant?.hasSubscription
       setAbandonedCheckout(isPending)
 
-      // Fix 1: auto-select the only store on first load.
-      // Use window.location.replace (hard redirect) so the URL updates reliably
-      // before React re-renders — router.replace inside useEffect races with
-      // searchParams and doesn't always reflect in the same render cycle.
-      if (data.stores?.length === 1 && !window.location.search.includes('store=')) {
+      // Auto-select the only store on first load.
+      // Use history.replaceState to update the URL without a page reload, then
+      // set local state directly so branding loads immediately.
+      if (data.stores?.length === 1 && !new URLSearchParams(window.location.search).get('store')) {
         const params = new URLSearchParams(window.location.search)
         params.set('store', data.stores[0].id)
-        window.location.replace(`/merchant/dashboard?${params}`)
-        return  // don't setLoading(false) — the page is about to reload
+        window.history.replaceState({}, '', `/merchant/dashboard?${params.toString()}`)
+        setActiveStoreId(data.stores[0].id)
       }
 
       setLoading(false)
