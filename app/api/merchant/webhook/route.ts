@@ -66,7 +66,6 @@ export async function POST(req: NextRequest) {
         .from('merchants')
         .update({
           subscription_status:    'active',
-          stripe_subscription_id: subscriptionId,
           billing_status:         'active',
           location_count:         locationCount,
         })
