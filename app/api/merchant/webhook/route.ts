@@ -21,7 +21,8 @@ import Stripe from 'stripe'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
-const webhookSecret = process.env.STRIPE_MERCHANT_WEBHOOK_SECRET
+const isTest = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test')
+const webhookSecret = isTest ? process.env.STRIPE_MERCHANT_TEST_WEBHOOK_SECRET : process.env.STRIPE_MERCHANT_WEBHOOK_SECRET
 
 export async function POST(req: NextRequest) {
   const body = await req.text()
