@@ -77,6 +77,13 @@ export async function POST(req: NextRequest) {
         .update({ is_active: true })
         .eq('merchant_id', merchantId)
 
+      // Fetch merchant email + company name for GHL payload
+      const { data: merchantData } = await supabase
+        .from('merchants')
+        .select('owner_email, company_name')
+        .eq('id', merchantId)
+        .single()
+
       // Notify GHL → sends merchant magic link + welcome email (skipped if
       // the webhook URL isn't configured yet)
       const ghlWebhook = process.env.GHL_MERCHANT_ACTIVATED_WEBHOOK_URL
@@ -86,12 +93,11 @@ export async function POST(req: NextRequest) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             merchantId,
+            merchantEmail:  merchantData?.owner_email ?? '',
+            companyName:    merchantData?.company_name ?? '',
             subscriptionId,
             locationCount,
             nextBillingDate,
-            // GHL workflow sends:
-            // 1. Welcome email with magic link to merchant dashboard
-            // 2. Internal notification to BinPerks admin to provision store
           }),
         }).catch(err => console.error('[webhook] GHL activated webhook error:', err))
       }
