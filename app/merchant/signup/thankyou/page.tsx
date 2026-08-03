@@ -2,7 +2,13 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { merchantSignupForm, calculateMonthlyTotal, formatPrice } from '@/lib/merchant-signup-session'
+import {
+  merchantSignupForm,
+  calculateFirstMonthTotal,
+  calculateRecurringMonthlyTotal,
+  formatPrice,
+  MERCHANT_IMPLEMENTATION_PRICE,
+} from '@/lib/merchant-signup-session'
 
 function ThankYouContent() {
   const searchParams = useSearchParams()
@@ -10,7 +16,7 @@ function ThankYouContent() {
   const [companyName, setCompanyName] = useState('')
   const [storeName, setStoreName] = useState('')
   const [ownerFirstName, setOwnerFirstName] = useState('')
-  const [monthlyTotal, setMonthlyTotal] = useState(299.99)
+  const [locationCount, setLocationCount] = useState(1)
 
   useEffect(() => {
     const form = merchantSignupForm.get()
@@ -18,9 +24,12 @@ function ThankYouContent() {
       setCompanyName(form.companyName)
       setStoreName(form.storeName)
       setOwnerFirstName(form.firstName)
-      setMonthlyTotal(calculateMonthlyTotal(form.locationCount))
+      setLocationCount(form.locationCount)
     }
   }, [])
+
+  const firstMonthTotal = calculateFirstMonthTotal(locationCount)
+  const recurringTotal  = calculateRecurringMonthlyTotal(locationCount)
 
   // searchParams (session_id, merchant) are available for a future "confirm
   // payment status" call if needed — activation itself happens async via
@@ -66,17 +75,26 @@ function ThankYouContent() {
 
           <div className="flex flex-col gap-2">
             <div className="flex justify-between">
-              <span className="text-[13px] text-[#8E8EA8] font-medium">Monthly amount</span>
-              <span className="text-[13px] font-bold text-[#1A1A2E]">{formatPrice(monthlyTotal)}/mo</span>
+              <span className="text-[13px] text-[#8E8EA8] font-medium">Charged today</span>
+              <span className="text-[13px] font-bold text-[#1A1A2E]">{formatPrice(firstMonthTotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[13px] text-[#8E8EA8] font-medium">Next billing date</span>
-              <span className="text-[13px] font-bold text-[#1A1A2E]">{nextBillingDate}</span>
+              <span className="text-[13px] text-[#8E8EA8] font-medium">Then from {nextBillingDate}</span>
+              <span className="text-[13px] font-bold text-[#1A1A2E]">{formatPrice(recurringTotal)}/mo</span>
             </div>
             <div className="flex justify-between">
               <span className="text-[13px] text-[#8E8EA8] font-medium">Business</span>
               <span className="text-[13px] font-bold text-[#1A1A2E]">{companyName || '—'}</span>
             </div>
+          </div>
+
+          <div className="bg-[#F5F5F8] rounded-xl px-4 py-3">
+            <p className="text-[11px] text-[#8E8EA8] font-medium leading-relaxed">
+              Your first month includes the one-time {formatPrice(MERCHANT_IMPLEMENTATION_PRICE)}{' '}
+              Implementation &amp; Launch fee. Billing drops to {formatPrice(recurringTotal)}/mo
+              automatically from {nextBillingDate} — nothing for you to do.
+              {' '}Promo discounts, if you used one, are reflected on your Stripe receipt.
+            </p>
           </div>
         </div>
 

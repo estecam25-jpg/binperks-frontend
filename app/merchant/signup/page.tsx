@@ -2,7 +2,11 @@
 
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { MERCHANT_BASE_PRICE, MERCHANT_EXTRA_LOCATION_PRICE } from '@/lib/merchant-signup-session'
+import {
+  MERCHANT_IMPLEMENTATION_PRICE,
+  MERCHANT_PLATFORM_PRICE,
+  MERCHANT_EXTRA_LOCATION_PRICE,
+} from '@/lib/merchant-signup-session'
 import { TIERS } from '@/lib/tiers'
 
 export default function MerchantLandingPage() {
@@ -32,11 +36,11 @@ export default function MerchantLandingPage() {
           onClick={() => router.push('/merchant/signup/apply')}
           className="px-8 py-5 rounded-2xl font-bold text-[18px] font-['Montserrat'] tracking-wide bg-[#FFB217] text-[#1A1A2E] active:scale-[0.97] transition-all shadow-lg"
         >
-          Apply Now — No Setup Fees
+          Apply Now — Setup Done For You
         </button>
 
         <p className="text-[12px] text-white/40 font-medium">
-          ${MERCHANT_BASE_PRICE}/mo · Cancel anytime · Setup handled by BinPerks
+          ${MERCHANT_IMPLEMENTATION_PRICE} to launch, then ${MERCHANT_PLATFORM_PRICE}/mo · Cancel anytime · Setup handled by BinPerks
         </p>
 
         <Link
@@ -87,7 +91,7 @@ export default function MerchantLandingPage() {
           </div>
           <div className="bg-[#F5F5F8] px-5 py-3 border-t border-[#EBEBF2]">
             <p className="text-[11px] text-[#8E8EA8] font-medium text-center">
-              VIP members earn faster — you keep 80% of every $29.99/mo VIP fee
+              VIP members earn faster — you keep $19.99 of every $29.99/mo VIP membership you enroll
             </p>
           </div>
         </div>
@@ -121,17 +125,31 @@ export default function MerchantLandingPage() {
           <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Simple pricing</h2>
           <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
             <div className="flex items-baseline justify-between">
-              <span className="text-[14px] font-bold text-[#1A1A2E]">First location</span>
-              <span className="font-['Coiny'] text-2xl text-[#4A4B98]">${MERCHANT_BASE_PRICE}/mo</span>
+              <span className="text-[14px] font-bold text-[#1A1A2E]">
+                First month
+                <span className="block text-[11px] font-medium text-[#8E8EA8]">Implementation &amp; Launch — one time</span>
+              </span>
+              <span className="font-['Coiny'] text-2xl text-[#4A4B98]">${MERCHANT_IMPLEMENTATION_PRICE}</span>
             </div>
             <div className="flex items-baseline justify-between">
-              <span className="text-[14px] font-bold text-[#1A1A2E]">Each additional location</span>
+              <span className="text-[14px] font-bold text-[#1A1A2E]">
+                Month 2 onward
+                <span className="block text-[11px] font-medium text-[#8E8EA8]">Platform subscription</span>
+              </span>
+              <span className="font-['Coiny'] text-2xl text-[#4A4B98]">${MERCHANT_PLATFORM_PRICE}/mo</span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-[14px] font-bold text-[#1A1A2E]">
+                Each additional location
+                <span className="block text-[11px] font-medium text-[#8E8EA8]">Every month, from month 1</span>
+              </span>
               <span className="font-['Coiny'] text-2xl text-[#4A4B98]">+${MERCHANT_EXTRA_LOCATION_PRICE}/mo</span>
             </div>
             <div className="border-t border-[#EBEBF2] pt-3 mt-1">
-              <p className="text-[12px] text-[#8E8EA8] font-medium">
-                Example: 3 locations = ${MERCHANT_BASE_PRICE} + ${MERCHANT_EXTRA_LOCATION_PRICE} + ${MERCHANT_EXTRA_LOCATION_PRICE} = $
-                {(MERCHANT_BASE_PRICE + 2 * MERCHANT_EXTRA_LOCATION_PRICE).toFixed(2)}/mo
+              <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">
+                Example: 3 locations = ${MERCHANT_IMPLEMENTATION_PRICE} + ${MERCHANT_EXTRA_LOCATION_PRICE} + ${MERCHANT_EXTRA_LOCATION_PRICE} = $
+                {(MERCHANT_IMPLEMENTATION_PRICE + 2 * MERCHANT_EXTRA_LOCATION_PRICE).toFixed(2)} the first month,
+                then ${(MERCHANT_PLATFORM_PRICE + 2 * MERCHANT_EXTRA_LOCATION_PRICE).toFixed(2)}/mo after that.
               </p>
             </div>
           </div>
@@ -146,7 +164,7 @@ export default function MerchantLandingPage() {
             Apply Now
           </button>
           <p className="text-[11px] text-[#8E8EA8] text-center font-medium">
-            No setup fee · No long-term contract · Cancel anytime
+            No long-term contract · Cancel anytime
           </p>
         </div>
       </div>

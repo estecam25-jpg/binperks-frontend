@@ -69,14 +69,30 @@ export const merchantSignupResult = {
   set: (v: MerchantSignupResult) => set('bp_msignup_result', v),
 }
 
-// ── Pricing helpers (locked per brief) ────────────────────────────────────
+// ── Pricing helpers (V3 — locked per brief) ───────────────────────────────
+//
+// Month 1:  $299.99 Implementation & Launch (first location) + $49.99 x additional
+// Month 2+: $99.00  Platform Subscription   (first location) + $49.99 x additional
+//
+// The month 1 → month 2 transition is executed by the Stripe Subscription
+// Schedule created in /api/merchant/webhook. These helpers only drive display.
 
-export const MERCHANT_BASE_PRICE = 299.99
-export const MERCHANT_EXTRA_LOCATION_PRICE = 79.99
+export const MERCHANT_IMPLEMENTATION_PRICE = 299.99
+export const MERCHANT_PLATFORM_PRICE       = 99.00
+export const MERCHANT_EXTRA_LOCATION_PRICE = 49.99
 
-export function calculateMonthlyTotal(locationCount: number): number {
-  if (locationCount <= 1) return MERCHANT_BASE_PRICE
-  return MERCHANT_BASE_PRICE + (locationCount - 1) * MERCHANT_EXTRA_LOCATION_PRICE
+function extraLocations(locationCount: number): number {
+  return Math.max(0, locationCount - 1)
+}
+
+/** Month 1 — Implementation & Launch plus any additional locations. */
+export function calculateFirstMonthTotal(locationCount: number): number {
+  return MERCHANT_IMPLEMENTATION_PRICE + extraLocations(locationCount) * MERCHANT_EXTRA_LOCATION_PRICE
+}
+
+/** Month 2 onward — Platform Subscription plus any additional locations. */
+export function calculateRecurringMonthlyTotal(locationCount: number): number {
+  return MERCHANT_PLATFORM_PRICE + extraLocations(locationCount) * MERCHANT_EXTRA_LOCATION_PRICE
 }
 
 export function formatPrice(amount: number): string {

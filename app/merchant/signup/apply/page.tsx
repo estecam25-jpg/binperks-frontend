@@ -2,7 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { merchantSignupForm, type MerchantSignupForm } from '@/lib/merchant-signup-session'
+import {
+  merchantSignupForm,
+  MERCHANT_EXTRA_LOCATION_PRICE,
+  type MerchantSignupForm,
+} from '@/lib/merchant-signup-session'
 
 const US_STATES = [
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
@@ -187,7 +191,7 @@ export default function MerchantApplyPage() {
 
             <Field
               label="How many locations total?"
-              hint="You can add more later at +$79.99/mo each"
+              hint={`You can add more later at +$${MERCHANT_EXTRA_LOCATION_PRICE}/mo each`}
               error={err('locationCount')}
             >
               <select

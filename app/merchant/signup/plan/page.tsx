@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   merchantSignupForm,
-  calculateMonthlyTotal, formatPrice,
-  MERCHANT_BASE_PRICE, MERCHANT_EXTRA_LOCATION_PRICE,
+  calculateFirstMonthTotal, calculateRecurringMonthlyTotal, formatPrice,
+  MERCHANT_IMPLEMENTATION_PRICE, MERCHANT_PLATFORM_PRICE, MERCHANT_EXTRA_LOCATION_PRICE,
   type MerchantSignupForm,
 } from '@/lib/merchant-signup-session'
 
@@ -26,7 +26,8 @@ export default function MerchantPlanPage() {
   if (!form) return null
 
   const isMulti = locationCount > 1
-  const monthlyTotal = calculateMonthlyTotal(locationCount)
+  const firstMonthTotal = calculateFirstMonthTotal(locationCount)
+  const recurringTotal  = calculateRecurringMonthlyTotal(locationCount)
   const additionalLocations = locationCount - 1
 
   async function handleCheckout() {
@@ -116,42 +117,89 @@ export default function MerchantPlanPage() {
             </div>
           )}
 
-          {/* Transparent math breakdown */}
-          <div className="px-5 py-5 flex flex-col gap-3">
-            <p className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">
-              Monthly breakdown
-            </p>
+          {/* Transparent math breakdown — month 1 and month 2+ differ under V3 */}
+          <div className="px-5 py-5 flex flex-col gap-4">
 
-            <div className="flex items-center justify-between">
-              <span className="text-[14px] font-semibold text-[#8E8EA8]">
-                First location
-              </span>
-              <span className="text-[14px] font-bold text-[#1A1A2E]">
-                {formatPrice(MERCHANT_BASE_PRICE)}
-              </span>
-            </div>
+            {/* ── Month 1 ── */}
+            <div className="flex flex-col gap-3">
+              <p className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">
+                Today — first month
+              </p>
 
-            {locationCount > 1 && (
               <div className="flex items-center justify-between">
                 <span className="text-[14px] font-semibold text-[#8E8EA8]">
-                  {additionalLocations} additional location{additionalLocations > 1 ? 's' : ''}
-                  {' '}× {formatPrice(MERCHANT_EXTRA_LOCATION_PRICE)}
+                  Implementation &amp; Launch
                 </span>
                 <span className="text-[14px] font-bold text-[#1A1A2E]">
-                  {formatPrice(additionalLocations * MERCHANT_EXTRA_LOCATION_PRICE)}
+                  {formatPrice(MERCHANT_IMPLEMENTATION_PRICE)}
                 </span>
               </div>
-            )}
 
-            {/* Total — updates live */}
-            <div className="flex items-center justify-between pt-3 border-t-2 border-[#1A1A2E]">
-              <span className="text-[15px] font-bold text-[#1A1A2E]">Monthly total</span>
-              <span
-                className="font-['Coiny'] text-3xl text-[#4A4B98] transition-all duration-200"
-                key={monthlyTotal}  // remount to re-trigger transition on change
-              >
-                {formatPrice(monthlyTotal)}<span className="text-[16px] text-[#8E8EA8]">/mo</span>
-              </span>
+              {locationCount > 1 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[14px] font-semibold text-[#8E8EA8]">
+                    {additionalLocations} additional location{additionalLocations > 1 ? 's' : ''}
+                    {' '}× {formatPrice(MERCHANT_EXTRA_LOCATION_PRICE)}
+                  </span>
+                  <span className="text-[14px] font-bold text-[#1A1A2E]">
+                    {formatPrice(additionalLocations * MERCHANT_EXTRA_LOCATION_PRICE)}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-3 border-t-2 border-[#1A1A2E]">
+                <span className="text-[15px] font-bold text-[#1A1A2E]">Due today</span>
+                <span
+                  className="font-['Coiny'] text-3xl text-[#4A4B98] transition-all duration-200"
+                  key={firstMonthTotal}  // remount to re-trigger transition on change
+                >
+                  {formatPrice(firstMonthTotal)}
+                </span>
+              </div>
+            </div>
+
+            {/* ── Month 2+ ── */}
+            <div className="flex flex-col gap-3 bg-[#F5F5F8] rounded-xl px-4 py-4 -mx-1">
+              <p className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">
+                From month 2 onward
+              </p>
+
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] font-semibold text-[#8E8EA8]">
+                  Platform subscription
+                </span>
+                <span className="text-[14px] font-bold text-[#1A1A2E]">
+                  {formatPrice(MERCHANT_PLATFORM_PRICE)}
+                </span>
+              </div>
+
+              {locationCount > 1 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[14px] font-semibold text-[#8E8EA8]">
+                    {additionalLocations} additional location{additionalLocations > 1 ? 's' : ''}
+                    {' '}× {formatPrice(MERCHANT_EXTRA_LOCATION_PRICE)}
+                  </span>
+                  <span className="text-[14px] font-bold text-[#1A1A2E]">
+                    {formatPrice(additionalLocations * MERCHANT_EXTRA_LOCATION_PRICE)}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-3 border-t border-[#D8D8E4]">
+                <span className="text-[15px] font-bold text-[#1A1A2E]">Monthly after that</span>
+                <span
+                  className="font-['Coiny'] text-2xl text-[#1A1A2E] transition-all duration-200"
+                  key={recurringTotal}
+                >
+                  {formatPrice(recurringTotal)}<span className="text-[14px] text-[#8E8EA8]">/mo</span>
+                </span>
+              </div>
+
+              <p className="text-[11px] text-[#8E8EA8] font-medium leading-relaxed">
+                The {formatPrice(MERCHANT_IMPLEMENTATION_PRICE)} Implementation &amp; Launch fee is
+                charged once, for your first billing cycle only. Billing drops to{' '}
+                {formatPrice(recurringTotal)}/mo automatically after that — nothing for you to do.
+              </p>
             </div>
           </div>
         </div>
@@ -169,7 +217,7 @@ export default function MerchantPlanPage() {
               'Member dashboard for your customers',
               'Weekly email reports',
               'QR code signage (BinPerks provisions)',
-              isMulti ? `Aggregate dashboard across all ${locationCount} locations` : 'Add more locations anytime at +$79.99/mo',
+              isMulti ? `Aggregate dashboard across all ${locationCount} locations` : `Add more locations anytime at +$${MERCHANT_EXTRA_LOCATION_PRICE}/mo each`,
             ].map((item, i) => (
               <div key={i} className="flex items-start gap-2.5">
                 <span className="text-[#4A4B98] font-bold text-[13px] flex-shrink-0 mt-0.5">✓</span>
@@ -215,12 +263,12 @@ export default function MerchantPlanPage() {
           )}
           {checkingOut
             ? 'Redirecting to payment…'
-            : `Start for ${formatPrice(monthlyTotal)}/mo`
+            : `Start for ${formatPrice(firstMonthTotal)} today`
           }
         </button>
 
         <p className="text-[11px] text-[#8E8EA8] text-center font-medium">
-          Billed monthly via Stripe · Cancel anytime · No setup fees
+          Billed monthly via Stripe · Cancel anytime
         </p>
       </main>
     </div>
