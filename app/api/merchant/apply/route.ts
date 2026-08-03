@@ -21,9 +21,16 @@
  *   - stores.is_active = true
  *   - GHL sends magic link email — BinPerks admin provisions logo/brand color/QR manually
  *
- * Pricing (locked):
- *   Base: $299.99/mo (first location)
- *   Additional: +$79.99/mo per extra location
+ * Pricing (V3):
+ *   Month 1:  $299.99 Implementation & Launch (first location) + $49.99 x additional locations
+ *   Month 2+: $99.00 Platform Subscription (first location)    + $49.99 x additional locations
+ *
+ *   This route creates the Month 1 checkout only. The transition to $99/month is
+ *   handled by the Subscription Schedule that /api/merchant/webhook creates on
+ *   checkout.session.completed — never here.
+ *
+ *   FOUNDING100 waives the Implementation & Launch fee only (product-restricted
+ *   coupon); it does not discount platform or additional-location prices.
  *
  * Request body: MerchantSignupForm + { locationCount }
  * Response: { checkoutUrl: string, merchantId: string }
@@ -144,20 +151,20 @@ export async function POST(req: NextRequest) {
       created_at:        new Date().toISOString(),
     })
 
-    // 5. Build Stripe line items using catalog price IDs (required for coupons/promotions to apply)
+    // 5. Build Stripe line items using V3 catalog price IDs (required for coupons/promotions to apply)
     const isTest = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test')
 
-    const basePriceId = isTest
-      ? process.env.STRIPE_MERCHANT_PRICE_ID_TEST
-      : process.env.STRIPE_MERCHANT_PRICE_ID
+    const IMPLEMENTATION_PRICE = isTest
+      ? process.env.STRIPE_PRICE_IMPLEMENTATION_TEST
+      : process.env.STRIPE_PRICE_IMPLEMENTATION
 
-    const additionalPriceId = isTest
-      ? process.env.STRIPE_MERCHANT_ADDITIONAL_PRICE_ID_TEST
-      : process.env.STRIPE_MERCHANT_ADDITIONAL_PRICE_ID
+    const LOCATION_PRICE = isTest
+      ? process.env.STRIPE_PRICE_LOCATION_TEST
+      : process.env.STRIPE_PRICE_LOCATION
 
     const lineItems = [
-      { price: basePriceId, quantity: 1 },
-      ...(count > 1 ? [{ price: additionalPriceId, quantity: count - 1 }] : []),
+      { price: IMPLEMENTATION_PRICE, quantity: 1 },
+      ...(count > 1 ? [{ price: LOCATION_PRICE, quantity: count - 1 }] : []),
     ]
 
     // 6. Create Stripe checkout session
@@ -174,8 +181,8 @@ export async function POST(req: NextRequest) {
           locationCount: String(count),
         },
       },
-      success_url: `${appUrl}/merchant/signup/thankyou?session_id={CHECKOUT_SESSION_ID}&merchant=${merchant.id}`,
-      cancel_url:  `${appUrl}/merchant/signup/plan`,
+      success_url: `${appUrl}/merchant/signup/thankyou?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${appUrl}/merchant/signup/apply`,
       metadata: {
         merchantId:    merchant.id,
         locationCount: String(count),

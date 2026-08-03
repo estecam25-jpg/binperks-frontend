@@ -33,21 +33,24 @@ export async function POST() {
     return NextResponse.json({ error: 'Subscription already active' }, { status: 400 })
   }
 
+  // V3 pricing: Month 1 is Implementation & Launch + additional locations.
+  // The $99/month platform price takes over via the Subscription Schedule that
+  // /api/merchant/webhook creates on checkout.session.completed — never here.
   const isTest = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test')
 
-  const basePriceId = isTest
-    ? process.env.STRIPE_MERCHANT_PRICE_ID_TEST
-    : process.env.STRIPE_MERCHANT_PRICE_ID
+  const IMPLEMENTATION_PRICE = isTest
+    ? process.env.STRIPE_PRICE_IMPLEMENTATION_TEST
+    : process.env.STRIPE_PRICE_IMPLEMENTATION
 
-  const additionalPriceId = isTest
-    ? process.env.STRIPE_MERCHANT_ADDITIONAL_PRICE_ID_TEST
-    : process.env.STRIPE_MERCHANT_ADDITIONAL_PRICE_ID
+  const LOCATION_PRICE = isTest
+    ? process.env.STRIPE_PRICE_LOCATION_TEST
+    : process.env.STRIPE_PRICE_LOCATION
 
   const count = merchant.location_count ?? 1
 
   const lineItems = [
-    { price: basePriceId, quantity: 1 },
-    ...(count > 1 ? [{ price: additionalPriceId, quantity: count - 1 }] : []),
+    { price: IMPLEMENTATION_PRICE, quantity: 1 },
+    ...(count > 1 ? [{ price: LOCATION_PRICE, quantity: count - 1 }] : []),
   ]
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.binperks.com'
