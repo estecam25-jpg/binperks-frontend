@@ -240,8 +240,7 @@ export async function POST(req: NextRequest) {
           .single()
 
         const eligible         = originMerchant?.commission_eligible ?? false
-        const COMMISSION_AMT   = 19.99
-        const commissionAmount = eligible ? COMMISSION_AMT : 19.99 // always 19.99, direction differs
+        const commissionAmount = 19.99 // always $19.99 — direction (merchant vs BinPerks) differs
 
         // Create immutable commission decision
         const { data: decision, error: decisionErr } = await supabase
