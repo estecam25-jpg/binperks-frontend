@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     admin.from('stamp_events').select('stamp_count').throwOnError(),
     admin.from('rewards').select('*', { count: 'exact', head: true }).eq('status', 'earned'),
     admin.from('rewards').select('*', { count: 'exact', head: true }).eq('status', 'redeemed'),
-    admin.from('merchants').select('id, billing_status, subscription_status, location_count').eq('billing_status', 'active'),
+    admin.from('merchants').select('id, billing_status, subscription_status, location_count, implementation_fee_paid_at').eq('billing_status', 'active'),
     admin.from('members').select('*', { count: 'exact', head: true }).gte('created_at', som),
     admin.from('merchants').select('*', { count: 'exact', head: true }).gte('created_at', som),
     admin.from('members').select('*', { count: 'exact', head: true }).eq('subscription_status', 'vip').gte('created_at', som),
@@ -48,15 +48,31 @@ export async function GET(req: NextRequest) {
 
   const totalStamps = (stampSum ?? []).reduce((sum: number, r: { stamp_count: number }) => sum + (r.stamp_count ?? 0), 0)
 
+  // V3 billing: the first cycle is $299.99 Implementation & Launch, then the
+  // $99.00 platform subscription from cycle 2 onward. Additional locations are
+  // $49.99 in every cycle, including the first.
+  const IMPLEMENTATION_PRICE = 299.99
+  const PLATFORM_PRICE       = 99.00
+  const EXTRA_LOCATION_PRICE = 49.99
+
+  const oneMonthAgo = new Date()
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+
   const activeMerchants = (merchants ?? []).filter(m => m.subscription_status === 'active')
   const merchantMrr = activeMerchants.reduce((sum, m) => {
     const locs = Math.max(1, m.location_count ?? 1)
-    return sum + 299.99 + (locs - 1) * 79.99
+    // Merchants still inside their first billing cycle are paying the
+    // implementation fee. A null implementation_fee_paid_at means a pre-V3
+    // merchant, who is by definition past their first cycle.
+    const paidAt = m.implementation_fee_paid_at ? new Date(m.implementation_fee_paid_at) : null
+    const inFirstCycle = paidAt !== null && paidAt > oneMonthAgo
+    const basePrice = inFirstCycle ? IMPLEMENTATION_PRICE : PLATFORM_PRICE
+    return sum + basePrice + (locs - 1) * EXTRA_LOCATION_PRICE
   }, 0)
   const memberMrr  = (totalVip ?? 0) * 29.99
   const totalMrr   = merchantMrr + memberMrr
 
-  const mrrGrowthThisMonth    = (newActiveMerchantsThisMonth ?? 0) * 299.99 + (newVipThisMonth ?? 0) * 29.99
+  const mrrGrowthThisMonth    = (newActiveMerchantsThisMonth ?? 0) * IMPLEMENTATION_PRICE + (newVipThisMonth ?? 0) * 29.99
   const vipConversionRate     = (totalMembers ?? 0) > 0 ? ((totalVip ?? 0) / (totalMembers ?? 0)) * 100 : 0
   const referralConversionRate = (totalReferrals ?? 0) > 0 ? ((qualifiedReferrals ?? 0) / (totalReferrals ?? 0)) * 100 : 0
 

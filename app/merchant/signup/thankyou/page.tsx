@@ -1,166 +1,59 @@
-'use client'
+/**
+ * /merchant/signup/thankyou
+ *
+ * Server component. Reads the Stripe checkout session named by ?session_id so
+ * the page shows what the merchant was ACTUALLY charged, rather than a
+ * list-price estimate — a FOUNDING100 merchant pays $0 for Implementation &
+ * Launch and must not be told they paid $299.99.
+ *
+ * Merchant activation is handled asynchronously by the Stripe webhook at
+ * /api/merchant/webhook. Nothing on this page grants access or changes state;
+ * it is display only.
+ */
 
-import { useEffect, useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
-import {
-  merchantSignupForm,
-  calculateFirstMonthTotal,
-  calculateRecurringMonthlyTotal,
-  formatPrice,
-  MERCHANT_IMPLEMENTATION_PRICE,
-} from '@/lib/merchant-signup-session'
+import Stripe from 'stripe'
+import ThankYouContent from './thankyou-content'
 
-function ThankYouContent() {
-  const searchParams = useSearchParams()
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 
-  const [companyName, setCompanyName] = useState('')
-  const [storeName, setStoreName] = useState('')
-  const [ownerFirstName, setOwnerFirstName] = useState('')
-  const [locationCount, setLocationCount] = useState(1)
+export default async function MerchantThankYouPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const { session_id: sessionIdParam } = await searchParams
+  const sessionId = typeof sessionIdParam === 'string' ? sessionIdParam : null
 
-  useEffect(() => {
-    const form = merchantSignupForm.get()
-    if (form) {
-      setCompanyName(form.companyName)
-      setStoreName(form.storeName)
-      setOwnerFirstName(form.firstName)
-      setLocationCount(form.locationCount)
+  let chargedToday: number | null = null
+  let locationCountFromStripe: number | null = null
+  let discountApplied = false
+
+  if (sessionId) {
+    try {
+      const session = await stripe.checkout.sessions.retrieve(sessionId)
+
+      if (typeof session.amount_total === 'number') {
+        chargedToday = session.amount_total / 100
+      }
+
+      const metaCount = Number(session.metadata?.locationCount)
+      if (Number.isFinite(metaCount) && metaCount > 0) {
+        locationCountFromStripe = metaCount
+      }
+
+      discountApplied = (session.total_details?.amount_discount ?? 0) > 0
+    } catch (err) {
+      // Unknown or expired session_id — fall back to the list-price estimate
+      // rather than failing the page. The merchant has already paid.
+      console.error('[/merchant/signup/thankyou] Stripe session retrieve failed:', err)
     }
-  }, [])
-
-  const firstMonthTotal = calculateFirstMonthTotal(locationCount)
-  const recurringTotal  = calculateRecurringMonthlyTotal(locationCount)
-
-  // searchParams (session_id, merchant) are available for a future "confirm
-  // payment status" call if needed — activation itself happens async via
-  // the Stripe webhook at /api/merchant/webhook, not on this page load.
-  void searchParams
-
-  const nextBillingDate = (() => {
-    const d = new Date()
-    d.setMonth(d.getMonth() + 1)
-    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-  })()
+  }
 
   return (
-    <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
-
-      {/* Dark hero — confident, done */}
-      <div className="bg-[#1A1A2E] px-6 pt-16 pb-24 flex flex-col items-center gap-4 text-center">
-        <div className="w-16 h-16 rounded-full bg-[#FFB217]/20 flex items-center justify-center text-3xl">
-          🎉
-        </div>
-        <h1 className="font-['Coiny'] text-4xl text-white leading-tight">
-          {ownerFirstName ? `Welcome aboard, ${ownerFirstName}!` : "You're in!"}
-        </h1>
-        <p className="text-[14px] text-white/70 font-medium leading-relaxed max-w-sm">
-          {storeName ? `${storeName} is now part of the BinPerks network.` : 'Your store is now part of the BinPerks network.'}
-          {' '}We'll get you set up and running within 1 business day.
-        </p>
-      </div>
-
-      <div className="flex-1 flex flex-col items-center px-4 -mt-10 pb-16 gap-5 max-w-lg mx-auto w-full">
-
-        {/* Subscription confirmation card */}
-        <div className="w-full bg-white rounded-2xl shadow-xl px-5 py-5 flex flex-col gap-4">
-          <div className="flex items-center gap-3 pb-3 border-b border-[#EBEBF2]">
-            <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-xl flex-shrink-0">
-              ✅
-            </div>
-            <div>
-              <p className="text-[14px] font-bold text-[#1A1A2E]">Payment confirmed</p>
-              <p className="text-[12px] text-[#8E8EA8] font-medium">BinPerks subscription active</p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <div className="flex justify-between">
-              <span className="text-[13px] text-[#8E8EA8] font-medium">Charged today</span>
-              <span className="text-[13px] font-bold text-[#1A1A2E]">{formatPrice(firstMonthTotal)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[13px] text-[#8E8EA8] font-medium">Then from {nextBillingDate}</span>
-              <span className="text-[13px] font-bold text-[#1A1A2E]">{formatPrice(recurringTotal)}/mo</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[13px] text-[#8E8EA8] font-medium">Business</span>
-              <span className="text-[13px] font-bold text-[#1A1A2E]">{companyName || '—'}</span>
-            </div>
-          </div>
-
-          <div className="bg-[#F5F5F8] rounded-xl px-4 py-3">
-            <p className="text-[11px] text-[#8E8EA8] font-medium leading-relaxed">
-              Your first month includes the one-time {formatPrice(MERCHANT_IMPLEMENTATION_PRICE)}{' '}
-              Implementation &amp; Launch fee. Billing drops to {formatPrice(recurringTotal)}/mo
-              automatically from {nextBillingDate} — nothing for you to do.
-              {' '}Promo discounts, if you used one, are reflected on your Stripe receipt.
-            </p>
-          </div>
-        </div>
-
-        {/* Next steps */}
-        <div className="w-full bg-white rounded-2xl shadow-sm px-5 py-5 flex flex-col gap-4">
-          <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">What happens next</h2>
-
-          <div className="flex flex-col gap-4">
-            {[
-              {
-                icon: '📧',
-                title: 'Check your email',
-                body: 'A sign-in link is on its way to your inbox. Use it to access your merchant dashboard.',
-                timing: 'Within minutes',
-              },
-              {
-                icon: '🎨',
-                title: 'BinPerks provisions your store',
-                body: 'We\'ll configure your store logo, brand colors, QR code, and cashier PINs. We may reach out for your logo file.',
-                timing: 'Within 1 business day',
-              },
-              {
-                icon: '📲',
-                title: 'You go live',
-                body: 'Once provisioned, print your QR code signage, brief your cashiers, and start earning stamps from day one.',
-                timing: 'Day 1',
-              },
-            ].map((step, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-xl flex-shrink-0">
-                  {step.icon}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-baseline gap-2 mb-0.5">
-                    <p className="text-[14px] font-bold text-[#1A1A2E]">{step.title}</p>
-                    <span className="text-[10px] font-bold tracking-wide uppercase text-[#4A4B98] bg-indigo-50 px-2 py-0.5 rounded-full">
-                      {step.timing}
-                    </span>
-                  </div>
-                  <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">{step.body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Help */}
-        <div className="w-full bg-white rounded-2xl shadow-sm px-5 py-4">
-          <p className="text-[13px] font-bold text-[#1A1A2E] mb-1">Questions?</p>
-          <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">
-            Email us at{' '}
-            <a href="mailto:support@binperks.com" className="text-[#4A4B98] font-semibold underline">
-              support@binperks.com
-            </a>
-            {' '}or reply to your confirmation email. We're quick to respond.
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function MerchantThankYouPage() {
-  return (
-    <Suspense>
-      <ThankYouContent />
-    </Suspense>
+    <ThankYouContent
+      chargedToday={chargedToday}
+      locationCountFromStripe={locationCountFromStripe}
+      discountApplied={discountApplied}
+    />
   )
 }

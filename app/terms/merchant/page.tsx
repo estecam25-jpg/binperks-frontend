@@ -26,10 +26,11 @@ export default function MerchantTermsPage() {
 
         <Section title="3. Subscription and Billing">
           <Ul items={[
-            'The base subscription is $299.99/month for your first location.',
-            'Each additional location is $79.99/month.',
+            'Your first billing cycle is $299.99 for your first location, covering Implementation & Launch.',
+            'From your second billing cycle onward, the platform subscription is $99.00/month for your first location.',
+            'Each additional location is $49.99/month, beginning with your first billing cycle.',
             'Billing is processed monthly via Stripe on your subscription anniversary date.',
-            'There is no free trial and no setup fee.',
+            'There is no free trial.',
             'Subscriptions are non-refundable. There are no prorated refunds under any circumstances.',
             'If you cancel your subscription, your access continues until the end of your current paid billing period. Your subscription will not renew after that date.',
           ]} />
