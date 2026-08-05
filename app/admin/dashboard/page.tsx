@@ -14,6 +14,9 @@ interface Stats {
   merchantMrr: number; memberMrr: number; totalMrr: number
   newMembersThisMonth: number; newMerchantsThisMonth: number
   mrrGrowthThisMonth: number; vipConversionRate: number; referralConversionRate: number
+  // V3 network stats
+  originatedMembers: number; commissionEligibleMerchants: number
+  binperksRetainedThisMonth: number; settlementPeriod: string
 }
 interface Merchant {
   id: string; name: string; owner_email: string; company_name: string
@@ -23,13 +26,31 @@ interface Merchant {
   w9: { merchant_id: string; status: string; submitted_at: string | null; reviewed_at: string | null } | null
   onboardingComplete: number
   abandonedCheckout: boolean
+  // V3 fields
+  commissionEligible: boolean
+  participantType: string | null
+  participantTypeLabel: string | null
+  negativeBalance: number
+  adminSuspended: boolean
+  adminSuspensionReason: string | null
+}
+interface EligibilityEvent {
+  id: string; eventType: string; effectiveAt: string
+  triggeredBy: string | null; reason: string | null; commissionEligible: boolean | null
 }
 interface Store {
   id: string; brand_name: string; canonical_key: string; is_active: boolean
   merchantName: string; binCount: number | null; totalMembers: number; vipMembers: number
   vipConversionPct: number; stampsThisWeek: number
   uniqueVisitorsLast30Days: number; engagementRate: number
+  // V3 independent store statuses (first three admin-toggleable)
+  isOpenForShopping: boolean
+  networkVisible: boolean
+  enrollmentEnabled: boolean
+  commissionEligible: boolean   // merchant-level, read-only here
 }
+// The three store status columns an admin may flip from this screen.
+type StoreToggleField = 'is_open_for_shopping' | 'network_visible' | 'enrollment_enabled'
 interface Member {
   id: string; first_name: string; last_name: string; phone: string; email: string
   subscription_status: string; total_stamps: number; is_blacklisted: boolean
@@ -67,14 +88,53 @@ function Spinner() {
   return <div className="flex justify-center py-12"><span className="w-8 h-8 border-[3px] border-[#EBEBF2] border-t-[#4A4B98] rounded-full animate-spin" /></div>
 }
 
+/** Small static pill used for V3 status chips. */
+function Pill({ label, tone }: { label: string; tone: 'green' | 'red' | 'gray' | 'amber' | 'blue' }) {
+  const tones = {
+    green: 'bg-green-100 text-green-700',
+    red:   'bg-red-100 text-red-700',
+    gray:  'bg-gray-100 text-gray-500',
+    amber: 'bg-yellow-100 text-yellow-700',
+    blue:  'bg-indigo-100 text-indigo-700',
+  }
+  return <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${tones[tone]}`}>{label}</span>
+}
+
+/** Clickable status pill for the three admin-toggleable store fields. */
+function TogglePill({ label, on, busy, onClick }: {
+  label: string; on: boolean; busy: boolean; onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition-colors disabled:opacity-40 ${
+        on ? 'bg-green-100 text-green-700 active:bg-green-200'
+           : 'bg-gray-200 text-gray-500 active:bg-gray-300'
+      }`}
+    >
+      {busy ? '…' : `${on ? '✓' : '✕'} ${label}`}
+    </button>
+  )
+}
+
+function formatEventType(t: string) {
+  return t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 function MerchantCard({
   m, onAction, actionLoading, onW9Action, onW9Reject,
+  expanded, onToggleExpand, history, historyLoading,
 }: {
   m: Merchant
   onAction: (id: string, action: 'activate' | 'deactivate') => Promise<void>
   actionLoading: string | null
   onW9Action: (id: string, action: 'approve_w9') => void
   onW9Reject: (id: string) => void
+  expanded: boolean
+  onToggleExpand: () => void
+  history: EligibilityEvent[] | undefined
+  historyLoading: boolean
 }) {
   const atRisk   = m.billing_status === 'active' && m.stampsThisWeek === 0 && m.totalMembers > 0
   const pending  = !m.billing_status || m.billing_status === 'pending'
@@ -98,6 +158,26 @@ function MerchantCard({
           m.billing_status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
         }`}>{m.billing_status ?? 'pending'}</span>
       </div>
+
+      {/* V3 status row — commission eligibility, participant type, balance, suspension */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <Pill
+          label={m.commissionEligible ? '💰 Commission eligible' : '⛔ Commissions paused'}
+          tone={m.commissionEligible ? 'green' : 'red'}
+        />
+        {m.participantTypeLabel && <Pill label={m.participantTypeLabel} tone="blue" />}
+        {/* Negative balance is hidden entirely at zero — only a real debt shows. */}
+        {m.negativeBalance > 0 && (
+          <Pill label={`Owes $${m.negativeBalance.toFixed(2)}`} tone="red" />
+        )}
+        {m.adminSuspended && <Pill label="⚠️ Admin suspended" tone="amber" />}
+      </div>
+      {m.adminSuspended && m.adminSuspensionReason && (
+        <p className="text-[11px] font-medium text-yellow-800 bg-yellow-50 border border-yellow-200 rounded-lg px-2.5 py-1.5">
+          Suspension reason: {m.adminSuspensionReason}
+        </p>
+      )}
+
       <div className="grid grid-cols-4 gap-1 text-center">
         {[
           { v: String(m.location_count ?? 1), l: 'stores' },
@@ -178,12 +258,66 @@ function MerchantCard({
           {actionLoading === m.id + 'deactivate' ? '…' : 'Deactivate'}
         </button>
       </div>
+
+      {/* Commission eligibility audit trail — lazy-loaded on first expand */}
+      <button
+        onClick={onToggleExpand}
+        className="w-full text-left text-[11px] font-bold text-[#4A4B98] flex items-center gap-1.5 pt-0.5"
+      >
+        <span className={`transition-transform ${expanded ? 'rotate-90' : ''}`}>▸</span>
+        Eligibility history
+      </button>
+
+      {expanded && (
+        <div className="border border-[#EBEBF2] rounded-xl overflow-hidden">
+          {historyLoading ? (
+            <p className="text-[11px] text-[#8E8EA8] font-medium px-3 py-3">Loading…</p>
+          ) : !history || history.length === 0 ? (
+            <p className="text-[11px] text-[#8E8EA8] font-medium px-3 py-3">
+              No eligibility changes recorded for this merchant yet.
+            </p>
+          ) : (
+            <div className="divide-y divide-[#EBEBF2]">
+              {history.map(h => (
+                <div key={h.id} className="px-3 py-2.5 flex flex-col gap-0.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[12px] font-bold text-[#1A1A2E]">{formatEventType(h.eventType)}</p>
+                    {h.commissionEligible !== null && (
+                      <Pill
+                        label={h.commissionEligible ? 'eligible' : 'ineligible'}
+                        tone={h.commissionEligible ? 'green' : 'red'}
+                      />
+                    )}
+                  </div>
+                  <p className="text-[10px] text-[#8E8EA8] font-medium">
+                    {new Date(h.effectiveAt).toLocaleString()}
+                    {h.triggeredBy ? ` · ${h.triggeredBy}` : ''}
+                  </p>
+                  {h.reason && (
+                    <p className="text-[11px] text-[#1A1A2E] font-medium mt-0.5">{h.reason}</p>
+                  )}
+                </div>
+              ))}
+              {history.length === 10 && (
+                <p className="text-[10px] text-[#C0C0D0] font-medium px-3 py-2">
+                  Showing 10 most recent events.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <p className="text-[10px] text-[#C0C0D0] font-medium">Joined {new Date(m.created_at).toLocaleDateString()}</p>
     </div>
   )
 }
 
-function StoreCard({ s }: { s: Store }) {
+function StoreCard({ s, onToggle, togglingField }: {
+  s: Store
+  onToggle: (store: Store, field: StoreToggleField, next: boolean) => void
+  togglingField: StoreToggleField | null
+}) {
   const eng = s.engagementRate
   const engColor = eng >= 50 ? 'text-green-700' : eng >= 20 ? 'text-yellow-700' : 'text-red-700'
   const engBg    = eng >= 50 ? 'bg-green-50'   : eng >= 20 ? 'bg-yellow-50'   : 'bg-red-50'
@@ -218,6 +352,42 @@ function StoreCard({ s }: { s: Store }) {
           <p className="text-[9px] text-[#8E8EA8] font-medium">engage</p>
         </div>
       </div>
+
+      {/* V3 status model — four independent fields, never derived from is_active */}
+      <div className="border-t border-[#EBEBF2] pt-3 flex flex-col gap-2">
+        <p className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
+          Network status
+        </p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <TogglePill
+            label="Open for shopping"
+            on={s.isOpenForShopping}
+            busy={togglingField === 'is_open_for_shopping'}
+            onClick={() => onToggle(s, 'is_open_for_shopping', !s.isOpenForShopping)}
+          />
+          <TogglePill
+            label="Network visible"
+            on={s.networkVisible}
+            busy={togglingField === 'network_visible'}
+            onClick={() => onToggle(s, 'network_visible', !s.networkVisible)}
+          />
+          <TogglePill
+            label="Enrollment"
+            on={s.enrollmentEnabled}
+            busy={togglingField === 'enrollment_enabled'}
+            onClick={() => onToggle(s, 'enrollment_enabled', !s.enrollmentEnabled)}
+          />
+          {/* Merchant-level and read-only here — a store cannot change it. */}
+          <span
+            className={`text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
+              s.commissionEligible ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+            }`}
+            title="Commission eligibility is set on the merchant account, not per store"
+          >
+            🔒 {s.commissionEligible ? 'Commission eligible' : 'Commissions paused'}
+          </span>
+        </div>
+      </div>
     </div>
   )
 }
@@ -248,6 +418,13 @@ export default function AdminDashboardPage() {
   const [blacklistReason, setBlacklistReason] = useState('')
   const [w9RejectTarget,  setW9RejectTarget]  = useState<string | null>(null)  // merchantId
   const [w9RejectNotes,   setW9RejectNotes]   = useState('')
+
+  // V3: merchant eligibility history (lazy per merchant) + store status toggles
+  const [expandedMerchant, setExpandedMerchant] = useState<string | null>(null)
+  const [historyByMerchant, setHistoryByMerchant] = useState<Record<string, EligibilityEvent[]>>({})
+  const [historyLoading, setHistoryLoading] = useState<string | null>(null)
+  const [storeToggling, setStoreToggling] = useState<string | null>(null)  // `${storeId}:${field}`
+  const [enrollmentConfirm, setEnrollmentConfirm] = useState<Store | null>(null)
 
   // Auth check
   useEffect(() => {
@@ -333,6 +510,47 @@ export default function AdminDashboardPage() {
     setActionLoading(null)
   }
 
+  // Fetch a merchant's eligibility history once, on first expand.
+  async function handleToggleExpand(merchantId: string) {
+    if (expandedMerchant === merchantId) { setExpandedMerchant(null); return }
+    setExpandedMerchant(merchantId)
+    if (historyByMerchant[merchantId]) return
+    setHistoryLoading(merchantId)
+    const res = await fetch('/api/admin/merchants?action=eligibility_history&merchantId=' + merchantId)
+    if (res.ok) {
+      const d = await res.json()
+      setHistoryByMerchant(prev => ({ ...prev, [merchantId]: d.history ?? [] }))
+    }
+    setHistoryLoading(null)
+  }
+
+  async function applyStoreToggle(store: Store, field: StoreToggleField, next: boolean) {
+    setStoreToggling(`${store.id}:${field}`)
+    const res = await fetch('/api/admin/stores', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId: store.id, field, value: next }),
+    })
+    if (res.ok) {
+      const key =
+        field === 'is_open_for_shopping' ? 'isOpenForShopping' :
+        field === 'network_visible'      ? 'networkVisible'    : 'enrollmentEnabled'
+      setStores(prev => prev.map(s => s.id === store.id ? { ...s, [key]: next } : s))
+    }
+    setStoreToggling(null)
+  }
+
+  // Disabling enrollment cuts off every QR code and link for the location, so it
+  // routes through a confirmation. Re-enabling is not destructive and applies
+  // straight away. Note enrollment_enabled must stay on after merchant
+  // cancellation — turn it off only for a documented reason (CLAUDE.md rule 21).
+  function handleStoreToggle(store: Store, field: StoreToggleField, next: boolean) {
+    if (field === 'enrollment_enabled' && next === false) {
+      setEnrollmentConfirm(store)
+      return
+    }
+    applyStoreToggle(store, field, next)
+  }
+
   async function handleMemberSearch(e: React.FormEvent) {
     e.preventDefault()
     if (!memberSearch.trim()) return
@@ -381,6 +599,29 @@ export default function AdminDashboardPage() {
           <StatCard label="MRR Growth" value={s ? '+$' + s.mrrGrowthThisMonth.toFixed(2) : '—'} sub="new this month" />
           <StatCard label="Coupons" value={s ? s.couponsIssued + ' / ' + s.couponsRedeemed : '—'} sub="issued / redeemed" />
         </div>
+
+        {/* ── V3 network ── */}
+        <div className="pt-2">
+          <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8] px-1 mb-2">
+            Network
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard
+              label="Originated Members"
+              value={s?.originatedMembers ?? '—'}
+              sub="with an Origin Store" />
+            <StatCard
+              label="Eligible Merchants"
+              value={s?.commissionEligibleMerchants ?? '—'}
+              sub="earning commissions" />
+          </div>
+          <div className="mt-3">
+            <StatCard
+              label="BinPerks Retained"
+              value={s ? '$' + s.binperksRetainedThisMonth.toFixed(2) : '—'}
+              sub={s ? `commissions kept in ${s.settlementPeriod} (ineligible origins)` : 'this settlement period'} />
+          </div>
+        </div>
       </div>
     )
   }
@@ -423,7 +664,11 @@ export default function AdminDashboardPage() {
         {filteredMerchants.map(m => (
           <MerchantCard key={m.id} m={m} onAction={handleMerchantAction} actionLoading={actionLoading}
             onW9Action={handleW9Action}
-            onW9Reject={(id) => { setW9RejectTarget(id); setW9RejectNotes('') }} />
+            onW9Reject={(id) => { setW9RejectTarget(id); setW9RejectNotes('') }}
+            expanded={expandedMerchant === m.id}
+            onToggleExpand={() => handleToggleExpand(m.id)}
+            history={historyByMerchant[m.id]}
+            historyLoading={historyLoading === m.id} />
         ))}
       </div>
     )
@@ -434,7 +679,18 @@ export default function AdminDashboardPage() {
     return (
       <div className="flex flex-col gap-3">
         {stores.length === 0 && <p className="text-[13px] text-[#8E8EA8] font-medium">No stores found.</p>}
-        {stores.map(s => <StoreCard key={s.id} s={s} />)}
+        {stores.map(s => (
+          <StoreCard
+            key={s.id}
+            s={s}
+            onToggle={handleStoreToggle}
+            togglingField={
+              storeToggling?.startsWith(s.id + ':')
+                ? (storeToggling.split(':')[1] as StoreToggleField)
+                : null
+            }
+          />
+        ))}
       </div>
     )
   }
@@ -601,6 +857,47 @@ export default function AdminDashboardPage() {
                 className="flex-1 py-3 rounded-xl text-[14px] font-bold text-white bg-[#DA1212] disabled:opacity-40"
               >
                 {actionLoading === w9RejectTarget + 'reject_w9' ? '…' : 'Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Disable-enrollment confirmation */}
+      {enrollmentConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center px-4 z-50">
+          <div className="bg-white rounded-3xl px-6 py-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl">
+            <h3 className="font-['Coiny'] text-xl text-[#1A1A2E]">Disable enrollment?</h3>
+            <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
+              Are you sure? This will prevent new members from enrolling through this store&apos;s
+              QR codes and links.
+            </p>
+            <p className="text-[12px] font-semibold text-[#1A1A2E] bg-[#F5F5F8] rounded-xl px-3 py-2.5">
+              {enrollmentConfirm.brand_name}
+              <span className="block text-[10px] font-mono text-[#8E8EA8] mt-0.5">
+                {enrollmentConfirm.canonical_key}
+              </span>
+            </p>
+            <p className="text-[11px] text-[#8E8EA8] font-medium leading-relaxed">
+              Enrollment should stay on after a merchant cancels. Only disable it for a
+              documented reason such as fraud.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEnrollmentConfirm(null)}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-[#8E8EA8] border-2 border-[#EBEBF2]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const target = enrollmentConfirm
+                  setEnrollmentConfirm(null)
+                  applyStoreToggle(target, 'enrollment_enabled', false)
+                }}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-white bg-[#DA1212]"
+              >
+                Disable
               </button>
             </div>
           </div>

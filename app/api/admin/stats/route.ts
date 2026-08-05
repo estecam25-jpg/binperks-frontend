@@ -16,6 +16,10 @@ export async function GET(req: NextRequest) {
   startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0)
   const som = startOfMonth.toISOString()
 
+  // settlement_ledger.settlement_period is text in YYYY-MM form.
+  const now = new Date()
+  const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
   const [
     { count: starterMembers },
     { count: totalVip },
@@ -30,6 +34,9 @@ export async function GET(req: NextRequest) {
     { count: totalMembers },
     { count: totalReferrals },
     { count: qualifiedReferrals },
+    { count: originatedMembers },
+    { count: commissionEligibleMerchants },
+    { data: retainedRows },
   ] = await Promise.all([
     admin.from('members').select('*', { count: 'exact', head: true }).eq('subscription_status', 'free'),
     admin.from('members').select('*', { count: 'exact', head: true }).eq('subscription_status', 'vip'),
@@ -44,7 +51,25 @@ export async function GET(req: NextRequest) {
     admin.from('members').select('*', { count: 'exact', head: true }),
     admin.from('referrals').select('*', { count: 'exact', head: true }),
     admin.from('referrals').select('*', { count: 'exact', head: true }).eq('status', 'qualified'),
+
+    // V3 network stats
+    admin.from('members').select('*', { count: 'exact', head: true }).not('origin_store_id', 'is', null),
+    admin.from('merchants').select('*', { count: 'exact', head: true }).eq('commission_eligible', true),
+    // Commissions BinPerks kept this period because the Origin Merchant was
+    // ineligible at payment time. Credit and debit are summed separately because
+    // the generated net_amount column's sign convention is settlement-side, and
+    // these entries are a BinPerks credit.
+    admin.from('settlement_ledger')
+      .select('credit_amount, debit_amount')
+      .eq('ledger_entry_type', 'commission_retained_binperks')
+      .eq('settlement_period', currentPeriod),
   ])
+
+  const binperksRetainedThisMonth = (retainedRows ?? []).reduce(
+    (sum: number, r: { credit_amount: number | null; debit_amount: number | null }) =>
+      sum + Number(r.credit_amount ?? 0) - Number(r.debit_amount ?? 0),
+    0,
+  )
 
   const totalStamps = (stampSum ?? []).reduce((sum: number, r: { stamp_count: number }) => sum + (r.stamp_count ?? 0), 0)
 
@@ -91,5 +116,10 @@ export async function GET(req: NextRequest) {
     mrrGrowthThisMonth:      Math.round(mrrGrowthThisMonth * 100) / 100,
     vipConversionRate:       Math.round(vipConversionRate * 10) / 10,
     referralConversionRate:  Math.round(referralConversionRate * 10) / 10,
+    // V3 network stats
+    originatedMembers:           originatedMembers ?? 0,
+    commissionEligibleMerchants: commissionEligibleMerchants ?? 0,
+    binperksRetainedThisMonth:   Math.round(binperksRetainedThisMonth * 100) / 100,
+    settlementPeriod:            currentPeriod,
   })
 }

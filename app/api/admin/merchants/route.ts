@@ -27,11 +27,36 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ url: data.signedUrl })
   }
 
+  // Commission eligibility audit trail for one merchant. Fetched lazily when the
+  // admin expands a merchant card, so the main list stays a single round trip.
+  if (action === 'eligibility_history' && mIdParam) {
+    const { data, error } = await admin
+      .from('origin_eligibility_history')
+      .select('id, event_type, effective_at, triggered_by, reason, commission_eligible')
+      .eq('merchant_id', mIdParam)
+      .order('effective_at', { ascending: false })
+      .limit(10)
+    if (error) {
+      console.error('[admin/merchants] eligibility_history error:', error)
+      return NextResponse.json({ error: 'query_failed' }, { status: 500 })
+    }
+    return NextResponse.json({
+      history: (data ?? []).map(h => ({
+        id:                 h.id,
+        eventType:          h.event_type,
+        effectiveAt:        h.effective_at,
+        triggeredBy:        h.triggered_by,
+        reason:             h.reason,
+        commissionEligible: h.commission_eligible,
+      })),
+    })
+  }
+
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [merchantsResult, stampEvents, allMembers, w9Records, allStores, allPerks, allStaff, allStamps] = await Promise.all([
+  const [merchantsResult, stampEvents, allMembers, w9Records, allStores, allPerks, allStaff, allStamps, participantTypes] = await Promise.all([
     admin.from('merchants')
-      .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at, stripe_subscription_id')
+      .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at, stripe_subscription_id, participant_type, commission_eligible, negative_balance, admin_suspended, admin_suspension_reason')
       .order('created_at', { ascending: false }),
     admin.from('stamp_events').select('merchant_id, stamp_count').gte('awarded_at', sevenDaysAgo),
     admin.from('members').select('merchant_id, subscription_status'),
@@ -40,7 +65,15 @@ export async function GET(req: NextRequest) {
     admin.from('perks').select('merchant_id, is_active, member_type').eq('is_active', true),
     admin.from('staff_users').select('merchant_id').eq('is_active', true),
     admin.from('stamp_events').select('merchant_id'),
+    admin.from('participant_types').select('id, display_name'),
   ])
+
+  // participant_types is the source of truth for the human-readable label
+  // ('bin_store' → 'Bin Store'). Falls back to the raw slug if a type is missing.
+  const participantLabelById: Record<string, string> = {}
+  for (const p of (participantTypes.data ?? [])) {
+    if (p.id) participantLabelById[p.id] = p.display_name ?? p.id
+  }
 
   // Aggregate stamps per merchant this week
   const stampsByMerchant: Record<string, number> = {}
@@ -120,6 +153,15 @@ export async function GET(req: NextRequest) {
       w9:                w9ByMerchant[m.id] ?? null,
       onboardingComplete: calcOnboarding(m),
       abandonedCheckout: m.billing_status === 'pending' && !m.stripe_subscription_id,
+      // V3 fields. commission_eligible is merchant-level (never per store) and
+      // is driven by billing + admin suspension, not by billing_status alone —
+      // see CLAUDE.md "STORE AND MERCHANT STATUS MODEL (V3)".
+      commissionEligible:    m.commission_eligible ?? false,
+      participantType:       m.participant_type ?? null,
+      participantTypeLabel:  m.participant_type ? (participantLabelById[m.participant_type] ?? m.participant_type) : null,
+      negativeBalance:       Number(m.negative_balance ?? 0),
+      adminSuspended:        m.admin_suspended ?? false,
+      adminSuspensionReason: m.admin_suspension_reason ?? null,
     }
   })
 
