@@ -10,7 +10,7 @@ interface Store {
   logoUrl?: string | null
 }
 
-type TabId = 'start' | 'overview' | 'members' | 'redemptions' | 'perks' | 'marketing' | 'settings'
+type TabId = 'start' | 'overview' | 'members' | 'redemptions' | 'perks' | 'marketing' | 'settlement' | 'settings'
 
 const BASE_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'overview',     label: 'Overview',     icon: '📊' },
@@ -18,6 +18,7 @@ const BASE_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'redemptions',  label: 'Redemptions',  icon: '🎟️' },
   { id: 'perks',        label: 'Perks',        icon: '✨' },
   { id: 'marketing',    label: 'Marketing',    icon: '📣' },
+  { id: 'settlement',   label: 'Settlement',   icon: '🧾' },
   { id: 'settings',     label: 'Settings',     icon: '⚙️' },
 ]
 

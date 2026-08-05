@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import MerchantNav, { type TabId, type Store } from './components/MerchantNav'
 import OverviewTab from './components/tabs/OverviewTab'
 import MembersTab from './components/tabs/MembersTab'
+import SettlementTab from './components/tabs/SettlementTab'
 import { RedemptionsTab, PerksTab, MarketingTab, SettingsTab, GettingStartedTab } from './components/tabs/DashboardTabs'
 
 function DashboardShell() {
@@ -162,6 +163,10 @@ function DashboardShell() {
         )}
         {activeTab === 'marketing' && (
           <MarketingTab storeId={activeStoreId} stores={stores} />
+        )}
+        {/* Settlement is merchant-level — no storeId, statements are not per-location */}
+        {activeTab === 'settlement' && (
+          <SettlementTab />
         )}
         {activeTab === 'settings' && (
           <SettingsTab storeId={activeStoreId} stores={stores} />

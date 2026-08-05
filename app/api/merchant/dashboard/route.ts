@@ -9,21 +9,34 @@
  *
  * Response:
  * {
- *   merchant: { id, companyName, locationCount, billingStatus, hasSubscription },
+ *   merchant: { id, companyName, locationCount, billingStatus, hasSubscription,
+ *               commissionEligible, commissionSuspensionReason },
  *   stores: [{ id, storeName, storeKey, city, state, isActive }],
  *   stats: {
  *     totalMembers, stampsToday, couponsRedeemedThisWeek, referralsThisWeek,
  *     newMembersThisWeek
  *   },
+ *   originMetrics: { originatedMembers, originatedVipMembers, monthlyCommissionPotential },
  *   fiscalWeekChart: [{ date, dayLabel, stampCount }],
  *   recentMembers: [{ id, firstName, lastName, tier, totalStamps, joinedAt }]
  * }
+ *
+ * NOTE ON SCOPE: commissionEligible and originMetrics are MERCHANT-level and are
+ * deliberately NOT filtered by the storeId param. Commission eligibility belongs
+ * to the merchant account, not a location, and Origin Store attribution is counted
+ * per originating merchant. Switching locations in the dashboard must not change
+ * these numbers — see CLAUDE.md "STORE AND MERCHANT STATUS MODEL (V3)".
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getTier } from '@/lib/tiers'
+
+// Origin Merchant commission per VIP member per month while eligible.
+// Source of truth: CLAUDE.md "PRICING (V3 LOCKED)". Mirrored in
+// /api/member/vip-webhook, which writes the immutable commission_decisions.
+const ORIGIN_COMMISSION_PER_VIP = 19.99
 
 function getFiscalWeekRange(fiscalWeekStart: string = 'friday') {
   const dayMap: Record<string, number> = {
@@ -60,7 +73,7 @@ export async function GET(req: NextRequest) {
 
   const { data: merchant } = await admin
     .from('merchants')
-    .select('id, company_name, location_count, billing_status, stripe_customer_id')
+    .select('id, company_name, location_count, billing_status, stripe_customer_id, commission_eligible, commission_suspension_reason')
     .eq('auth_user_id', user.id)
     .single()
 
@@ -83,9 +96,12 @@ export async function GET(req: NextRequest) {
         locationCount: merchant.location_count,
         billingStatus: merchant.billing_status,
         hasSubscription: !!merchant.stripe_customer_id,
+        commissionEligible: merchant.commission_eligible ?? false,
+        commissionSuspensionReason: merchant.commission_suspension_reason ?? null,
       },
       stores: [],
       stats:           null,
+      originMetrics:   null,
       fiscalWeekChart: [],
       recentMembers:   [],
     })
@@ -110,6 +126,8 @@ export async function GET(req: NextRequest) {
     newMembersThisWeekRes,
     fiscalChartRes,
     recentMembersRes,
+    originatedMembersRes,
+    originatedVipRes,
   ] = await Promise.all([
     admin
       .from('members')
@@ -159,6 +177,21 @@ export async function GET(req: NextRequest) {
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(10),
+
+    // Origin Store attribution — merchant-scoped and all-time, never filtered by
+    // storeIds or by member status. A member this merchant originated stays
+    // attributed to it permanently (CLAUDE.md rule 18), including members whose
+    // home store later differs from where they enrolled.
+    admin
+      .from('members')
+      .select('id', { count: 'exact', head: true })
+      .eq('origin_merchant_id', merchant.id),
+
+    admin
+      .from('members')
+      .select('id', { count: 'exact', head: true })
+      .eq('origin_merchant_id', merchant.id)
+      .eq('subscription_status', 'vip'),
   ])
 
   const chartDays: { date: string; dayLabel: string; stampCount: number }[] = []
@@ -186,6 +219,9 @@ export async function GET(req: NextRequest) {
     }
   })
 
+  const commissionEligible = merchant.commission_eligible ?? false
+  const originatedVipMembers = originatedVipRes.count ?? 0
+
   return NextResponse.json({
     merchant: {
       id:              merchant.id,
@@ -193,6 +229,8 @@ export async function GET(req: NextRequest) {
       locationCount:   merchant.location_count,
       billingStatus:   merchant.billing_status,
       hasSubscription: !!merchant.stripe_customer_id,
+      commissionEligible,
+      commissionSuspensionReason: merchant.commission_suspension_reason ?? null,
     },
     stores: stores.map(s => ({
       id:         s.id,
@@ -210,6 +248,17 @@ export async function GET(req: NextRequest) {
       couponsRedeemedThisWeek: couponsThisWeekRes.count ?? 0,
       referralsThisWeek:       referralsThisWeekRes.count ?? 0,
       newMembersThisWeek:      newMembersThisWeekRes.count ?? 0,
+    },
+    originMetrics: {
+      originatedMembers:    originatedMembersRes.count ?? 0,
+      originatedVipMembers,
+      // Forward-looking estimate of what these VIP members would generate next
+      // month at current eligibility — NOT an amount owed. Null when ineligible,
+      // because BinPerks retains the commission during suspension and it is never
+      // paid retroactively (CLAUDE.md "ORIGIN STORE RULES").
+      monthlyCommissionPotential: commissionEligible
+        ? Number((originatedVipMembers * ORIGIN_COMMISSION_PER_VIP).toFixed(2))
+        : null,
     },
     fiscalWeekChart: chartDays,
     recentMembers,

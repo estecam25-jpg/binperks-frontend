@@ -5,7 +5,18 @@ import { useEffect, useState } from 'react'
 interface ChartDay { date: string; dayLabel: string; stampCount: number }
 interface RecentMember { id: string; firstName: string; lastName: string; tier: string; totalStamps: number; joinedAt: string }
 
+interface OriginMetrics {
+  originatedMembers: number
+  originatedVipMembers: number
+  // null when the merchant is not commission_eligible — no potential to show.
+  monthlyCommissionPotential: number | null
+}
+
 interface OverviewData {
+  merchant: {
+    commissionEligible: boolean
+    commissionSuspensionReason: string | null
+  } | null
   stats: {
     totalMembers: number
     stampsToday: number
@@ -13,6 +24,7 @@ interface OverviewData {
     referralsThisWeek: number
     newMembersThisWeek: number
   } | null
+  originMetrics: OriginMetrics | null
   fiscalWeekChart: ChartDay[]
   recentMembers: RecentMember[]
   fiscalWeekStart: string
@@ -37,11 +49,42 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
   if (loading) return <LoadingSkeleton />
   if (!data?.stats) return <EmptyState />
 
-  const { stats, fiscalWeekChart, recentMembers } = data
+  const { stats, fiscalWeekChart, recentMembers, merchant, originMetrics } = data
   const maxStamps = Math.max(...fiscalWeekChart.map(d => d.stampCount), 1)
+  const eligible = merchant?.commissionEligible ?? false
 
   return (
     <div className="flex flex-col gap-5 p-4 pb-12">
+
+      {/* ── Commission eligibility ──
+          Merchant-level status: unaffected by which location is selected. */}
+      {merchant && (
+        <div
+          className="rounded-2xl px-4 py-3.5 flex items-start gap-3 border"
+          style={
+            eligible
+              ? { backgroundColor: '#F0FAF1', borderColor: '#BFE3C4' }
+              : { backgroundColor: '#FDF0F0', borderColor: '#F3C4C4' }
+          }
+        >
+          <span className="text-lg flex-shrink-0 leading-none mt-0.5">
+            {eligible ? '✅' : '⏸️'}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p
+              className="text-[14px] font-bold leading-tight"
+              style={{ color: eligible ? '#2A7D34' : '#DA1212' }}
+            >
+              {eligible ? 'Earning commissions ✓' : 'Commissions paused'}
+            </p>
+            <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">
+              {eligible
+                ? `You earn $19.99/month for every VIP member you enroll, for as long as they stay subscribed.`
+                : `Members you enrolled keep their perks and coupons, but new commissions aren't being credited to your account. Contact BinPerks at support@binperks.com to resolve this.`}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Stats grid ── */}
       <div className="grid grid-cols-2 gap-3">
@@ -67,6 +110,61 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
           </div>
         ))}
       </div>
+
+      {/* ── Members you originated ──
+          Attribution is permanent and merchant-wide, so these figures do not
+          change when switching between locations. */}
+      {originMetrics && (
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3.5 border-b border-[#EBEBF2]">
+            <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Members you enrolled</h2>
+            <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
+              Members who joined the BinPerks network through your store. This never changes,
+              even if they shop elsewhere in the network.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 divide-x divide-[#EBEBF2]">
+            <div className="px-4 py-4">
+              <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] mb-1">
+                Total enrolled
+              </p>
+              <p className="font-['Coiny'] text-3xl text-[#4A4B98] leading-none">
+                {originMetrics.originatedMembers.toLocaleString()}
+              </p>
+            </div>
+            <div className="px-4 py-4">
+              <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] mb-1">
+                Currently VIP
+              </p>
+              <p className="font-['Coiny'] text-3xl text-[#FFB217] leading-none">
+                {originMetrics.originatedVipMembers.toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          {/* Only shown while commission_eligible — a paused merchant has no
+              potential to project, and BinPerks retains those commissions. */}
+          {originMetrics.monthlyCommissionPotential !== null && (
+            <div className="px-4 py-4 border-t border-[#EBEBF2] bg-[#F5F5F8]">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
+                  Monthly commission potential
+                </p>
+                <p className="font-['Coiny'] text-2xl text-[#2A7D34] leading-none">
+                  ${originMetrics.monthlyCommissionPotential.toFixed(2)}
+                </p>
+              </div>
+              <p className="text-[11px] text-[#8E8EA8] font-medium mt-1.5 leading-relaxed">
+                {originMetrics.originatedVipMembers.toLocaleString()} VIP member
+                {originMetrics.originatedVipMembers === 1 ? '' : 's'} × $19.99. An estimate at
+                today&apos;s numbers, not an amount owed — your actual payout is calculated in the
+                monthly settlement and shown on the Settlement tab.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Fiscal week chart — the signature element ── */}
       <div className="bg-white rounded-2xl px-4 py-5 shadow-sm">
