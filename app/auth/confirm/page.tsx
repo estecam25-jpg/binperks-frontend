@@ -1,6 +1,11 @@
 /**
  * /auth/confirm
  *
+ * DEPRECATED — magic-link confirmation page, kept for backward compatibility.
+ * Member sign-in now uses an 8-digit SMS code entered directly on
+ * /member/login/[storeKey]. This page only serves magic-link SMS messages
+ * sent before the cutover. See /s/[code] for the full note.
+ *
  * Intermediate sign-in page. The magic link in the SMS points to /s/[code]
  * which redirects here with only the short code — the token_hash is stored
  * in Redis and never exposed in the URL. This prevents SMS link-preview bots

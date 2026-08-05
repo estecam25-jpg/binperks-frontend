@@ -1,6 +1,11 @@
 /**
  * POST /api/auth/confirm
  *
+ * DEPRECATED — magic-link confirmation, kept for backward compatibility.
+ * Member sign-in now uses an 8-digit SMS code (/api/member/verify-code).
+ * Nothing writes token:[code] any more; this only serves magic-link SMS
+ * messages sent before the cutover. See /s/[code] for the full note.
+ *
  * Called by /auth/confirm when the user taps "Tap to Sign In".
  * Looks up the token_hash from Redis using the short code, verifies the OTP,
  * sets session cookies, and returns { redirectUrl }.

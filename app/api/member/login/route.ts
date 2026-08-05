@@ -1,11 +1,21 @@
 /**
  * POST /api/member/login
  *
- * Passwordless member login. Member submits their phone number; we resolve
- * the matching member record(s), mint a Supabase magic link via the admin
- * client, shorten it via Upstash Redis, and send the short URL to GHL for
- * SMS delivery — Supabase's own phone provider is OFF, GHL/Twilio sends all
- * member SMS per the locked Auth Architecture.
+ * Step 1 of passwordless member sign-in. The member submits their phone
+ * number; we resolve the matching member record(s), mint a Supabase magic-link
+ * token via the admin client, then issue our own 8-digit code that maps to
+ * that token in Redis. GHL/Twilio delivers the code by SMS — Supabase's phone
+ * provider is OFF permanently, GHL sends all member SMS per the locked Auth
+ * Architecture.
+ *
+ * The Supabase hashed_token never leaves the server and never appears in a
+ * URL. The member proves possession of the phone by typing the 8-digit code
+ * back into the login page, which POSTs to /api/member/verify-code.
+ *
+ * Redis keys written (all 10-minute TTL, keyed by phone):
+ *   member_otp:{phone}          → the 8-digit code
+ *   member_token:{phone}        → the Supabase hashed_token
+ *   member_otp_attempts:{phone} → cleared here, incremented by verify-code
  *
  * Members are merchant-scoped, so the same phone number can legitimately
  * belong to more than one merchant's member list. We never reveal which —
@@ -26,9 +36,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { Redis } from '@upstash/redis'
+import { randomInt } from 'node:crypto'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 const APP_URL = 'https://app.binperks.com'
+
+/** Code lifetime in Redis. Shorter than Supabase's own token expiry (~60 min)
+ *  so the code is always the binding constraint. */
+const OTP_TTL_SECONDS = 10 * 60
 
 interface LoginRequest {
   phone: string
@@ -45,6 +60,12 @@ interface MemberRow {
   merchant_id: string
 }
 
+/** 8-digit numeric code, 10000000–99999999. Uses crypto rather than
+ *  Math.random() because this value is an authentication credential. */
+function generateOtpCode(): string {
+  return randomInt(10_000_000, 100_000_000).toString()
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as Partial<LoginRequest>
@@ -55,8 +76,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
     }
 
-    // Rate limiting: max 5 magic link requests per phone per 15-minute window.
-    // Prevents SMS credit abuse and phone enumeration via timing differences.
+    // Rate limiting: max 5 code requests per phone per 15-minute window.
+    // Covers both the initial send and the "Resend code" button. Prevents SMS
+    // credit abuse and phone enumeration via timing differences.
     const redis = new Redis({
       url: process.env.KV_REST_API_URL!,
       token: process.env.KV_REST_API_TOKEN!,
@@ -68,7 +90,7 @@ export async function POST(req: NextRequest) {
     }
     if (requests > 5) {
       return NextResponse.json(
-        { error: 'Too many requests. Please wait 15 minutes before requesting a new sign-in link.' },
+        { error: 'Too many requests. Please wait 15 minutes before requesting a new sign-in code.' },
         { status: 429 }
       )
     }
@@ -137,24 +159,25 @@ export async function POST(req: NextRequest) {
 
     if (linkError || !linkData) {
       console.error('[/api/member/login] generateLink error:', linkError)
-      return NextResponse.json({ error: 'Failed to generate login link' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to generate sign-in code' }, { status: 500 })
     }
 
-    // Build confirm URL then shorten via Upstash Redis (single-use, 65 min TTL)
-    const magicLink = `${APP_URL}/auth/confirm?token_hash=${linkData.properties.hashed_token}&type=magiclink&next=/member/dashboard`
-
-    let smsLink = magicLink // fallback to full URL if Redis fails
+    // Pair our 8-digit code with the Supabase token in Redis. Both expire
+    // together; the attempt counter resets so a resend gives a clean slate.
+    const code = generateOtpCode()
     try {
-      // Reuse the redis client already created above for rate limiting
-      const code = Math.random().toString(36).substring(2, 10)
-      // Store token_hash in Redis (not in URL) so bots can't consume it via link preview
-      await redis.set(`token:${code}`, linkData.properties.hashed_token, { ex: 65 * 60 })
-      smsLink = `${process.env.NEXT_PUBLIC_APP_URL}/s/${code}`
+      await Promise.all([
+        redis.set(`member_otp:${phone}`, code, { ex: OTP_TTL_SECONDS }),
+        redis.set(`member_token:${phone}`, linkData.properties.hashed_token, { ex: OTP_TTL_SECONDS }),
+        redis.del(`member_otp_attempts:${phone}`),
+      ])
     } catch (err) {
-      console.error('[/api/member/login] Redis shorten error:', err)
+      console.error('[/api/member/login] Redis write error:', err)
+      return NextResponse.json({ error: 'Failed to generate sign-in code' }, { status: 500 })
     }
 
-    // Awaited: send short magic link to member via GHL → SMS
+    // Awaited: send the code to the member via GHL → SMS.
+    // GHL template: "Your BinPerks sign-in code is: {{code}}. Expires in 10 minutes."
     const ghlWebhook = process.env.GHL_MAGIC_LINK_WEBHOOK_URL
     if (ghlWebhook) {
       try {
@@ -165,7 +188,7 @@ export async function POST(req: NextRequest) {
             memberId:  member.id,
             phone,
             firstName: member.first_name,
-            magicLink: smsLink,
+            code,
           }),
         })
       } catch (err) {

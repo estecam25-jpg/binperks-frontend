@@ -3,7 +3,8 @@
  *
  * Server component: fetches store branding from Supabase at request time,
  * renders the branded header server-side (zero flash), then hands off to
- * the client LoginForm for the interactive phone + magic-link flow.
+ * the client LoginForm for the interactive two-step flow: phone number in,
+ * then the 8-digit code we text back via GHL.
  */
 
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'

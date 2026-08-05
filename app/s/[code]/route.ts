@@ -1,13 +1,19 @@
 /**
  * GET /s/[code]
  *
- * URL shortener redirect handler.
+ * DEPRECATED — magic-link short URL handler, kept for backward compatibility.
+ *
+ * Member sign-in now uses an 8-digit SMS code entered on
+ * /member/login/[storeKey] (see /api/member/login and
+ * /api/member/verify-code). Nothing writes token:[code] any more, so this
+ * route only still resolves for magic-link SMS messages that were sent
+ * before the cutover and are inside their 65-minute Redis TTL. Once that
+ * window has passed with no traffic here, this route and /auth/confirm can
+ * both be deleted.
+ *
  * Checks that the code exists in Redis, then redirects to the /auth/confirm
  * page with ONLY the code -- the token_hash never appears in the URL, so
  * SMS link-preview bots cannot follow it and consume the token.
- *
- * The actual token_hash is stored in Redis under token:[code] and is only
- * retrieved when the member taps the "Sign In" button on /auth/confirm.
  */
 
 import { NextRequest, NextResponse } from 'next/server'

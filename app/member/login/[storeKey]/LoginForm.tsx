@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 interface Account {
@@ -25,78 +25,263 @@ function formatPhone(raw: string): string {
 
 function normalizePhone(v: string): string { return v.replace(/\D/g, '') }
 
-type ViewState = 'idle' | 'loading' | 'sent' | 'not_found' | 'multiple_accounts' | 'error'
+/** Which screen the member is on. */
+type Step = 'phone' | 'accounts' | 'code'
+
+/** In-flight network state, orthogonal to the step. */
+type Status = 'idle' | 'sending' | 'verifying'
+
+/** Seconds the "Resend code" button stays disabled after a send. Keeps members
+ *  from burning through the server-side 5-per-15-minutes budget by reflex. */
+const RESEND_COOLDOWN = 30
 
 function LoginFormContent({ brandColor, storeKey }: Props) {
   const searchParams = useSearchParams()
+  const codeRef = useRef<HTMLInputElement>(null)
+
   const [phone, setPhone] = useState('')
   const [touched, setTouched] = useState(false)
-  const [view, setView] = useState<ViewState>('idle')
+  const [step, setStep] = useState<Step>('phone')
+  const [status, setStatus] = useState<Status>('idle')
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [selectedMemberId, setSelectedMemberId] = useState<string | undefined>()
+  const [code, setCode] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [notFound, setNotFound] = useState(false)
   const [authError, setAuthError] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
 
   useEffect(() => {
     if (searchParams.get('error') === 'auth') setAuthError(true)
   }, [searchParams])
 
+  // Focus the code box as soon as the code step appears
+  useEffect(() => {
+    if (step === 'code') codeRef.current?.focus()
+  }, [step])
+
+  // Resend cooldown ticker
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setTimeout(() => setCooldown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [cooldown])
+
   const digits = normalizePhone(phone)
   const phoneValid = digits.length === 10
 
-  async function submitLogin(memberId?: string) {
-    setView('loading')
-    const res = await fetch('/api/member/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: digits, memberId }),
-    })
+  /** Requests a code. Used by the phone form, the account picker, and Resend. */
+  async function requestCode(memberId?: string) {
+    setStatus('sending')
+    setError(null)
+    setNotFound(false)
 
-    if (res.status === 404) { setView('not_found'); return }
-    if (!res.ok) { setView('error'); return }
-
-    const data = await res.json()
-    if (data.error === 'multiple_accounts') {
-      setAccounts(data.accounts ?? [])
-      setView('multiple_accounts')
+    let res: Response
+    try {
+      res = await fetch('/api/member/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: digits, memberId }),
+      })
+    } catch {
+      setStatus('idle')
+      setError('Something went wrong. Please try again.')
       return
     }
-    if (!data.ok) { setView('error'); return }
 
-    setView('sent')
+    if (res.status === 404) {
+      setStatus('idle')
+      setNotFound(true)
+      setStep('phone')
+      return
+    }
+
+    if (res.status === 429) {
+      const data = await res.json().catch(() => ({}))
+      setStatus('idle')
+      setError(data.error ?? 'Too many requests. Please wait 15 minutes before trying again.')
+      return
+    }
+
+    if (!res.ok) {
+      setStatus('idle')
+      setError('Something went wrong. Please try again.')
+      return
+    }
+
+    const data = await res.json()
+
+    if (data.error === 'multiple_accounts') {
+      setAccounts(data.accounts ?? [])
+      setStatus('idle')
+      setStep('accounts')
+      return
+    }
+
+    if (!data.ok) {
+      setStatus('idle')
+      setError('Something went wrong. Please try again.')
+      return
+    }
+
+    setSelectedMemberId(memberId)
+    setCode('')
+    setStatus('idle')
+    setStep('code')
+    setCooldown(RESEND_COOLDOWN)
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  function handlePhoneSubmit(e: React.FormEvent) {
     e.preventDefault()
     setTouched(true)
     if (!phoneValid) return
-    submitLogin()
+    requestCode()
   }
 
-  if (view === 'sent') {
+  async function handleCodeSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (code.length !== 8) return
+    setStatus('verifying')
+    setError(null)
+
+    let res: Response
+    try {
+      res = await fetch('/api/member/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: digits, code }),
+      })
+    } catch {
+      setStatus('idle')
+      setError('Something went wrong. Please try again.')
+      return
+    }
+
+    if (res.ok) {
+      const data = await res.json()
+      // Full-page navigation so the cookies set by the server are picked up
+      window.location.href = data.redirectUrl ?? '/member/dashboard'
+      return
+    }
+
+    const data = await res.json().catch(() => ({}))
+    setStatus('idle')
+    setCode('')
+    codeRef.current?.focus()
+
+    if (data.error === 'expired') {
+      setError('That code has expired. Tap "Resend code" to get a new one.')
+    } else if (data.error === 'too_many_attempts') {
+      setError('Too many incorrect tries. Tap "Resend code" to get a new one.')
+    } else {
+      setError('That code is incorrect. Check your texts and try again.')
+    }
+  }
+
+  function backToPhone() {
+    setStep('phone')
+    setStatus('idle')
+    setCode('')
+    setError(null)
+    setNotFound(false)
+    setSelectedMemberId(undefined)
+  }
+
+  /* ---------------------------------------------------------------- code */
+
+  if (step === 'code') {
     return (
-      <div className="w-full flex flex-col items-center text-center gap-4 pt-6">
-        <div
-          className="w-16 h-16 rounded-full flex items-center justify-center text-3xl"
-          style={{ backgroundColor: `${brandColor}15` }}
-        >
-          📱
+      <div className="w-full flex flex-col gap-5">
+        <div className="flex flex-col items-center gap-3 text-center pt-2">
+          <div
+            className="w-16 h-16 rounded-full flex items-center justify-center text-3xl"
+            style={{ backgroundColor: `${brandColor}15` }}
+          >
+            📱
+          </div>
+          <div>
+            <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-1">Check your texts</h1>
+            <p className="text-[14px] text-[#8E8EA8] font-medium leading-relaxed">
+              We sent an 8-digit code to{' '}
+              <strong className="text-[#1A1A2E]">{formatPhone(phone)}</strong>.
+            </p>
+          </div>
         </div>
-        <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Check your texts</h1>
-        <p className="text-[14px] text-[#8E8EA8] font-medium leading-relaxed">
-          We sent a sign-in link to {formatPhone(phone)}. Tap it to open your rewards dashboard.
-          No password needed.
-        </p>
-        <button
-          onClick={() => setView('idle')}
-          className="text-[13px] font-semibold underline mt-2"
-          style={{ color: brandColor }}
-        >
-          Use a different number
-        </button>
+
+        <form onSubmit={handleCodeSubmit} className="w-full flex flex-col gap-3">
+          <input
+            ref={codeRef}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={8}
+            placeholder="12345678"
+            value={code}
+            onChange={e => {
+              setCode(e.target.value.replace(/\D/g, '').slice(0, 8))
+              setError(null)
+            }}
+            autoComplete="one-time-code"
+            className={`
+              w-full px-4 py-4 rounded-2xl border-2 bg-white font-['Montserrat'] text-[24px] font-bold
+              text-[#1A1A2E] tracking-[0.3em] text-center outline-none transition-colors
+              placeholder:text-[#D1D1DC] placeholder:font-normal placeholder:tracking-normal
+              ${error ? 'border-[#DA1212] bg-red-50' : 'border-transparent'}
+            `}
+          />
+
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+              <p className="text-[12px] font-semibold text-[#DA1212] text-center">{error}</p>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={code.length !== 8 || status === 'verifying'}
+            className="w-full py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide disabled:opacity-40 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
+            style={{ backgroundColor: brandColor }}
+          >
+            {status === 'verifying' && (
+              <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+            )}
+            {status === 'verifying' ? 'Signing in…' : 'Sign In'}
+          </button>
+        </form>
+
+        <div className="bg-white rounded-xl px-4 py-3">
+          <p className="text-[12px] text-[#8E8EA8] font-medium text-center">
+            The code expires in 10 minutes.
+          </p>
+        </div>
+
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={() => requestCode(selectedMemberId)}
+            disabled={cooldown > 0 || status === 'sending'}
+            className="text-[13px] font-bold underline disabled:opacity-40 disabled:no-underline"
+            style={{ color: brandColor }}
+          >
+            {status === 'sending'
+              ? 'Sending…'
+              : cooldown > 0
+                ? `Resend code in ${cooldown}s`
+                : 'Resend code'}
+          </button>
+          <button
+            onClick={backToPhone}
+            className="text-[13px] font-semibold text-[#8E8EA8] underline"
+          >
+            Use a different number
+          </button>
+        </div>
       </div>
     )
   }
 
-  if (view === 'multiple_accounts') {
+  /* ------------------------------------------------------------ accounts */
+
+  if (step === 'accounts') {
     return (
       <div className="w-full flex flex-col gap-4">
         <div className="text-center">
@@ -109,16 +294,24 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
           {accounts.map(acc => (
             <button
               key={acc.memberId}
-              onClick={() => submitLogin(acc.memberId)}
-              className="w-full flex items-center gap-3 bg-white rounded-2xl px-4 py-4 shadow-sm active:scale-[0.98] transition-transform"
+              onClick={() => requestCode(acc.memberId)}
+              disabled={status === 'sending'}
+              className="w-full flex items-center gap-3 bg-white rounded-2xl px-4 py-4 shadow-sm active:scale-[0.98] transition-transform disabled:opacity-50"
             >
               <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: acc.brandColor }} />
               <span className="text-[14px] font-bold text-[#1A1A2E]">{acc.storeName}</span>
             </button>
           ))}
         </div>
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-[12px] font-semibold text-[#DA1212]">{error}</p>
+          </div>
+        )}
+
         <button
-          onClick={() => setView('idle')}
+          onClick={backToPhone}
           className="text-[13px] font-semibold text-[#8E8EA8] underline self-center mt-1"
         >
           Back
@@ -127,24 +320,26 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
     )
   }
 
+  /* --------------------------------------------------------------- phone */
+
   return (
     <>
       <div className="w-full text-center">
         <h1 className="font-['Coiny'] text-3xl text-[#1A1A2E] mb-1">Welcome back</h1>
         <p className="text-[14px] text-[#8E8EA8] font-medium">
-          Enter your phone number and we'll text you a sign-in link.
+          Enter your phone number and we&apos;ll text you a sign-in code.
         </p>
       </div>
 
       {authError && (
         <div className="w-full p-3.5 bg-orange-50 border border-orange-200 rounded-xl">
           <p className="text-[13px] font-semibold text-orange-800 leading-snug">
-            That sign-in link expired or was already used. Enter your number below to get a new one.
+            That sign-in code expired or was already used. Enter your number below to get a new one.
           </p>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate className="w-full flex flex-col gap-4">
+      <form onSubmit={handlePhoneSubmit} noValidate className="w-full flex flex-col gap-4">
         <div>
           <input
             type="tel"
@@ -169,10 +364,10 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
           )}
         </div>
 
-        {view === 'not_found' && (
+        {notFound && (
           <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl">
             <p className="text-[12px] font-semibold text-orange-800">
-              We couldn't find an account for that number.{' '}
+              We couldn&apos;t find an account for that number.{' '}
               <a
                 href={`/member/join/${storeKey}`}
                 className="underline font-bold"
@@ -184,24 +379,22 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
           </div>
         )}
 
-        {view === 'error' && (
+        {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
-            <p className="text-[12px] font-semibold text-[#DA1212]">
-              Something went wrong. Please try again.
-            </p>
+            <p className="text-[12px] font-semibold text-[#DA1212]">{error}</p>
           </div>
         )}
 
         <button
           type="submit"
-          disabled={view === 'loading'}
+          disabled={status === 'sending'}
           className="w-full py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide disabled:opacity-50 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
           style={{ backgroundColor: brandColor }}
         >
-          {view === 'loading' && (
+          {status === 'sending' && (
             <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
           )}
-          {view === 'loading' ? 'Sending link…' : 'Send Sign-In Link'}
+          {status === 'sending' ? 'Sending code…' : 'Send Sign-In Code'}
         </button>
       </form>
 
