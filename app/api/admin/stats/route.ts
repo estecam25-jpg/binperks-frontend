@@ -56,18 +56,18 @@ export async function GET(req: NextRequest) {
     admin.from('members').select('*', { count: 'exact', head: true }).not('origin_store_id', 'is', null),
     admin.from('merchants').select('*', { count: 'exact', head: true }).eq('commission_eligible', true),
     // Commissions BinPerks kept this period because the Origin Merchant was
-    // ineligible at payment time. Credit and debit are summed separately because
-    // the generated net_amount column's sign convention is settlement-side, and
-    // these entries are a BinPerks credit.
+    // ineligible at payment time. The ledger is merchant-centric: for a retained
+    // commission nothing is owed to the merchant, so /api/member/vip-webhook
+    // records credit_amount 0 and puts the $19.99 in debit_amount. Read
+    // debit_amount — summing credit - debit here would report it as negative.
     admin.from('settlement_ledger')
-      .select('credit_amount, debit_amount')
+      .select('debit_amount')
       .eq('ledger_entry_type', 'commission_retained_binperks')
       .eq('settlement_period', currentPeriod),
   ])
 
   const binperksRetainedThisMonth = (retainedRows ?? []).reduce(
-    (sum: number, r: { credit_amount: number | null; debit_amount: number | null }) =>
-      sum + Number(r.credit_amount ?? 0) - Number(r.debit_amount ?? 0),
+    (sum: number, r: { debit_amount: number | null }) => sum + Number(r.debit_amount ?? 0),
     0,
   )
 

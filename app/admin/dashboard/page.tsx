@@ -58,7 +58,24 @@ interface Member {
 }
 interface AlertItem { id: string; message: string; detail?: string }
 interface Alerts { critical: AlertItem[]; warning: AlertItem[]; good: AlertItem[] }
-type TabId = 'overview' | 'merchants' | 'stores' | 'members' | 'alerts'
+interface SettlementBatch {
+  id: string; settlementPeriod: string; status: string
+  membershipRevenue: number; commissionCredits: number; binperksRetained: number
+  couponDebits: number; couponCredits: number; binperksCouponFund: number
+  refundAdjustments: number; negativeBalances: number; merchantDistributions: number
+  merchantCount: number
+  approvedBy: string | null; approvedAt: string | null
+  transfersInitiatedAt: string | null; lockedAt: string | null; createdAt: string
+}
+interface SettlementStatement {
+  id: string; merchantId: string; merchantName: string
+  originCommissionCredits: number; couponDebits: number; couponCredits: number
+  refundAdjustments: number; chargebackAdjustments: number
+  priorNegativeBalance: number; grossDistribution: number
+  netDistribution: number; closingNegativeBalance: number
+  statementStatus: string | null; transferStatus: string | null
+}
+type TabId = 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'alerts'
 
 // ── Module-level helper components ────────────────────────────────────────
 
@@ -120,6 +137,30 @@ function TogglePill({ label, on, busy, onClick }: {
 
 function formatEventType(t: string) {
   return t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function money(n: number) {
+  return '$' + n.toFixed(2)
+}
+
+/** "2026-07" → "July 2026"; unexpected formats pass through unchanged. */
+function formatPeriod(period: string) {
+  const m = /^(\d{4})-(\d{2})$/.exec(period)
+  if (!m) return period
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, 1)
+  return Number.isNaN(d.getTime())
+    ? period
+    : d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
+const BATCH_STATUS_TONE: Record<string, 'green' | 'red' | 'gray' | 'amber' | 'blue'> = {
+  draft:            'gray',
+  calculated:       'amber',
+  pending_approval: 'amber',
+  approved:         'blue',
+  processing:       'blue',
+  completed:        'green',
+  locked:           'green',
 }
 
 function MerchantCard({
@@ -426,6 +467,17 @@ export default function AdminDashboardPage() {
   const [storeToggling, setStoreToggling] = useState<string | null>(null)  // `${storeId}:${field}`
   const [enrollmentConfirm, setEnrollmentConfirm] = useState<Store | null>(null)
 
+  // Phase 3: settlement batches
+  const [batches, setBatches] = useState<SettlementBatch[]>([])
+  const [previousPeriod, setPreviousPeriod] = useState('')
+  const [previousPeriodCalculated, setPreviousPeriodCalculated] = useState(true)
+  const [expandedBatch, setExpandedBatch] = useState<string | null>(null)
+  const [statementsByBatch, setStatementsByBatch] = useState<Record<string, SettlementStatement[]>>({})
+  const [statementsLoading, setStatementsLoading] = useState<string | null>(null)
+  const [settlementBusy, setSettlementBusy] = useState<string | null>(null)
+  const [settlementError, setSettlementError] = useState('')
+  const [approveConfirm, setApproveConfirm] = useState<SettlementBatch | null>(null)
+
   // Auth check
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
@@ -463,13 +515,26 @@ export default function AdminDashboardPage() {
     setTabLoading(null); setLoadedTabs(p => new Set([...p, 'alerts']))
   }, [])
 
+  const loadSettlement = useCallback(async (markLoaded = true) => {
+    if (markLoaded) setTabLoading('settlement')
+    const res = await fetch('/api/admin/settlement')
+    if (res.ok) {
+      const d = await res.json()
+      setBatches(d.batches ?? [])
+      setPreviousPeriod(d.previousPeriod ?? '')
+      setPreviousPeriodCalculated(!!d.previousPeriodCalculated)
+    }
+    if (markLoaded) { setTabLoading(null); setLoadedTabs(p => new Set([...p, 'settlement'])) }
+  }, [])
+
   useEffect(() => {
     if (!authed) return
     if (tab === 'overview'  && !loadedTabs.has('overview'))  loadOverview()
     if (tab === 'merchants' && !loadedTabs.has('merchants')) loadMerchants()
     if (tab === 'stores'    && !loadedTabs.has('stores'))    loadStores()
     if (tab === 'alerts'    && !loadedTabs.has('alerts'))    loadAlerts()
-  }, [tab, authed, loadedTabs, loadOverview, loadMerchants, loadStores, loadAlerts])
+    if (tab === 'settlement' && !loadedTabs.has('settlement')) loadSettlement()
+  }, [tab, authed, loadedTabs, loadOverview, loadMerchants, loadStores, loadAlerts, loadSettlement])
 
   const filteredMerchants = useMemo(() => merchants.filter(m => {
     const q = merchantSearch.trim().toLowerCase()
@@ -549,6 +614,73 @@ export default function AdminDashboardPage() {
       return
     }
     applyStoreToggle(store, field, next)
+  }
+
+  // ── Settlement ───────────────────────────────────────────────────────────
+
+  async function handleCalculateSettlement() {
+    setSettlementBusy('calculate'); setSettlementError('')
+    const res = await fetch('/api/admin/settlement/calculate', { method: 'POST' })
+    const d = await res.json().catch(() => null)
+    if (!res.ok) {
+      setSettlementError(
+        d?.error === 'batch_exists'
+          ? `A batch already exists for ${d.period}.`
+          : d?.message ?? 'Calculation failed. Check the server logs.',
+      )
+    } else {
+      await loadSettlement(false)
+    }
+    setSettlementBusy(null)
+  }
+
+  // Approval is the money gate — it never initiates a transfer, but it is the
+  // point of no return for the batch, so it routes through a confirmation.
+  async function handleApproveBatch(batch: SettlementBatch) {
+    setSettlementBusy(batch.id); setSettlementError('')
+    const res = await fetch('/api/admin/settlement/approve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchId: batch.id }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => null)
+      setSettlementError(d?.error === 'invalid_status'
+        ? `Batch is ${d.status} — only calculated batches can be approved.`
+        : 'Approval failed. Check the server logs.')
+      setSettlementBusy(null)
+      return
+    }
+
+    // Carry closing negative balances into merchant accounts straight after
+    // approval, so the next period starts from the correct opening balance.
+    const nbRes = await fetch('/api/admin/settlement/negative-balance', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchId: batch.id }),
+    })
+    if (!nbRes.ok) {
+      setSettlementError('Batch approved, but negative balances were not applied. Check the server logs.')
+    }
+
+    await loadSettlement(false)
+    if (expandedBatch === batch.id) await loadStatements(batch.id, true)
+    setSettlementBusy(null)
+  }
+
+  async function loadStatements(batchId: string, force = false) {
+    if (statementsByBatch[batchId] && !force) return
+    setStatementsLoading(batchId)
+    const res = await fetch(`/api/admin/settlement/${batchId}`)
+    if (res.ok) {
+      const d = await res.json()
+      setStatementsByBatch(prev => ({ ...prev, [batchId]: d.statements ?? [] }))
+    }
+    setStatementsLoading(null)
+  }
+
+  async function handleToggleBatch(batchId: string) {
+    if (expandedBatch === batchId) { setExpandedBatch(null); return }
+    setExpandedBatch(batchId)
+    await loadStatements(batchId)
   }
 
   async function handleMemberSearch(e: React.FormEvent) {
@@ -736,6 +868,151 @@ export default function AdminDashboardPage() {
     )
   }
 
+  function renderSettlement() {
+    if (tabLoading === 'settlement') return <Spinner />
+    return (
+      <div className="flex flex-col gap-3">
+
+        <div className="px-1">
+          <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">
+            Monthly batches are calculated and approved by hand. Approving records the
+            decision and carries negative balances forward — it does <strong>not</strong> move
+            money. Stripe Connect transfers are a separate step, still pending attorney
+            confirmation.
+          </p>
+        </div>
+
+        {settlementError && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+            <p className="text-[12px] font-semibold text-red-700">{settlementError}</p>
+          </div>
+        )}
+
+        {/* Calculate — only offered while last month has no batch */}
+        {!previousPeriodCalculated && previousPeriod && (
+          <button
+            onClick={handleCalculateSettlement}
+            disabled={settlementBusy === 'calculate'}
+            className="w-full py-3.5 rounded-xl text-[14px] font-bold text-white bg-[#4A4B98] disabled:opacity-40"
+          >
+            {settlementBusy === 'calculate'
+              ? 'Calculating…'
+              : `Calculate Settlement — ${formatPeriod(previousPeriod)}`}
+          </button>
+        )}
+        {previousPeriodCalculated && previousPeriod && (
+          <p className="text-[11px] text-[#8E8EA8] font-medium px-1">
+            {formatPeriod(previousPeriod)} has already been calculated.
+          </p>
+        )}
+
+        {batches.length === 0 && (
+          <div className="bg-white rounded-2xl py-14 px-6 text-center flex flex-col items-center gap-3">
+            <span className="text-3xl">🧾</span>
+            <p className="text-[13px] font-semibold text-[#8E8EA8] max-w-xs leading-relaxed">
+              No settlement batches yet. Calculate the first one once a month of VIP
+              payments has closed.
+            </p>
+          </div>
+        )}
+
+        {batches.map(b => {
+          const expanded = expandedBatch === b.id
+          const stmts    = statementsByBatch[b.id]
+          return (
+            <div key={b.id} className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3">
+
+              <button onClick={() => handleToggleBatch(b.id)} className="flex items-start justify-between gap-2 text-left">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-[14px] font-bold text-[#1A1A2E]">{formatPeriod(b.settlementPeriod)}</p>
+                    <Pill label={b.status.replace(/_/g, ' ')} tone={BATCH_STATUS_TONE[b.status] ?? 'gray'} />
+                  </div>
+                  <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
+                    {b.merchantCount} merchant{b.merchantCount === 1 ? '' : 's'}
+                    {b.approvedBy ? ` · approved by ${b.approvedBy}` : ''}
+                  </p>
+                </div>
+                <span className={`text-[#8E8EA8] transition-transform ${expanded ? 'rotate-90' : ''}`}>▸</span>
+              </button>
+
+              <div className="grid grid-cols-3 gap-1 text-center">
+                <div>
+                  <p className="text-[13px] font-bold text-[#2A7D34]">{money(b.merchantDistributions)}</p>
+                  <p className="text-[9px] text-[#8E8EA8] font-medium">to merchants</p>
+                </div>
+                <div>
+                  <p className="text-[13px] font-bold text-[#4A4B98]">{money(b.binperksRetained)}</p>
+                  <p className="text-[9px] text-[#8E8EA8] font-medium">BinPerks kept</p>
+                </div>
+                <div>
+                  <p className="text-[13px] font-bold text-[#1A1A2E]">{money(b.membershipRevenue)}</p>
+                  <p className="text-[9px] text-[#8E8EA8] font-medium">member revenue</p>
+                </div>
+              </div>
+
+              {b.negativeBalances > 0 && (
+                <p className="text-[11px] font-semibold text-[#DA1212] bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">
+                  {money(b.negativeBalances)} carried forward as negative balance
+                </p>
+              )}
+
+              {/* Approve — only for a batch still awaiting sign-off */}
+              {(b.status === 'calculated' || b.status === 'pending_approval') && (
+                <button
+                  onClick={() => setApproveConfirm(b)}
+                  disabled={settlementBusy === b.id}
+                  className="w-full py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#2A7D34] disabled:opacity-40"
+                >
+                  {settlementBusy === b.id ? '…' : 'Approve batch'}
+                </button>
+              )}
+
+              {expanded && (
+                <div className="border border-[#EBEBF2] rounded-xl overflow-hidden">
+                  {statementsLoading === b.id ? (
+                    <p className="text-[11px] text-[#8E8EA8] font-medium px-3 py-3">Loading…</p>
+                  ) : !stmts || stmts.length === 0 ? (
+                    <p className="text-[11px] text-[#8E8EA8] font-medium px-3 py-3">
+                      No merchant statements in this batch.
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-[#EBEBF2]">
+                      {stmts.map(s => (
+                        <div key={s.id} className="px-3 py-3 flex flex-col gap-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[12px] font-bold text-[#1A1A2E] truncate">{s.merchantName}</p>
+                            <span className="font-['Coiny'] text-lg text-[#2A7D34] flex-shrink-0">
+                              {money(s.netDistribution)}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-[#8E8EA8] font-medium leading-relaxed">
+                            commissions {money(s.originCommissionCredits)}
+                            {' · '}coupons funded −{money(s.couponDebits)}
+                            {' · '}coupons honoured +{money(s.couponCredits)}
+                            {(s.refundAdjustments > 0 || s.chargebackAdjustments > 0) &&
+                              ` · adjustments −${money(s.refundAdjustments + s.chargebackAdjustments)}`}
+                          </p>
+                          {(s.priorNegativeBalance > 0 || s.closingNegativeBalance > 0) && (
+                            <p className="text-[10px] font-semibold text-[#DA1212]">
+                              {s.priorNegativeBalance > 0 && `prior balance −${money(s.priorNegativeBalance)}`}
+                              {s.priorNegativeBalance > 0 && s.closingNegativeBalance > 0 && ' · '}
+                              {s.closingNegativeBalance > 0 && `carries forward ${money(s.closingNegativeBalance)}`}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   function renderAlerts() {
     if (tabLoading === 'alerts') return <Spinner />
     if (!alerts) return <p className="text-[13px] text-[#8E8EA8]">No data.</p>
@@ -784,6 +1061,7 @@ export default function AdminDashboardPage() {
     { id: 'merchants', label: 'Merchants' },
     { id: 'stores',    label: 'Stores' },
     { id: 'members',   label: 'Members' },
+    { id: 'settlement', label: 'Settlement' },
     { id: 'alerts',    label: 'Alerts' },
   ]
 
@@ -823,6 +1101,7 @@ export default function AdminDashboardPage() {
         {tab === 'merchants' && renderMerchants()}
         {tab === 'stores'    && renderStores()}
         {tab === 'members'   && renderMembers()}
+        {tab === 'settlement' && renderSettlement()}
         {tab === 'alerts'    && renderAlerts()}
       </main>
 
@@ -857,6 +1136,47 @@ export default function AdminDashboardPage() {
                 className="flex-1 py-3 rounded-xl text-[14px] font-bold text-white bg-[#DA1212] disabled:opacity-40"
               >
                 {actionLoading === w9RejectTarget + 'reject_w9' ? '…' : 'Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approve settlement batch confirmation */}
+      {approveConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center px-4 z-50">
+          <div className="bg-white rounded-3xl px-6 py-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl">
+            <h3 className="font-['Coiny'] text-xl text-[#1A1A2E]">
+              Approve {formatPeriod(approveConfirm.settlementPeriod)}?
+            </h3>
+            <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
+              This records your approval of {money(approveConfirm.merchantDistributions)} across{' '}
+              {approveConfirm.merchantCount} merchant{approveConfirm.merchantCount === 1 ? '' : 's'} and
+              carries any negative balances into next period.
+            </p>
+            <p className="text-[12px] font-semibold text-[#1A1A2E] bg-[#F5F5F8] rounded-xl px-3 py-2.5 leading-relaxed">
+              No money moves. Stripe Connect transfers are a separate step and are not
+              wired up yet.
+            </p>
+            <p className="text-[11px] text-[#8E8EA8] font-medium">
+              Approval cannot be undone from this screen.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setApproveConfirm(null)}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-[#8E8EA8] border-2 border-[#EBEBF2]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const target = approveConfirm
+                  setApproveConfirm(null)
+                  handleApproveBatch(target)
+                }}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-white bg-[#2A7D34]"
+              >
+                Approve
               </button>
             </div>
           </div>

@@ -35,12 +35,17 @@ function formatMoney(amount: number | null): string {
   return `$${amount.toFixed(2)}`
 }
 
+// Keys match merchant_settlement_statements.statement_status
+// (draft | approved | transferred | failed | adjusted), plus a couple of
+// transfer-status values that render through the same pill.
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
-  paid:     { bg: '#2A7D3415', color: '#2A7D34' },
-  approved: { bg: '#4A4B9815', color: '#4A4B98' },
-  draft:    { bg: '#8E8EA815', color: '#8E8EA8' },
-  pending:  { bg: '#FFB21725', color: '#8A6A00' },
-  failed:   { bg: '#DA121215', color: '#DA1212' },
+  paid:        { bg: '#2A7D3415', color: '#2A7D34' },
+  transferred: { bg: '#2A7D3415', color: '#2A7D34' },
+  approved:    { bg: '#4A4B9815', color: '#4A4B98' },
+  adjusted:    { bg: '#FFB21725', color: '#8A6A00' },
+  draft:       { bg: '#8E8EA815', color: '#8E8EA8' },
+  pending:     { bg: '#FFB21725', color: '#8A6A00' },
+  failed:      { bg: '#DA121215', color: '#DA1212' },
 }
 
 function StatusPill({ label }: { label: string }) {
