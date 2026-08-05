@@ -134,7 +134,7 @@ export default function MemberDashboardPage() {
     return (
       <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
         <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: brandColor }}>
-          <span className="font-['Coiny'] text-xl leading-none text-white">{brandName}</span>
+          <span className="font-['Coiny'] text-xl leading-none text-white">BinPerks Member</span>
         </div>
         <main className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-3">
           <span className="text-3xl">⚠️</span>
@@ -172,7 +172,9 @@ export default function MemberDashboardPage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* White-label header */}
+      {/* Network header — BinPerks is the primary identity (V3 principle 1 & 2).
+          The store keeps its brand color and logo, but reads as the location the
+          member belongs to, not as the program itself. */}
       <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: brandColor }}>
         {store?.logoUrl ? (
           <div className="w-8 h-8 rounded-full bg-white overflow-hidden flex-shrink-0 shadow-sm">
@@ -185,18 +187,23 @@ export default function MemberDashboardPage() {
             />
           </div>
         ) : null}
-        <span className="font-['Coiny'] text-xl leading-none text-white">{storeName}</span>
-        <span className="text-white/50 text-[10px] font-semibold tracking-widest uppercase ml-auto">
-          Powered by BinPerks
-        </span>
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <span className="font-['Coiny'] text-xl leading-none text-white">BinPerks Member</span>
+          {store && (
+            <span className="text-white/70 text-[11px] font-semibold truncate">{storeName}</span>
+          )}
+        </div>
       </div>
 
       <main className="flex-1 flex flex-col items-center px-4 py-7 gap-4 max-w-md mx-auto w-full">
 
-        {/* Greeting + tier */}
+        {/* Greeting + tier + membership status */}
         <div className="w-full flex flex-col items-center text-center gap-1.5">
           <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Hi, {member.firstName}</h1>
-          <TierBadge totalStamps={member.totalStamps} tierName={isFree ? 'Free' : undefined} />
+          <TierBadge totalStamps={member.totalStamps} tierName={isFree ? 'Free' : undefined} networkLabel />
+          <p className="text-[12px] text-[#8E8EA8] font-medium">
+            BinPerks network membership
+          </p>
         </div>
 
         {/* Stamp progress card */}
@@ -234,7 +241,7 @@ export default function MemberDashboardPage() {
           <div className="w-full rounded-2xl px-5 py-4 flex items-center gap-3.5" style={{ backgroundColor: '#FFB217' }}>
             <span className="text-3xl flex-shrink-0">{approachingBanner.emoji}</span>
             <p className="text-[14px] font-semibold text-[#1A1A2E] leading-snug">
-              You’re almost a <strong>{approachingBanner.label} BinPerks member!</strong> Just a few more visits to unlock your <strong>{approachingBanner.mult}x stamp multiplier!</strong>
+              You’re almost a <strong>BinPerks {approachingBanner.label} Member!</strong> Just a few more visits to unlock your <strong>{approachingBanner.mult}x stamp multiplier!</strong>
             </p>
           </div>
         )}
@@ -255,6 +262,9 @@ export default function MemberDashboardPage() {
                 <div className="font-['Coiny'] text-xl text-white flex-shrink-0">${r.couponValue}</div>
               </div>
             ))}
+            <p className="text-[11px] text-[#8E8EA8] font-medium px-1 leading-relaxed">
+              Redeemable at any participating BinPerks location.
+            </p>
           </div>
         )}
 
@@ -298,19 +308,23 @@ export default function MemberDashboardPage() {
           </div>
         </div>
 
-        {/* Perks at this store */}
+        {/* Member perks — each perk names the store that provides it, since perks
+            are merchant-specific offers inside a network-wide membership. */}
         {(freePerks.length > 0 || vipPerks.length > 0) && (
           <div className="w-full flex flex-col gap-2.5">
             <p className="text-[12px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] px-1">
-              Perks at {brandName}
+              Member perks
             </p>
 
             {/* Free perks — visible to all members */}
             {freePerks.map(p => (
               <div key={p.id} className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm">
                 <p className="text-[14px] font-bold text-[#1A1A2E]">{p.title}</p>
+                {store && (
+                  <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">Provided by {storeName}</p>
+                )}
                 {p.description && (
-                  <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">{p.description}</p>
+                  <p className="text-[12px] text-[#8E8EA8] font-medium mt-1 leading-relaxed">{p.description}</p>
                 )}
               </div>
             ))}
@@ -320,8 +334,11 @@ export default function MemberDashboardPage() {
               isFree ? (
                 <div key={p.id} className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm relative overflow-hidden">
                   <p className="text-[14px] font-bold text-[#D1D1DC]">{p.title}</p>
+                  {store && (
+                    <p className="text-[11px] text-[#D1D1DC] font-medium mt-0.5">Provided by {storeName}</p>
+                  )}
                   {p.description && (
-                    <p className="text-[12px] text-[#D1D1DC] font-medium mt-0.5 leading-relaxed">{p.description}</p>
+                    <p className="text-[12px] text-[#D1D1DC] font-medium mt-1 leading-relaxed">{p.description}</p>
                   )}
                   <div className="absolute inset-0 flex items-center justify-end pr-4">
                     <span
@@ -340,8 +357,11 @@ export default function MemberDashboardPage() {
                     </span>
                     <p className="text-[14px] font-bold text-[#1A1A2E]">{p.title}</p>
                   </div>
+                  {store && (
+                    <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">Provided by {storeName}</p>
+                  )}
                   {p.description && (
-                    <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">{p.description}</p>
+                    <p className="text-[12px] text-[#8E8EA8] font-medium mt-1 leading-relaxed">{p.description}</p>
                   )}
                 </div>
               )

@@ -34,11 +34,29 @@ export function stampsToNextCoupon(totalStamps: number): number {
   return pos === 0 ? 20 : 20 - pos
 }
 
-// Display-only names. 'Free' is Starter for free members; passed explicitly, never from getTier().
+// Display-only. 'Free' is Starter for free members; passed explicitly, never from getTier().
+// Emoji and label are kept separate so V3 network copy can compose them differently
+// ("🥇 BinPerks Gold Member") without duplicating the tier vocabulary.
+export const TIER_EMOJI: Record<TierName, string> = {
+  Free:    '🪨',
+  Bronze:  '🥉',
+  Silver:  '🥈',
+  Gold:    '🥇',
+  Diamond: '💎',
+}
+
+export const TIER_LABELS: Record<TierName, string> = {
+  Free:    'Starter',
+  Bronze:  'Bronze',
+  Silver:  'Silver',
+  Gold:    'Gold',
+  Diamond: 'Diamond',
+}
+
 export const TIER_DISPLAY_NAMES: Record<TierName, string> = {
-  Free:    '🪨 Starter',
-  Bronze:  '🥉 Bronze',
-  Silver:  '🥈 Silver',
-  Gold:    '🥇 Gold',
-  Diamond: '💎 Diamond',
+  Free:    `${TIER_EMOJI.Free} ${TIER_LABELS.Free}`,
+  Bronze:  `${TIER_EMOJI.Bronze} ${TIER_LABELS.Bronze}`,
+  Silver:  `${TIER_EMOJI.Silver} ${TIER_LABELS.Silver}`,
+  Gold:    `${TIER_EMOJI.Gold} ${TIER_LABELS.Gold}`,
+  Diamond: `${TIER_EMOJI.Diamond} ${TIER_LABELS.Diamond}`,
 }
