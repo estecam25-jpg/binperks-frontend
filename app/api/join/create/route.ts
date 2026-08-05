@@ -213,6 +213,14 @@ export async function POST(req: NextRequest) {
 
     // 6. Notify GHL (fire-and-forget — don't block the response).
     //    Skipped if GHL_MEMBER_CREATED_WEBHOOK_URL is not yet configured.
+    //
+    //    V3 network language: the SMS/email copy itself lives in the GoHighLevel
+    //    workflow, not here — this route only supplies merge values. `storeName`
+    //    stays the bare store name so existing {{storeName}} merge tags keep
+    //    rendering correctly. `networkStoreName` carries the V3 framing
+    //    ("BinPerks at EstaBins Tampa") for the workflow to switch over to, so a
+    //    member reads as joining the network through a store rather than joining
+    //    that store's own program.
     const finalReferralUrl = `${APP_URL}/member/join/${store.canonical_key}?ref=${referralCode}`
     const ghlWebhook = process.env.GHL_MEMBER_CREATED_WEBHOOK_URL
     if (ghlWebhook) {
@@ -225,8 +233,9 @@ export async function POST(req: NextRequest) {
           lastName,
           phone,
           email,
-          storeName:   store.display_name,
-          referralUrl: finalReferralUrl,
+          storeName:        store.display_name,
+          networkStoreName: `BinPerks at ${store.display_name}`,
+          referralUrl:      finalReferralUrl,
         }),
       }).catch(err => console.error('[/api/join/create] GHL webhook error:', err))
     }
