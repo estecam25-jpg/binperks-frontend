@@ -5,10 +5,11 @@
  *
  * Steps:
  *   1. Normalize phone (digits only), check uniqueness within merchant
- *   2. Look up store's canonical_key (for the referral_url)
+ *   2. Look up store's canonical_key + merchant_id (referral_url + Origin Store attribution)
  *   3. Create Supabase auth user (passwordless — magic link only, no provider send;
  *      GHL delivers the actual SMS with the link per the locked Auth Architecture)
- *   4. Insert members row with home_store_id, merchant_id, referral fields
+ *   4. Insert members row with home_store_id, merchant_id, referral fields, and the
+ *      permanent V3 Origin Store attribution (origin_store_id / origin_merchant_id)
  *   5. If referred: create referrals row (status: 'pending')
  *   6. TODO: POST to GHL webhook to create the contact + trigger welcome SMS
  *      (Express backend route not built yet — see SIGNUP_FUNNEL_README contract)
@@ -75,14 +76,19 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (existing) {
+      // Returning member — bail out before any write. Origin Store attribution is
+      // permanent (V3 rule 18): an existing member's origin_* fields are never
+      // re-derived or overwritten by a second trip through the signup form.
       return NextResponse.json({ error: 'phone_exists' }, { status: 409 })
     }
 
     // 2. Look up the store's canonical_key so the referral_url points at the
-    //    right /member/join/[storeKey] funnel (QR codes use the same canonical_key)
+    //    right /member/join/[storeKey] funnel (QR codes use the same canonical_key).
+    //    merchant_id comes from this row too — the store record is the authoritative
+    //    source for Origin Store attribution, not the client-supplied merchantId.
     const { data: store, error: storeError } = await supabase
       .from('stores')
-      .select('canonical_key, display_name')
+      .select('canonical_key, display_name, merchant_id')
       .eq('id', storeId)
       .single()
 
@@ -148,6 +154,20 @@ export async function POST(req: NextRequest) {
           referral_code:         referralCode,
           referral_url:          referralUrl,
           created_at:            new Date().toISOString(),
+
+          // ── V3 Origin Store attribution ──────────────────────────────────
+          // Written ONCE, here, at enrollment. Permanent for the life of the
+          // member — never updated, reassigned, or transferred (V3 rule 18).
+          // The Origin Store earns the $19.99 merchant commission on this
+          // member's VIP payments while its merchant stays commission_eligible.
+          origin_store_id:          storeId,
+          origin_merchant_id:       store.merchant_id,
+          origin_enrolled_at:       new Date().toISOString(),
+          origin_enrollment_source: 'qr_code',            // all signup-page enrollments
+          origin_migration_source:  'v3_enrollment',      // live enrollment, not a backfill
+          origin_confidence:        'enrollment_record',  // highest — direct enrollment
+          origin_migration_notes:   'Enrolled via member signup page at launch',
+          origin_admin_reviewed:    true,                 // live enrollments need no review
         })
         .select('id')
         .single()
