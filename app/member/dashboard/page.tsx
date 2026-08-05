@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase'
 import TierBadge from '@/components/stamp/TierBadge'
+import Scanner from './Scanner'
 import { getTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
 
 interface MemberData {
@@ -245,6 +246,9 @@ export default function MemberDashboardPage() {
             </p>
           </div>
         )}
+
+        {/* AI Product Scanner — available to ALL members, Starter and VIP */}
+        <Scanner brandColor={brandColor} />
 
         {/* Active coupons */}
         {activeRewards.length > 0 && (
