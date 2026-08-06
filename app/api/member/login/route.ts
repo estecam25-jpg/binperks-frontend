@@ -2,20 +2,13 @@
  * POST /api/member/login
  *
  * Step 1 of passwordless member sign-in. The member submits their phone
- * number; we resolve the matching member record(s), mint a Supabase magic-link
- * token via the admin client, then issue our own 8-digit code that maps to
- * that token in Redis. GHL/Twilio delivers the code by SMS — Supabase's phone
- * provider is OFF permanently, GHL sends all member SMS per the locked Auth
- * Architecture.
+ * number; we resolve the matching member record(s) and issue an 8-digit SMS
+ * code via lib/member-otp (see that file for the Redis keys and why the
+ * Supabase token stays server-side). The member types the code back into the
+ * login page, which POSTs to /api/member/verify-code.
  *
- * The Supabase hashed_token never leaves the server and never appears in a
- * URL. The member proves possession of the phone by typing the 8-digit code
- * back into the login page, which POSTs to /api/member/verify-code.
- *
- * Redis keys written (all 10-minute TTL, keyed by phone):
- *   member_otp:{phone}          → the 8-digit code
- *   member_token:{phone}        → the Supabase hashed_token
- *   member_otp_attempts:{phone} → cleared here, incremented by verify-code
+ * The 404 on an unknown phone is also what the combined sign-in/join flow on
+ * the home page keys off to decide a caller is a new member.
  *
  * Members are merchant-scoped, so the same phone number can legitimately
  * belong to more than one merchant's member list. We never reveal which —
@@ -35,15 +28,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { Redis } from '@upstash/redis'
-import { randomInt } from 'node:crypto'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-
-const APP_URL = 'https://app.binperks.com'
-
-/** Code lifetime in Redis. Shorter than Supabase's own token expiry (~60 min)
- *  so the code is always the binding constraint. */
-const OTP_TTL_SECONDS = 10 * 60
+import { issueMemberOtp, redisClient } from '@/lib/member-otp'
 
 interface LoginRequest {
   phone: string
@@ -60,12 +46,6 @@ interface MemberRow {
   merchant_id: string
 }
 
-/** 8-digit numeric code, 10000000–99999999. Uses crypto rather than
- *  Math.random() because this value is an authentication credential. */
-function generateOtpCode(): string {
-  return randomInt(10_000_000, 100_000_000).toString()
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as Partial<LoginRequest>
@@ -79,10 +59,7 @@ export async function POST(req: NextRequest) {
     // Rate limiting: max 5 code requests per phone per 15-minute window.
     // Covers both the initial send and the "Resend code" button. Prevents SMS
     // credit abuse and phone enumeration via timing differences.
-    const redis = new Redis({
-      url: process.env.KV_REST_API_URL!,
-      token: process.env.KV_REST_API_TOKEN!,
-    })
+    const redis = redisClient()
     const rateLimitKey = `ratelimit:login:${phone}`
     const requests = await redis.incr(rateLimitKey)
     if (requests === 1) {
@@ -149,51 +126,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
 
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: member.email,
-      options: {
-        redirectTo: `${APP_URL}/auth/callback?next=/member/dashboard`,
-      },
+    const issued = await issueMemberOtp({
+      admin,
+      redis,
+      memberId:  member.id,
+      phone,
+      firstName: member.first_name,
+      email:     member.email,
     })
 
-    if (linkError || !linkData) {
-      console.error('[/api/member/login] generateLink error:', linkError)
+    if (!issued.ok) {
       return NextResponse.json({ error: 'Failed to generate sign-in code' }, { status: 500 })
-    }
-
-    // Pair our 8-digit code with the Supabase token in Redis. Both expire
-    // together; the attempt counter resets so a resend gives a clean slate.
-    const code = generateOtpCode()
-    try {
-      await Promise.all([
-        redis.set(`member_otp:${phone}`, code, { ex: OTP_TTL_SECONDS }),
-        redis.set(`member_token:${phone}`, linkData.properties.hashed_token, { ex: OTP_TTL_SECONDS }),
-        redis.del(`member_otp_attempts:${phone}`),
-      ])
-    } catch (err) {
-      console.error('[/api/member/login] Redis write error:', err)
-      return NextResponse.json({ error: 'Failed to generate sign-in code' }, { status: 500 })
-    }
-
-    // Awaited: send the code to the member via GHL → SMS.
-    // GHL template: "Your BinPerks sign-in code is: {{code}}. Expires in 10 minutes."
-    const ghlWebhook = process.env.GHL_MAGIC_LINK_WEBHOOK_URL
-    if (ghlWebhook) {
-      try {
-        await fetch(ghlWebhook, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            memberId:  member.id,
-            phone,
-            firstName: member.first_name,
-            code,
-          }),
-        })
-      } catch (err) {
-        console.error('[/api/member/login] GHL webhook error:', err)
-      }
     }
 
     return NextResponse.json({ ok: true })

@@ -24,6 +24,9 @@ interface ScanResult {
   identifiedCategory: string
   confidence: number
   description: string
+  /** Display text like "$24.99 – $39.99". Empty when the model had no
+   *  estimate. This is typical retail value, not the store's price. */
+  estimatedRetailPrice: string
 }
 
 // Below this, we tell the member outright that we're guessing rather than
@@ -159,18 +162,24 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
       {!open ? null : (
         <div className="fixed inset-0 z-50 bg-[#F5F5F8] flex flex-col">
 
-          {/* Header */}
+          {/* Header. Close is deliberately absent once a result is on screen:
+              the member answers Shopping Cart or Back to Bins, and the exit is
+              via "Scan another item" back to the capture screen. Keeping it on
+              the capture screen means they can always back out before scanning
+              rather than being trapped in the overlay. */}
           <div className="px-5 py-4 flex items-center gap-3" style={{ backgroundColor: brandColor }}>
             <span className="font-['Coiny'] text-xl text-white leading-none flex-1">
               BinPerks Scanner
             </span>
-            <button
-              onClick={close}
-              className="text-white/70 text-[13px] font-bold px-2 py-1"
-              aria-label="Close scanner"
-            >
-              Close
-            </button>
+            {!result && (
+              <button
+                onClick={close}
+                className="text-white/70 text-[13px] font-bold px-2 py-1"
+                aria-label="Close scanner"
+              >
+                Close
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4 max-w-md mx-auto w-full">
@@ -217,6 +226,23 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                 <p className="text-[12px] font-semibold text-[#4A4B98]">
                   {result.identifiedCategory}
                 </p>
+
+                {/* Retail estimate. Labelled as a typical retail range, never
+                    as this store's price — the model has no idea what the bin
+                    costs today, and members must not read it as one. */}
+                {result.estimatedRetailPrice && (
+                  <div className="mt-1 rounded-xl bg-[#F5F5F8] px-3.5 py-2.5">
+                    <p className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
+                      Estimated retail
+                    </p>
+                    <p className="text-[15px] font-bold text-[#1A1A2E] mt-0.5 leading-snug">
+                      {result.estimatedRetailPrice}
+                    </p>
+                    <p className="text-[10px] text-[#8E8EA8] font-medium mt-1 leading-relaxed">
+                      Typical price at retail — not this store&apos;s price.
+                    </p>
+                  </div>
+                )}
 
                 {result.description && (
                   <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed mt-0.5">
@@ -277,18 +303,14 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                   {choice === 'shopping_cart' ? 'Added to your cart list' : 'Back in the bins it goes'}
                 </p>
                 <p className="text-[12px] text-[#8E8EA8] font-medium">Scan another item?</p>
+                {/* The only option after a choice. Returns to the capture
+                    screen, which is where Close lives. */}
                 <button
                   onClick={reset}
                   className="w-full py-4 rounded-2xl font-bold text-[15px] text-white"
                   style={{ backgroundColor: brandColor }}
                 >
                   📷 Scan another item
-                </button>
-                <button
-                  onClick={close}
-                  className="text-[13px] font-semibold text-[#8E8EA8] underline"
-                >
-                  Done for now
                 </button>
               </div>
             )}

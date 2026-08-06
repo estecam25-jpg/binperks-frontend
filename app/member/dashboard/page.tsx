@@ -1,13 +1,25 @@
 'use client'
 
+/**
+ * Member dashboard.
+ *
+ * V3: this is a BinPerks surface, not a store surface. It uses BinPerks
+ * colors only — the member belongs to the network, and the Origin Store is
+ * an attribution fact, not a skin. Store-specific content lives inside the
+ * store finder, where each store is one of many.
+ */
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { createClient } from '@/lib/supabase'
 import TierBadge from '@/components/stamp/TierBadge'
 import Scanner from './Scanner'
+import StoreFinder from './StoreFinder'
 import { getTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
+
+/** The only brand color on this page. */
+const BINPERKS_BLUE = '#4A4B98'
 
 interface MemberData {
   id: string
@@ -47,21 +59,12 @@ interface Reward {
   redeemedAt: string | null
 }
 
-interface Perk {
-  id: string
-  slot: number
-  title: string
-  description: string
-}
-
 export default function MemberDashboardPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [member, setMember] = useState<MemberData | null>(null)
   const [store, setStore] = useState<StoreData | null>(null)
   const [rewards, setRewards] = useState<Reward[]>([])
-  const [freePerks, setFreePerks] = useState<Perk[]>([])
-  const [vipPerks, setVipPerks] = useState<Perk[]>([])
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -79,8 +82,6 @@ export default function MemberDashboardPage() {
       setMember(data.member)
       setStore(data.store)
       setRewards(data.rewards ?? [])
-      setFreePerks(data.freePerks ?? [])
-      setVipPerks(data.vipPerks ?? [])
       setLoading(false)
     }
     load()
@@ -115,7 +116,7 @@ export default function MemberDashboardPage() {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-[#F5F5F8] px-6 text-center gap-4">
         <p className="text-[15px] font-semibold text-[#1A1A2E] max-w-xs leading-relaxed">
-          Check your texts for a sign-in link to access your dashboard.
+          Sign in with the code we text you to access your dashboard.
         </p>
         <button
           onClick={() => router.replace('/member/login')}
@@ -127,14 +128,10 @@ export default function MemberDashboardPage() {
     )
   }
 
-  const brandColor = store?.brandColor ?? '#4A4B98'
-  const brandName = store?.brandName ?? 'BinPerks'
-  const storeName = store?.storeName ?? 'BinPerks'
-
   if (member.isBlacklisted) {
     return (
       <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
-        <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: brandColor }}>
+        <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: BINPERKS_BLUE }}>
           <span className="font-['Coiny'] text-xl leading-none text-white">BinPerks Member</span>
         </div>
         <main className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-3">
@@ -173,35 +170,24 @@ export default function MemberDashboardPage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* Network header — BinPerks is the primary identity (V3 principle 1 & 2).
-          The store keeps its brand color and logo, but reads as the location the
-          member belongs to, not as the program itself. */}
-      <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: brandColor }}>
-        {store?.logoUrl ? (
-          <div className="w-8 h-8 rounded-full bg-white overflow-hidden flex-shrink-0 shadow-sm">
-            <Image
-              src={store.logoUrl}
-              alt={brandName}
-              width={32}
-              height={32}
-              className="object-cover w-full h-full"
-            />
-          </div>
-        ) : null}
-        <div className="flex flex-col gap-0.5 min-w-0">
-          <span className="font-['Coiny'] text-xl leading-none text-white">BinPerks Member</span>
-          {store && (
-            <span className="text-white/70 text-[11px] font-semibold truncate">{storeName}</span>
-          )}
-        </div>
+      {/* BinPerks-only header. No store name, no store logo, no store color —
+          the membership is with the network. */}
+      <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: BINPERKS_BLUE }}>
+        <span className="font-['Coiny'] text-xl leading-none text-white flex-1">
+          BinPerks Member
+        </span>
+        <TierBadge
+          totalStamps={member.totalStamps}
+          subscriptionStatus={member.subscriptionStatus}
+          className="flex-shrink-0"
+        />
       </div>
 
       <main className="flex-1 flex flex-col items-center px-4 py-7 gap-4 max-w-md mx-auto w-full">
 
-        {/* Greeting + tier + membership status */}
+        {/* Greeting. The tier badge lives in the header now — one badge, not two. */}
         <div className="w-full flex flex-col items-center text-center gap-1.5">
           <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Hi, {member.firstName}</h1>
-          <TierBadge totalStamps={member.totalStamps} tierName={isFree ? 'Free' : undefined} networkLabel />
           <p className="text-[12px] text-[#8E8EA8] font-medium">
             BinPerks network membership
           </p>
@@ -248,7 +234,7 @@ export default function MemberDashboardPage() {
         )}
 
         {/* AI Product Scanner — available to ALL members, Starter and VIP */}
-        <Scanner brandColor={brandColor} />
+        <Scanner brandColor={BINPERKS_BLUE} />
 
         {/* Active coupons */}
         {activeRewards.length > 0 && (
@@ -277,15 +263,15 @@ export default function MemberDashboardPage() {
           <Link
             href="/member/upgrade"
             className="w-full rounded-2xl p-5 flex flex-col gap-2"
-            style={{ backgroundColor: `${brandColor}12`, border: `1.5px solid ${brandColor}30` }}
+            style={{ backgroundColor: `${BINPERKS_BLUE}12`, border: `1.5px solid ${BINPERKS_BLUE}30` }}
           >
-            <p className="font-['Coiny'] text-lg" style={{ color: brandColor }}>Keep earning with VIP</p>
+            <p className="font-['Coiny'] text-lg" style={{ color: BINPERKS_BLUE }}>Keep earning with VIP</p>
             <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">
               {hasUsedFreeLifetimeCoupon
                 ? "You've used your one lifetime Starter coupon. Upgrade to VIP ($29.99/mo) to keep earning stamps and unlock bigger coupons."
                 : 'Upgrade to VIP ($29.99/mo) to earn stamps faster and unlock bigger coupons.'}
             </p>
-            <span className="text-[13px] font-bold mt-1" style={{ color: brandColor }}>See VIP perks</span>
+            <span className="text-[13px] font-bold mt-1" style={{ color: BINPERKS_BLUE }}>See VIP perks</span>
           </Link>
         )}
 
@@ -303,8 +289,8 @@ export default function MemberDashboardPage() {
               onClick={handleCopyReferral}
               className="flex-shrink-0 text-[12px] font-bold px-3 py-1.5 rounded-lg transition-colors"
               style={{
-                backgroundColor: copied ? '#2A7D34' : `${brandColor}15`,
-                color: copied ? 'white' : brandColor,
+                backgroundColor: copied ? '#2A7D34' : `${BINPERKS_BLUE}15`,
+                color: copied ? 'white' : BINPERKS_BLUE,
               }}
             >
               {copied ? '✓ Copied' : 'Copy'}
@@ -312,72 +298,19 @@ export default function MemberDashboardPage() {
           </div>
         </div>
 
-        {/* Member perks — each perk names the store that provides it, since perks
-            are merchant-specific offers inside a network-wide membership. */}
-        {(freePerks.length > 0 || vipPerks.length > 0) && (
-          <div className="w-full flex flex-col gap-2.5">
-            <p className="text-[12px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] px-1">
-              Member perks
-            </p>
+        {/* Store finder — replaces the old single-store perks list. Perks are
+            merchant-specific offers inside a network-wide membership, so they
+            belong to a store in a list of stores, not to the dashboard. */}
+        <StoreFinder isFree={isFree} />
 
-            {/* Free perks — visible to all members */}
-            {freePerks.map(p => (
-              <div key={p.id} className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm">
-                <p className="text-[14px] font-bold text-[#1A1A2E]">{p.title}</p>
-                {store && (
-                  <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">Provided by {storeName}</p>
-                )}
-                {p.description && (
-                  <p className="text-[12px] text-[#8E8EA8] font-medium mt-1 leading-relaxed">{p.description}</p>
-                )}
-              </div>
-            ))}
-
-            {/* VIP perks -- fully shown to VIP, grayed out for free members */}
-            {vipPerks.map(p =>
-              isFree ? (
-                <div key={p.id} className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm relative overflow-hidden">
-                  <p className="text-[14px] font-bold text-[#D1D1DC]">{p.title}</p>
-                  {store && (
-                    <p className="text-[11px] text-[#D1D1DC] font-medium mt-0.5">Provided by {storeName}</p>
-                  )}
-                  {p.description && (
-                    <p className="text-[12px] text-[#D1D1DC] font-medium mt-1 leading-relaxed">{p.description}</p>
-                  )}
-                  <div className="absolute inset-0 flex items-center justify-end pr-4">
-                    <span
-                      className="text-[10px] font-bold px-2.5 py-1 rounded-full"
-                      style={{ backgroundColor: `${brandColor}18`, color: brandColor }}
-                    >
-                      VIP Only — Upgrade to unlock
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div key={p.id} className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded-full bg-[#4A4B98] text-white flex-shrink-0">
-                      VIP
-                    </span>
-                    <p className="text-[14px] font-bold text-[#1A1A2E]">{p.title}</p>
-                  </div>
-                  {store && (
-                    <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">Provided by {storeName}</p>
-                  )}
-                  {p.description && (
-                    <p className="text-[12px] text-[#8E8EA8] font-medium mt-1 leading-relaxed">{p.description}</p>
-                  )}
-                </div>
-              )
-            )}
-          </div>
-        )}
-
-        {/* Member Memo */}
+        {/* Member Memo — store-authored content, shown in neutral BinPerks
+            styling rather than the store's brand treatment. */}
         {store?.memberMemo && (
           <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-2">
             <p className="font-['Coiny'] text-xl text-[#1A1A2E]">Member Memo</p>
-            <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">{brandName}</p>
+            <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
+              From {store.storeName}
+            </p>
             <p className="text-[14px] font-medium text-[#1A1A2E] leading-relaxed">{store.memberMemo}</p>
           </div>
         )}

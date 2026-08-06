@@ -15,7 +15,11 @@
  *     mediaType  — required only when `image` has no data-URL prefix
  *
  * Responses:
- *   200 { scanEventId, identifiedProduct, identifiedCategory, confidence, description }
+ *   200 { scanEventId, identifiedProduct, identifiedCategory, confidence,
+ *         description, estimatedRetailPrice }
+ *     estimatedRetailPrice — display text like "$24.99 – $39.99", '' if the
+ *     model could not estimate. An estimate of typical retail value, NOT a
+ *     price this store charges; the UI must label it accordingly.
  *   400 { error: 'missing_image' | 'unsupported_media_type' | 'image_too_large' }
  *   401 { error: 'not_authenticated' }
  *   404 { error: 'member_not_found' }
@@ -50,14 +54,19 @@ const MAX_BASE64_LENGTH = 3_500_000
 const SYSTEM_PROMPT =
   "You are a product identification assistant inside a bin store. The member has scanned an item. " +
   "Identify the product as specifically as possible. Return JSON only with these fields: " +
-  "{ identified_product: string, identified_category: string, confidence: number (0-1), description: string }. " +
-  "If you cannot identify the item, return { identified_product: 'Unknown item', identified_category: 'Unknown', confidence: 0, description: 'Could not identify this item.' }"
+  "{ identified_product: string, identified_category: string, confidence: number (0-1), description: string, estimated_retail_price: string }. " +
+  "Also estimate the average retail price for this item in USD. Add a field: estimated_retail_price " +
+  "(string, e.g. '$24.99 – $39.99' or 'Typically $15–$25 at retail'). " +
+  "If you cannot identify the item, return { identified_product: 'Unknown item', identified_category: 'Unknown', confidence: 0, description: 'Could not identify this item.', estimated_retail_price: '' }"
 
 interface Identification {
   identified_product: string
   identified_category: string
   confidence: number
   description: string
+  /** Free text, not a number — the model returns ranges like "$15–$25".
+   *  Empty string when it could not estimate. */
+  estimated_retail_price: string
 }
 
 const UNIDENTIFIED: Identification = {
@@ -65,6 +74,7 @@ const UNIDENTIFIED: Identification = {
   identified_category: 'Unknown',
   confidence: 0,
   description: 'Could not identify this item.',
+  estimated_retail_price: '',
 }
 
 /**
@@ -91,11 +101,19 @@ function extractJson(text: string): Identification {
       ? Math.min(1, Math.max(0, rawConfidence))
       : 0
 
+    // Price stays a string exactly as the model wrote it. Coerce a stray
+    // number ("24.99") to text rather than dropping it, and treat null or a
+    // missing field as "no estimate" instead of the literal "null".
+    const rawPrice = parsed.estimated_retail_price
+    const estimatedRetailPrice =
+      rawPrice === null || rawPrice === undefined ? '' : String(rawPrice).trim()
+
     return {
       identified_product:  String(parsed.identified_product  ?? UNIDENTIFIED.identified_product),
       identified_category: String(parsed.identified_category ?? UNIDENTIFIED.identified_category),
       confidence,
       description:         String(parsed.description ?? UNIDENTIFIED.description),
+      estimated_retail_price: estimatedRetailPrice,
     }
   } catch {
     return UNIDENTIFIED
@@ -209,6 +227,8 @@ export async function POST(req: NextRequest) {
       identified_product:  identification.identified_product,
       identified_category: identification.identified_category,
       ai_confidence:       identification.confidence,
+      // Stored as null rather than '' so "no estimate" is unambiguous in SQL.
+      estimated_retail_price: identification.estimated_retail_price || null,
       member_choice:       null,   // set later by /api/member/scan/choice
     })
     .select('id')
@@ -220,10 +240,11 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
-    scanEventId:        scanEvent.id,
-    identifiedProduct:  identification.identified_product,
-    identifiedCategory: identification.identified_category,
-    confidence:         identification.confidence,
-    description:        identification.description,
+    scanEventId:         scanEvent.id,
+    identifiedProduct:   identification.identified_product,
+    identifiedCategory:  identification.identified_category,
+    confidence:          identification.confidence,
+    description:         identification.description,
+    estimatedRetailPrice: identification.estimated_retail_price,
   })
 }

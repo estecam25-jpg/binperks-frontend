@@ -11,24 +11,26 @@
  *   4. Insert members row with home_store_id, merchant_id, referral fields, and the
  *      permanent V3 Origin Store attribution (origin_store_id / origin_merchant_id)
  *   5. If referred: create referrals row (status: 'pending')
- *   6. TODO: POST to GHL webhook to create the contact + trigger welcome SMS
- *      (Express backend route not built yet — see SIGNUP_FUNNEL_README contract)
+ *   6. Notify GHL of the new member (fire-and-forget welcome comms)
+ *   7. Issue an 8-digit sign-in code by SMS so the member lands on the dashboard
  *
  * Request body:
  *   { storeId, merchantId, firstName, lastName, phone (digits), email,
  *     smsOptIn, referrerMemberId? }
  *
  * Responses:
- *   200 { memberId, referralCode, referralUrl }
+ *   200 { memberId, referralCode, referralUrl, otpSent }
+ *       otpSent false means the account exists but the code could not be sent —
+ *       the caller should send the member to the login page to request one.
  *   409 { error: 'phone_exists' }   — phone already registered at this merchant
+ *   409 { error: 'email_exists' }   — email already has a Supabase auth identity
  *   400 { error: string }
  *   500 { error: string }
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { Redis } from '@upstash/redis'
+import { issueMemberOtp } from '@/lib/member-otp'
 
 const APP_URL = 'https://app.binperks.com'
 
@@ -240,44 +242,31 @@ export async function POST(req: NextRequest) {
       }).catch(err => console.error('[/api/join/create] GHL webhook error:', err))
     }
 
-    // 7. Generate magic link and send via GHL so new member can go straight to dashboard.
-    //    Fire-and-forget — never block the signup response on this.
-    const magicLinkWebhook = process.env.GHL_MAGIC_LINK_WEBHOOK_URL
-    if (magicLinkWebhook) {
-      ;(async () => {
-        try {
-          const APP_BASE = process.env.NEXT_PUBLIC_APP_URL ?? APP_URL
-          const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-            type: 'magiclink',
-            email,
-            options: { redirectTo: APP_BASE + '/auth/callback?next=/member/dashboard' },
-          })
-          if (linkError || !linkData) {
-            console.error('[/api/join/create] generateLink error:', linkError); return
-          }
-          // Shorten via Upstash Redis (same pattern as /api/member/login)
-          const redis = new Redis({
-            url: process.env.KV_REST_API_URL!,
-            token: process.env.KV_REST_API_TOKEN!,
-          })
-          const code = Math.random().toString(36).substring(2, 10)
-          await redis.set('token:' + code, linkData.properties.hashed_token, { ex: 65 * 60 })
-          const shortUrl = APP_BASE + '/s/' + code
-          await fetch(magicLinkWebhook, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ memberId, phone, firstName, magicLink: shortUrl }),
-          })
-        } catch (err) {
-          console.error('[/api/join/create] magic link error:', err)
-        }
-      })()
+    // 7. Send the new member an 8-digit sign-in code so they can go straight
+    //    to the dashboard. Same code and same verify route as a returning
+    //    member's login — see lib/member-otp.
+    //
+    //    Awaited, not fire-and-forget: the combined join flow on the home page
+    //    sends the member to a code-entry screen the moment this returns, so
+    //    the code has to exist in Redis before we respond. `otpSent` tells the
+    //    caller whether to show that screen or fall back to the login page.
+    const issued = await issueMemberOtp({
+      admin,
+      memberId,
+      phone,
+      firstName,
+      email,
+    })
+
+    if (!issued.ok) {
+      console.error('[/api/join/create] OTP issue failed:', issued.reason)
     }
 
     return NextResponse.json({
       memberId,
       referralCode,
       referralUrl: finalReferralUrl,
+      otpSent: issued.ok,
     })
 
   } catch (err) {

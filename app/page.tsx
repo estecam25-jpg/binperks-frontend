@@ -1,23 +1,43 @@
+/**
+ * app.binperks.com — the front door.
+ *
+ * V3: one combined member sign-in / join flow instead of the old
+ * "For Members" / "For Merchants" split. The phone number decides the branch,
+ * so a member never has to know whether they're signing in or joining.
+ *
+ * Merchants are deliberately not offered here — /merchant/login only. The
+ * admin entrance stays the inconspicuous dot at the bottom.
+ */
+
 import Link from 'next/link'
+import HomeAuth from './HomeAuth'
 
 export default function HomePage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
-      <div className="flex flex-col items-center px-5 pt-16 pb-12 gap-2" style={{ backgroundColor: '#4A4B98' }}>
+
+      <div
+        className="flex flex-col items-center px-5 pt-14 pb-20 gap-2"
+        style={{ backgroundColor: '#4A4B98' }}
+      >
         <h1 className="font-['Coiny'] text-5xl text-white tracking-wide">BinPerks</h1>
-        <p className="text-white/70 text-[14px] font-semibold">Loyalty rewards for bin stores</p>
+        <p className="text-white/70 text-[14px] font-semibold">
+          Your rewards, everywhere you shop
+        </p>
       </div>
 
-      <div className="flex flex-col items-center px-5 py-12 gap-4 max-w-md mx-auto w-full">
-        <Link href="/member/join/" className="w-full py-5 rounded-2xl font-bold text-[18px] text-white text-center font-['Montserrat'] tracking-wide shadow-lg bg-[#4A4B98]">
-          For Members
-        </Link>
-        <Link href="/merchant/join/" className="w-full py-5 rounded-2xl font-bold text-[18px] text-center font-['Montserrat'] tracking-wide shadow-lg bg-white text-[#4A4B98] border-2 border-[#4A4B98]">
-          For Merchants
-        </Link>
-      </div>
+      <main className="flex-1 flex flex-col items-center px-4 -mt-12 pb-10 w-full">
+        <div className="w-full max-w-sm">
+          <HomeAuth />
+        </div>
 
-      <div className="mt-auto pb-6 text-center">
+        <p className="text-[11px] text-[#8E8EA8] text-center font-medium mt-6 max-w-sm">
+          Questions?{' '}
+          <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
+        </p>
+      </main>
+
+      <div className="pb-6 text-center">
         <Link href="/admin/login" className="text-[10px] text-[#E0E0E0]">·</Link>
       </div>
     </div>

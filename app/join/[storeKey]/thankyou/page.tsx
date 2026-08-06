@@ -14,7 +14,15 @@ export default function ThankYouPage() {
   const [store, setStore] = useState<SignupStore | null>(null)
   const [member, setMember] = useState<SignupMember | null>(null)
   const [firstName, setFirstName] = useState('')
+  const [phone, setPhone] = useState('')
   const [copied, setCopied] = useState(false)
+
+  // Sign-in code entry. Signup already texted a code (see /api/join/create),
+  // so the member finishes here rather than being sent to the login page.
+  const [code, setCode] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [resending, setResending] = useState(false)
 
   useEffect(() => {
     const s = signupStore.get()
@@ -26,8 +34,68 @@ export default function ThankYouPage() {
     setMember(m)
 
     const f = signupForm.get()
-    if (f) setFirstName(f.firstName)
+    if (f) { setFirstName(f.firstName); setPhone(f.phone) }
   }, [router, storeKey])
+
+  async function handleVerify(e: React.FormEvent) {
+    e.preventDefault()
+    if (code.length !== 8 || !phone) return
+    setVerifying(true)
+    setCodeError(null)
+
+    try {
+      const res = await fetch('/api/member/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        window.location.href = data.redirectUrl ?? '/member/dashboard'
+        return
+      }
+
+      const data = await res.json().catch(() => ({}))
+      setCode('')
+      setCodeError(
+        data.error === 'expired'
+          ? 'That code has expired. Tap "Resend code" below.'
+          : data.error === 'too_many_attempts'
+            ? 'Too many incorrect tries. Tap "Resend code" below.'
+            : 'That code is incorrect. Check your texts and try again.'
+      )
+    } catch {
+      setCodeError('Something went wrong. Please try again.')
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  async function handleResend() {
+    if (!phone) return
+    setResending(true)
+    setCodeError(null)
+    try {
+      const res = await fetch('/api/member/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setCodeError(
+          res.status === 429
+            ? (d.error ?? 'Too many requests. Please wait 15 minutes.')
+            : 'We couldn’t resend your code. Please try again.'
+        )
+      }
+    } catch {
+      setCodeError('We couldn’t resend your code. Please try again.')
+    } finally {
+      setResending(false)
+    }
+  }
 
   async function handleCopyReferral() {
     if (!member) return
@@ -81,27 +149,75 @@ export default function ThankYouPage() {
           </h1>
           <p className="text-[14px] text-[#8E8EA8] font-medium leading-relaxed">
             {isVip
-              ? `Your VIP membership is active. Check your phone for a link to your rewards dashboard.`
-              : `Your account is set up. Check your phone for a link to your rewards dashboard.`
+              ? `Your VIP membership is active. Enter the code we just texted you to open your dashboard.`
+              : `Your account is set up. Enter the code we just texted you to open your dashboard.`
             }
           </p>
         </div>
 
-        {/* Magic link card */}
-        <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex items-start gap-4">
-          <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-            style={{ backgroundColor: `${store.brandColor}15` }}
-          >
-            📱
+        {/* Sign-in code entry — the code was sent when the account was created. */}
+        <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
+          <div className="flex items-start gap-4">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
+              style={{ backgroundColor: `${store.brandColor}15` }}
+            >
+              📱
+            </div>
+            <div>
+              <p className="text-[14px] font-bold text-[#1A1A2E] mb-1">Check your texts</p>
+              <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
+                We sent an 8-digit sign-in code to your phone. It expires in 10 minutes.
+                No password needed — ever.
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-[14px] font-bold text-[#1A1A2E] mb-1">Check your texts</p>
-            <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
-              We sent a sign-in link to your phone. Tap it to open your rewards dashboard anytime.
-              No password needed — ever.
-            </p>
-          </div>
+
+          <form onSubmit={handleVerify} className="flex flex-col gap-3">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={8}
+              placeholder="12345678"
+              value={code}
+              onChange={e => { setCode(e.target.value.replace(/\D/g, '').slice(0, 8)); setCodeError(null) }}
+              autoComplete="one-time-code"
+              aria-label="8-digit sign-in code"
+              className={`
+                w-full px-4 py-4 rounded-2xl border-2 bg-[#F5F5F8] font-['Montserrat']
+                text-[24px] font-bold text-[#1A1A2E] tracking-[0.3em] text-center outline-none
+                placeholder:text-[#D1D1DC] placeholder:font-normal placeholder:tracking-normal
+                focus:bg-white transition-colors
+                ${codeError ? 'border-[#DA1212] bg-red-50' : 'border-transparent'}
+              `}
+            />
+
+            {codeError && (
+              <p className="text-[12px] font-semibold text-[#DA1212] text-center">{codeError}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={code.length !== 8 || verifying}
+              className="w-full py-4 rounded-2xl font-bold text-[16px] text-white font-['Montserrat'] disabled:opacity-35 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
+              style={{ backgroundColor: store.brandColor }}
+            >
+              {verifying && (
+                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              )}
+              {verifying ? 'Signing in…' : 'Open my dashboard'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resending}
+              className="text-[13px] font-semibold text-[#8E8EA8] underline disabled:opacity-40"
+            >
+              {resending ? 'Sending…' : 'Resend code'}
+            </button>
+          </form>
         </div>
 
         {/* VIP confirmation card */}
@@ -146,13 +262,6 @@ export default function ThankYouPage() {
             </button>
           </div>
 
-        </div>
-
-        {/* Sign-in notice — dashboard is only accessible after magic link click */}
-        <div className="w-full bg-white rounded-2xl border-2 border-[#EBEBF2] px-5 py-4 text-center">
-          <p className="text-[14px] font-semibold text-[#1A1A2E]">
-            Your sign-in link is on its way via text message.
-          </p>
         </div>
 
         {/* Footer */}
