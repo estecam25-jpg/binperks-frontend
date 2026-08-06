@@ -1,12 +1,22 @@
 'use client'
 
+/**
+ * Member settings.
+ *
+ * A BinPerks surface, not a store surface — BinPerks colors and wording only.
+ * The membership is with the network; the store a member enrolled through is
+ * an attribution fact and does not get to brand this page.
+ */
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
+/** The only brand color on this page. */
+const BINPERKS_BLUE = '#4A4B98'
+
 interface MeResponse {
   member: { firstName: string; phone: string; email: string; smsOptIn: boolean }
-  store: { brandName: string; brandColor: string } | null
 }
 
 export default function MemberSettingsPage() {
@@ -21,7 +31,10 @@ export default function MemberSettingsPage() {
 
   useEffect(() => {
     fetch('/api/member/me').then(res => {
-      if (res.status === 401) { router.replace('/member/login'); return null }
+      // Home page, not /member/login — that route is a store picker, and
+      // sending a signed-out member there makes them choose a store before
+      // they can even type a phone number.
+      if (res.status === 401) { router.replace('/'); return null }
       return res.ok ? res.json() : null
     }).then(d => {
       if (d) {
@@ -56,7 +69,7 @@ export default function MemberSettingsPage() {
     if (res.ok) {
       const supabase = createClient()
       await supabase.auth.signOut()
-      router.replace('/member/login')
+      router.replace('/')
     } else {
       setDeactivating(false)
     }
@@ -65,7 +78,7 @@ export default function MemberSettingsPage() {
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/member/login')
+    router.push('/')
   }
 
   if (loading) {
@@ -78,9 +91,6 @@ export default function MemberSettingsPage() {
 
   if (!data) return null
 
-  const brandColor = data.store?.brandColor ?? '#4A4B98'
-  const brandName = data.store?.brandName ?? 'BinPerks'
-
   function formatPhone(digits: string): string {
     if (digits.length !== 10) return digits
     return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`
@@ -88,8 +98,8 @@ export default function MemberSettingsPage() {
 
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
-      <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: brandColor }}>
-        <span className="font-['Coiny'] text-xl leading-none text-white">{brandName}</span>
+      <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: BINPERKS_BLUE }}>
+        <span className="font-['Coiny'] text-xl leading-none text-white">BinPerks Member</span>
       </div>
 
       <main className="flex-1 flex flex-col items-center px-4 py-8 gap-4 max-w-md mx-auto w-full">
@@ -133,17 +143,10 @@ export default function MemberSettingsPage() {
         </div>
         {saved && <p className="text-[12px] font-semibold text-[#2A7D34] self-start">✓ Saved</p>}
 
-        {/* Quick links */}
-        <div className="w-full flex flex-col gap-2">
-          <a href="/member/export" className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between">
-            <span className="text-[14px] font-bold text-[#1A1A2E]">Export my data</span>
-            <span className="text-[#8E8EA8]">→</span>
-          </a>
-          <a href="/member/feedback" className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between">
-            <span className="text-[14px] font-bold text-[#1A1A2E]">Leave feedback</span>
-            <span className="text-[#8E8EA8]">→</span>
-          </a>
-        </div>
+        {/* No quick links here by design. Data export is gone — BinPerks owns
+            member data, and access requests go through support per the Privacy
+            Policy. Feedback is gone too: members get a GHL SMS invite an hour
+            after a stamp, which is when they have something to say. */}
 
         {/* Sign out */}
         <button
@@ -162,8 +165,9 @@ export default function MemberSettingsPage() {
           ) : (
             <div className="w-full bg-red-50 border border-red-200 rounded-2xl px-4 py-4 flex flex-col gap-2.5">
               <p className="text-[12px] font-semibold text-[#DA1212]">
-                This deactivates your account at {brandName}. Your stamp and coupon history is kept,
-                never deleted — contact support if you change your mind.
+                This deactivates your BinPerks membership across the whole network, not just
+                one store. Your stamp and coupon history is kept, never deleted — contact
+                support if you change your mind.
               </p>
               <div className="flex gap-2">
                 <button
