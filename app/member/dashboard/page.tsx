@@ -71,7 +71,11 @@ export default function MemberDashboardPage() {
     async function load() {
       const res = await fetch('/api/member/me')
       if (res.status === 401) {
-        router.replace('/member/login')
+        // Home page, not /member/login. /member/login is a store picker, and
+        // sending a signed-out member there makes them choose a store before
+        // they can even type their phone — which reads as a loop when they
+        // just came from signing in. The home page is the one front door.
+        router.replace('/')
         return
       }
       if (!res.ok) {
@@ -90,7 +94,7 @@ export default function MemberDashboardPage() {
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/member/login')
+    router.push('/')
   }
 
   async function handleCopyReferral() {
@@ -112,17 +116,27 @@ export default function MemberDashboardPage() {
     )
   }
 
+  // Authenticated, but no members row matches this auth identity. Signing in
+  // again cannot fix that, so this deliberately does not offer a sign-in
+  // button — that is precisely the loop. Sign out and point at support.
   if (!member) {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-[#F5F5F8] px-6 text-center gap-4">
-        <p className="text-[15px] font-semibold text-[#1A1A2E] max-w-xs leading-relaxed">
-          Sign in with the code we text you to access your dashboard.
+        <span className="text-3xl">⚠️</span>
+        <p className="font-['Coiny'] text-xl text-[#1A1A2E]">We can&apos;t find your membership</p>
+        <p className="text-[13px] text-[#8E8EA8] font-medium max-w-xs leading-relaxed">
+          You&apos;re signed in, but this login isn&apos;t linked to a BinPerks membership.
+          Email{' '}
+          <a href="mailto:support@binperks.com" className="underline font-semibold">
+            support@binperks.com
+          </a>{' '}
+          and we&apos;ll get it sorted — signing in again won&apos;t change this.
         </p>
         <button
-          onClick={() => router.replace('/member/login')}
+          onClick={handleSignOut}
           className="w-full max-w-xs py-4 rounded-2xl font-bold text-[15px] font-['Montserrat'] bg-[#4A4B98] text-white active:scale-[0.97] transition-all"
         >
-          Go to sign in
+          Sign out
         </button>
       </div>
     )

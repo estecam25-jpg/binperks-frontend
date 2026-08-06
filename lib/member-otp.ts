@@ -13,7 +13,15 @@
  * Redis keys, all keyed by phone and expiring together:
  *   member_otp:{phone}          → the 8-digit code
  *   member_token:{phone}        → the Supabase hashed_token it unlocks
+ *   member_authuser:{phone}     → auth.users id the code is supposed to sign in
  *   member_otp_attempts:{phone} → wrong-guess counter, cleared on each issue
+ *
+ * Why member_authuser exists: generateLink resolves its target by email, and
+ * Supabase matches email case-insensitively. If auth.users somehow holds two
+ * rows whose emails differ only by case, generateLink can mint a token for the
+ * wrong one — and the member then signs in as an identity with no members row,
+ * which reads as an endless bounce back to the login screen. Recording the
+ * intended auth user lets verify-code refuse that instead of looping.
  */
 
 import { Redis } from '@upstash/redis'
@@ -30,6 +38,7 @@ export function otpKeys(phone: string) {
   return {
     code:     `member_otp:${phone}`,
     token:    `member_token:${phone}`,
+    authUser: `member_authuser:${phone}`,
     attempts: `member_otp_attempts:${phone}`,
   }
 }
@@ -55,6 +64,9 @@ interface IssueParams {
   phone: string
   firstName: string
   email: string
+  /** auth.users id this member is linked to. Recorded so verify-code can
+   *  confirm the session it just created belongs to the right identity. */
+  authUserId: string | null
   /** Reuse the caller's client when it already has one. */
   redis?: Redis
 }
@@ -72,13 +84,16 @@ type IssueResult =
  * there is no code to verify against.
  */
 export async function issueMemberOtp(params: IssueParams): Promise<IssueResult> {
-  const { admin, memberId, phone, firstName, email } = params
+  const { admin, memberId, phone, firstName, email, authUserId } = params
   const redis = params.redis ?? redisClient()
   const keys = otpKeys(phone)
 
+  // Lowercased because that is the only form we ever write to auth.users, and
+  // matching what is stored keeps generateLink's case-insensitive lookup from
+  // having to disambiguate.
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: 'magiclink',
-    email,
+    email: email.trim().toLowerCase(),
     options: { redirectTo: `${APP_URL}/auth/callback?next=/member/dashboard` },
   })
 
@@ -92,6 +107,12 @@ export async function issueMemberOtp(params: IssueParams): Promise<IssueResult> 
     await Promise.all([
       redis.set(keys.code, code, { ex: OTP_TTL_SECONDS }),
       redis.set(keys.token, linkData.properties.hashed_token, { ex: OTP_TTL_SECONDS }),
+      // Written only when known. An absent key means "cannot check", which
+      // verify-code treats as pass — an older member row with no auth_user_id
+      // must not be locked out by a guard meant for duplicate identities.
+      authUserId
+        ? redis.set(keys.authUser, authUserId, { ex: OTP_TTL_SECONDS })
+        : redis.del(keys.authUser),
       redis.del(keys.attempts),
     ])
   } catch (err) {

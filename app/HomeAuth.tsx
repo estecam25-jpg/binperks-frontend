@@ -273,12 +273,18 @@ export default function HomeAuth() {
     setStatus('idle')
     setCode('')
     codeRef.current?.focus()
+
+    // account_conflict means the code was right but signed in an identity with
+    // no membership behind it. Retrying lands in the same place, so say so
+    // rather than inviting another attempt.
     setError(
-      data.error === 'expired'
-        ? 'That code has expired. Tap "Resend code" to get a new one.'
-        : data.error === 'too_many_attempts'
-          ? 'Too many incorrect tries. Tap "Resend code" to get a new one.'
-          : 'That code is incorrect. Check your texts and try again.'
+      data.error === 'account_conflict'
+        ? 'Your code was correct, but this number is linked to an account we can’t open. Email support@binperks.com and we’ll fix it.'
+        : data.error === 'expired'
+          ? 'That code has expired. Tap "Resend code" to get a new one.'
+          : data.error === 'too_many_attempts'
+            ? 'Too many incorrect tries. Tap "Resend code" to get a new one.'
+            : 'That code is incorrect. Check your texts and try again.'
     )
   }
 

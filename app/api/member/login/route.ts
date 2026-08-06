@@ -129,10 +129,11 @@ export async function POST(req: NextRequest) {
     const issued = await issueMemberOtp({
       admin,
       redis,
-      memberId:  member.id,
+      memberId:   member.id,
       phone,
-      firstName: member.first_name,
-      email:     member.email,
+      firstName:  member.first_name,
+      email:      member.email,
+      authUserId: member.auth_user_id,
     })
 
     if (!issued.ok) {

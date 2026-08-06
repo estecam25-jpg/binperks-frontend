@@ -66,6 +66,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
     }
 
+    // Normalize here, not just in the client. Supabase matches email
+    // case-insensitively when resolving a magic link, so two auth.users rows
+    // differing only in case make that lookup ambiguous and can hand a member
+    // a token for the wrong identity. Writing one canonical form is what stops
+    // that pair from ever being created.
+    const normalizedEmail = email.trim().toLowerCase()
+
     const supabase = createAdminSupabaseClient()
 
     // 1. Check phone uniqueness within this merchant (members list is per-merchant,
@@ -108,7 +115,7 @@ export async function POST(req: NextRequest) {
     // collide on a cross-merchant signup where the same phone already has a
     // Supabase auth identity. Phone lookups use the members table only.
     const { data: authUser, error: authError } = await admin.auth.admin.createUser({
-      email,
+      email: normalizedEmail,
       email_confirm: true,
       user_metadata: { first_name: firstName, last_name: lastName },
     })
@@ -145,7 +152,7 @@ export async function POST(req: NextRequest) {
           first_name:            firstName,
           last_name:             lastName,
           phone,
-          email,
+          email:                 normalizedEmail,
           status:                'active',
           subscription_status:   'free',
           total_stamps:          0,
@@ -234,7 +241,7 @@ export async function POST(req: NextRequest) {
           firstName,
           lastName,
           phone,
-          email,
+          email:            normalizedEmail,
           storeName:        store.display_name,
           networkStoreName: `BinPerks at ${store.display_name}`,
           referralUrl:      finalReferralUrl,
@@ -255,7 +262,8 @@ export async function POST(req: NextRequest) {
       memberId,
       phone,
       firstName,
-      email,
+      email: normalizedEmail,
+      authUserId,
     })
 
     if (!issued.ok) {

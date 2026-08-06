@@ -60,11 +60,13 @@ export default function ThankYouPage() {
       const data = await res.json().catch(() => ({}))
       setCode('')
       setCodeError(
-        data.error === 'expired'
-          ? 'That code has expired. Tap "Resend code" below.'
-          : data.error === 'too_many_attempts'
-            ? 'Too many incorrect tries. Tap "Resend code" below.'
-            : 'That code is incorrect. Check your texts and try again.'
+        data.error === 'account_conflict'
+          ? 'Your code was correct, but this number is linked to an account we can’t open. Email support@binperks.com.'
+          : data.error === 'expired'
+            ? 'That code has expired. Tap "Resend code" below.'
+            : data.error === 'too_many_attempts'
+              ? 'Too many incorrect tries. Tap "Resend code" below.'
+              : 'That code is incorrect. Check your texts and try again.'
       )
     } catch {
       setCodeError('Something went wrong. Please try again.')

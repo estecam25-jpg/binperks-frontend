@@ -169,7 +169,10 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
     setCode('')
     codeRef.current?.focus()
 
-    if (data.error === 'expired') {
+    if (data.error === 'account_conflict') {
+      // Right code, wrong identity behind it — retrying cannot help.
+      setError('Your code was correct, but this number is linked to an account we can’t open. Email support@binperks.com and we’ll fix it.')
+    } else if (data.error === 'expired') {
       setError('That code has expired. Tap "Resend code" to get a new one.')
     } else if (data.error === 'too_many_attempts') {
       setError('Too many incorrect tries. Tap "Resend code" to get a new one.')
