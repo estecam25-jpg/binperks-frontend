@@ -20,6 +20,19 @@ import { getTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
 /** The only brand color on this page. */
 const BINPERKS_BLUE = '#4A4B98'
 
+/** How many past coupons the history shows. A glance, not an archive. */
+const RECENT_COUPON_COUNT = 3
+
+/** "August 1, 2026". Falls back to an empty string on a missing or unparseable
+ *  date so a bad row renders as "Received" with nothing after it rather than
+ *  "Invalid Date". */
+function formatReceived(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
 interface MemberData {
   id: string
   firstName: string
@@ -46,7 +59,6 @@ interface StoreData {
   logoUrl: string | null
   googleReviewUrl: string | null
   facebookReviewUrl: string | null
-  memberMemo: string | null
 }
 
 interface Reward {
@@ -169,7 +181,15 @@ export default function MemberDashboardPage() {
   const activeRewards = rewards.filter(r => r.status === 'earned')
   const pastRewards = rewards.filter(r => r.status !== 'earned')
   const isFree = member.subscriptionStatus === 'free'
+  // Still checked against the full history, not the trimmed display list — a
+  // Starter member's one lifetime coupon may be older than the last three.
   const hasUsedFreeLifetimeCoupon = isFree && pastRewards.some(r => r.status === 'redeemed')
+
+  // /api/member/me already orders by earned_at desc, but sort here too so the
+  // "last 3" holds regardless of what the API decides to do later.
+  const recentRewards = [...pastRewards]
+    .sort((a, b) => new Date(b.earnedAt).getTime() - new Date(a.earnedAt).getTime())
+    .slice(0, RECENT_COUPON_COUNT)
 
   const approachingBanner = (() => {
     if (isFree) return null
@@ -328,40 +348,35 @@ export default function MemberDashboardPage() {
           <span className="text-[#D1D1DC] text-xl flex-shrink-0">›</span>
         </Link>
 
-        {/* Member Memo — store-authored content, shown in neutral BinPerks
-            styling rather than the store's brand treatment. */}
-        {store?.memberMemo && (
-          <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-2">
-            <p className="font-['Coiny'] text-xl text-[#1A1A2E]">Member Memo</p>
-            <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
-              From {store.storeName}
-            </p>
-            <p className="text-[14px] font-medium text-[#1A1A2E] leading-relaxed">{store.memberMemo}</p>
-          </div>
-        )}
-
-        {/* Past coupons */}
-        {pastRewards.length > 0 && (
+        {/* Coupon history — the three most recent only. Older ones are still
+            in the database; this is a glance at what you've earned lately, not
+            an archive. */}
+        {recentRewards.length > 0 && (
           <div className="w-full flex flex-col gap-2">
             <p className="text-[12px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] px-1">
               Coupon history
             </p>
-            {pastRewards.map(r => (
-              <div key={r.id} className="w-full flex items-center justify-between px-1 py-1.5">
-                <span className="text-[12px] font-semibold text-[#8E8EA8]">${r.couponValue} coupon</span>
-                <span className="text-[11px] font-semibold text-[#D1D1DC] uppercase tracking-wide">{r.status}</span>
+            {recentRewards.map(r => (
+              <div key={r.id} className="w-full flex items-center justify-between gap-3 px-1 py-1.5">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-[#1A1A2E]">${r.couponValue} coupon</p>
+                  <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
+                    Received {formatReceived(r.earnedAt)}
+                  </p>
+                </div>
+                <span className="text-[11px] font-semibold text-[#D1D1DC] uppercase tracking-wide flex-shrink-0">
+                  {r.status}
+                </span>
               </div>
             ))}
           </div>
         )}
 
-        {/* Account links */}
-        <div className="w-full grid grid-cols-2 gap-2.5 mt-1">
-          <Link href="/member/feedback" className="flex flex-col items-center gap-1 py-3.5 rounded-2xl bg-white shadow-sm text-center">
-            <span className="text-lg">💬</span>
-            <span className="text-[11px] font-bold text-[#1A1A2E]">Feedback</span>
-          </Link>
-          <Link href="/member/settings" className="flex flex-col items-center gap-1 py-3.5 rounded-2xl bg-white shadow-sm text-center">
+        {/* Account links. Feedback is not offered here — members get a GHL SMS
+            invite an hour after a stamp, which is when they actually have
+            something to say. */}
+        <div className="w-full mt-1">
+          <Link href="/member/settings" className="w-full flex flex-col items-center gap-1 py-3.5 rounded-2xl bg-white shadow-sm text-center">
             <span className="text-lg">⚙️</span>
             <span className="text-[11px] font-bold text-[#1A1A2E]">Settings</span>
           </Link>

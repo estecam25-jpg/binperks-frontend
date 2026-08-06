@@ -1,18 +1,21 @@
 /**
  * GET /api/member/stores/[storeId]/perks
  *
- * Perks offered at one BinPerks location, fetched when the member expands
- * that store in the dashboard store finder.
+ * Everything shown when a member expands one store in the store finder: its
+ * Starter perks, its VIP perks, and its Store Message.
  *
  * Lazy rather than bundled into /api/member/stores because most members
- * expand one or two stores, and perks are the bulk of the payload.
+ * expand one or two stores, and this is the bulk of the payload.
  *
- * VIP perks are returned to every member, Free included, with `memberType`
- * so the UI can show them locked. Hiding them outright would remove the main
- * reason a Starter member upgrades.
+ * VIP perks are returned to every member, Starter included, so the UI can
+ * show them locked. Hiding them outright would remove the main reason a
+ * Starter member upgrades.
+ *
+ * storeMessage reads the store_message column (formerly member_memo — the
+ * old column still exists but nothing reads it; see the migration note).
  *
  * Responses:
- *   200 { storeName, freePerks: [...], vipPerks: [...] }
+ *   200 { storeName, storeMessage, freePerks: [...], vipPerks: [...] }
  *   401 { error: 'not_authenticated' }
  *   404 { error: 'store_not_found' }
  */
@@ -49,7 +52,7 @@ export async function GET(
   // pulled out of network discovery.
   const { data: store } = await admin
     .from('stores')
-    .select('id, display_name')
+    .select('id, display_name, store_message')
     .eq('id', storeId)
     .eq('is_active', true)
     .eq('network_visible', true)
@@ -75,8 +78,9 @@ export async function GET(
   })
 
   return NextResponse.json({
-    storeName: store.display_name,
-    freePerks: all.filter(p => p.member_type === 'free').map(shape),
-    vipPerks:  all.filter(p => p.member_type === 'vip').map(shape),
+    storeName:    store.display_name,
+    storeMessage: store.store_message ?? null,
+    freePerks:    all.filter(p => p.member_type === 'free').map(shape),
+    vipPerks:     all.filter(p => p.member_type === 'vip').map(shape),
   })
 }

@@ -2,8 +2,12 @@
  * GET  /api/merchant/store?storeId=...
  * PATCH /api/merchant/store
  *
- * GET  — returns current branding + member_memo + review URL for one store
- * PATCH — updates brand_color, font_family, logo_url, member_memo, and/or google_review_url
+ * GET  — returns current branding + store_message + review URL for one store
+ * PATCH — updates brand_color, font_family, logo_url, store_message, and/or google_review_url
+ *
+ * store_message was called member_memo until the Store Message rename. The
+ * old column still exists but nothing reads or writes it; it is kept only as
+ * a rollback path and should be dropped once this has been live a while.
  *
  * Auth: Supabase merchant session cookie.
  * Data: admin client (bypasses RLS).
@@ -43,7 +47,7 @@ export async function GET(req: NextRequest) {
 
   const { data: store } = await admin
     .from('stores')
-    .select('id, brand_color, font_family, logo_url, member_memo, google_review_url, bin_count')
+    .select('id, brand_color, font_family, logo_url, store_message, google_review_url, bin_count')
     .eq('id', storeId)
     .eq('merchant_id', owner.merchantId)
     .single()
@@ -53,9 +57,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     brandColor: store.brand_color        ?? '#4A4B98',
     fontFamily: store.font_family        ?? null,
-    logoUrl:    store.logo_url           ?? null,
-    memberMemo: store.member_memo        ?? null,
-    reviewUrl:  store.google_review_url  ?? null,
+    logoUrl:      store.logo_url          ?? null,
+    storeMessage: store.store_message     ?? null,
+    reviewUrl:    store.google_review_url ?? null,
     binCount:   store.bin_count          ?? null,
   })
 }
@@ -71,14 +75,14 @@ export async function PATCH(req: NextRequest) {
     brandColor?:        string
     fontFamily?:        string | null
     logoUrl?:           string | null
-    memberMemo?:        string | null
+    storeMessage?:      string | null
     reviewUrl?:         string | null
     binCount?:          number | null
     marketingDownloaded?: boolean
     joinPageVisited?:   boolean
   }
 
-  const { storeId, brandColor, fontFamily, logoUrl, memberMemo, reviewUrl, binCount, marketingDownloaded, joinPageVisited } = body
+  const { storeId, brandColor, fontFamily, logoUrl, storeMessage, reviewUrl, binCount, marketingDownloaded, joinPageVisited } = body
   if (!storeId) return NextResponse.json({ error: 'storeId required' }, { status: 400 })
 
   // Validate hex color if provided
@@ -86,9 +90,9 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid brandColor — must be a 6-digit hex' }, { status: 400 })
   }
 
-  // Validate memo length if provided
-  if (memberMemo && memberMemo.length > 160) {
-    return NextResponse.json({ error: 'Member memo must be 160 characters or fewer' }, { status: 400 })
+  // Validate store message length if provided
+  if (storeMessage && storeMessage.length > 160) {
+    return NextResponse.json({ error: 'Store message must be 160 characters or fewer' }, { status: 400 })
   }
 
   const admin = createAdminSupabaseClient()
@@ -108,7 +112,7 @@ export async function PATCH(req: NextRequest) {
   if (brandColor  !== undefined)  updates.brand_color         = brandColor
   if (fontFamily  !== undefined)  updates.font_family         = fontFamily ?? null
   if (logoUrl     !== undefined)  updates.logo_url            = logoUrl ?? null
-  if (memberMemo  !== undefined)  updates.member_memo         = memberMemo ?? null
+  if (storeMessage !== undefined) updates.store_message       = storeMessage ?? null
   if (reviewUrl   !== undefined)  updates.google_review_url   = reviewUrl ?? null
   if (binCount    !== undefined)  updates.bin_count           = binCount ?? null
   if (marketingDownloaded)        updates.marketing_downloaded_at = new Date().toISOString()
@@ -122,7 +126,7 @@ export async function PATCH(req: NextRequest) {
     .from('stores')
     .update(updates)
     .eq('id', storeId)
-    .select('id, brand_color, font_family, logo_url, member_memo, google_review_url, bin_count')
+    .select('id, brand_color, font_family, logo_url, store_message, google_review_url, bin_count')
     .single()
 
   if (error) {
@@ -133,9 +137,9 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({
     brandColor: updated.brand_color        ?? '#4A4B98',
     fontFamily: updated.font_family        ?? null,
-    logoUrl:    updated.logo_url           ?? null,
-    memberMemo: updated.member_memo        ?? null,
-    reviewUrl:  updated.google_review_url  ?? null,
+    logoUrl:      updated.logo_url          ?? null,
+    storeMessage: updated.store_message     ?? null,
+    reviewUrl:    updated.google_review_url ?? null,
     binCount:   updated.bin_count          ?? null,
   })
 }

@@ -523,10 +523,10 @@ function MaterialCard({
 export function MarketingTab({ storeId, stores }: { storeId: string | null; stores: { id: string; storeName: string; storeKey?: string; city: string; state: string }[] }) {
   const activeStore = storeId ? stores.find(s => s.id === storeId) : stores[0]
   const [copied, setCopied] = useState(false)
-  const [memo, setMemo] = useState('')
-  const [memoSaving, setMemoSaving] = useState(false)
-  const [memoSaved, setMemoSaved] = useState(false)
-  const [memoLoading, setMemoLoading] = useState(true)
+  const [storeMessage, setStoreMessage] = useState('')
+  const [messageSaving, setMessageSaving] = useState(false)
+  const [messageSaved, setMessageSaved] = useState(false)
+  const [messageLoading, setMessageLoading] = useState(true)
   const [brandColor, setBrandColor] = useState('#4A4B98')
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
@@ -545,16 +545,16 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
 
   useEffect(() => {
     if (!activeStoreId) return
-    setMemoLoading(true)
+    setMessageLoading(true)
     fetch(`/api/merchant/store?storeId=${activeStoreId}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d) {
-          setMemo(d.memberMemo ?? '')
+          setStoreMessage(d.storeMessage ?? '')
           setBrandColor(d.brandColor ?? '#4A4B98')
           setLogoUrl(d.logoUrl ?? null)
         }
-        setMemoLoading(false)
+        setMessageLoading(false)
       })
   }, [activeStoreId])
 
@@ -568,16 +568,16 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
     window.open(`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(joinUrl)}&format=png`, '_blank')
   }
 
-  async function handleMemoSave() {
+  async function handleStoreMessageSave() {
     if (!activeStoreId) return
-    setMemoSaving(true)
+    setMessageSaving(true)
     const res = await fetch('/api/merchant/store', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId: activeStoreId, memberMemo: memo.trim() || null }),
+      body: JSON.stringify({ storeId: activeStoreId, storeMessage: storeMessage.trim() || null }),
     })
-    setMemoSaving(false)
-    if (res.ok) { setMemoSaved(true); setTimeout(() => setMemoSaved(false), 3000) }
+    setMessageSaving(false)
+    if (res.ok) { setMessageSaved(true); setTimeout(() => setMessageSaved(false), 3000) }
   }
 
   async function handleDownload(key: string, ref: RefObject<HTMLDivElement | null>, filename: string) {
@@ -662,41 +662,42 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         </div>
       </div>
 
-      {/* Member Memo */}
+      {/* Store Message */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[#EBEBF2]">
-          <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Member Memo</h2>
+          <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Store Message</h2>
           <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
-            If left blank, the memo won&apos;t show on member dashboards.
+            Shown to members when they open your store in the BinPerks store finder.
+            If left blank, the section is hidden.
           </p>
         </div>
         <div className="px-5 py-5 flex flex-col gap-3">
-          {memoLoading ? (
+          {messageLoading ? (
             <div className="h-20 bg-[#F5F5F8] rounded-xl animate-pulse" />
           ) : (
             <>
               <div className="relative">
                 <textarea
-                  value={memo}
-                  onChange={e => setMemo(e.target.value.slice(0, 160))}
+                  value={storeMessage}
+                  onChange={e => setStoreMessage(e.target.value.slice(0, 160))}
                   placeholder="Shop our online auctions."
                   rows={3}
                   className="w-full rounded-xl border-2 border-[#EBEBF2] px-4 py-3 text-[14px] font-medium text-[#1A1A2E] placeholder-[#C5C5D5] resize-none focus:outline-none focus:border-[#4A4B98] transition-colors"
                 />
-                <span className={`absolute bottom-3 right-3 text-[11px] font-bold ${memo.length >= 150 ? 'text-[#DA1212]' : 'text-[#C5C5D5]'}`}>
-                  {memo.length}/160
+                <span className={`absolute bottom-3 right-3 text-[11px] font-bold ${storeMessage.length >= 150 ? 'text-[#DA1212]' : 'text-[#C5C5D5]'}`}>
+                  {storeMessage.length}/160
                 </span>
               </div>
               <button
-                onClick={handleMemoSave}
-                disabled={memoSaving || memoSaved}
+                onClick={handleStoreMessageSave}
+                disabled={messageSaving || messageSaved}
                 className="w-full py-3.5 rounded-xl font-bold text-[14px] font-['Montserrat'] transition-all disabled:opacity-70"
                 style={{
-                  backgroundColor: memoSaved ? '#2A7D34' : '#4A4B98',
+                  backgroundColor: messageSaved ? '#2A7D34' : '#4A4B98',
                   color: 'white',
                 }}
               >
-                {memoSaving ? 'Saving…' : memoSaved ? '✓ Saved' : 'Save Memo'}
+                {messageSaving ? 'Saving…' : messageSaved ? '✓ Saved' : 'Save Message'}
               </button>
             </>
           )}

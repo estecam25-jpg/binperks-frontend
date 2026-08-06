@@ -39,9 +39,11 @@ export async function GET() {
     return NextResponse.json({ error: 'member_not_found' }, { status: 404 })
   }
 
+  // No store message here — it belongs to the store finder, where it is shown
+  // per store rather than only for the one the member enrolled through.
   const { data: store } = await supabase
     .from('stores')
-    .select('id, display_name, brand_name, brand_color, logo_url, google_review_url, facebook_review_url, member_memo')
+    .select('id, display_name, brand_name, brand_color, logo_url, google_review_url, facebook_review_url')
     .eq('id', member.home_store_id)
     .single()
 
@@ -97,7 +99,6 @@ export async function GET() {
       logoUrl:           store.logo_url,
       googleReviewUrl:   store.google_review_url,
       facebookReviewUrl: store.facebook_review_url,
-      memberMemo:        store.member_memo ?? null,
     } : null,
     rewards: (rewards ?? []).map(r => ({
       id:          r.id,

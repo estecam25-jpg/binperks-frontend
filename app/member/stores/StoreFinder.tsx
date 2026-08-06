@@ -43,6 +43,9 @@ interface Perk {
 interface PerkData {
   freePerks: Perk[]
   vipPerks: Perk[]
+  /** Store-authored note. Null when the store hasn't written one, in which
+   *  case the whole Store Message section is omitted. */
+  storeMessage: string | null
 }
 
 export default function StoreFinder({ isFree }: { isFree: boolean }) {
@@ -96,7 +99,11 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
       const data = await res.json()
       setPerks(prev => ({
         ...prev,
-        [store.id]: { freePerks: data.freePerks ?? [], vipPerks: data.vipPerks ?? [] },
+        [store.id]: {
+          freePerks:    data.freePerks ?? [],
+          vipPerks:     data.vipPerks ?? [],
+          storeMessage: data.storeMessage ?? null,
+        },
       }))
     } catch {
       setPerksError(store.id)
@@ -195,54 +202,74 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
 
                 {perksError === store.id && (
                   <p className="text-[13px] font-semibold text-[#DA1212] py-3">
-                    Couldn&apos;t load perks for this store.
+                    Couldn&apos;t load this store&apos;s details.
                   </p>
                 )}
 
-                {data && data.freePerks.length === 0 && data.vipPerks.length === 0 && (
+                {data && data.freePerks.length === 0 && data.vipPerks.length === 0 && !data.storeMessage && (
                   <p className="text-[13px] text-[#8E8EA8] font-medium py-3">
                     This store hasn&apos;t published its perks yet.
                   </p>
                 )}
 
-                {data?.freePerks.map(p => (
-                  <div key={p.id} className="pt-3">
-                    <p className="text-[14px] font-bold text-[#1A1A2E]">{p.title}</p>
-                    {p.description && (
-                      <p className="text-[12px] text-[#8E8EA8] font-medium mt-1 leading-relaxed">
-                        {p.description}
+                {/* ── Starter Member Perks ── */}
+                {data && data.freePerks.length > 0 && (
+                  <section className="pt-3 flex flex-col gap-2.5">
+                    <h3 className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
+                      Starter Member Perks
+                    </h3>
+                    {data.freePerks.map(p => (
+                      <div key={p.id}>
+                        <p className="text-[14px] font-bold text-[#1A1A2E]">{p.title}</p>
+                        {p.description && (
+                          <p className="text-[12px] text-[#8E8EA8] font-medium mt-1 leading-relaxed">
+                            {p.description}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </section>
+                )}
+
+                {/* ── VIP Member Perks ──
+                    Shown to Starter members too, greyed — they're the reason
+                    to upgrade, so hiding them would defeat the point. */}
+                {data && data.vipPerks.length > 0 && (
+                  <section className="pt-3 flex flex-col gap-2.5">
+                    <h3 className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
+                      VIP Member Perks
+                    </h3>
+                    {data.vipPerks.map(p => (
+                      <div key={p.id}>
+                        <p className={`text-[14px] font-bold ${isFree ? 'text-[#D1D1DC]' : 'text-[#1A1A2E]'}`}>
+                          {p.title}
+                        </p>
+                        {p.description && (
+                          <p className={`text-[12px] font-medium mt-1 leading-relaxed ${isFree ? 'text-[#D1D1DC]' : 'text-[#8E8EA8]'}`}>
+                            {p.description}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    {isFree && (
+                      <p className="text-[11px] font-semibold" style={{ color: BINPERKS_BLUE }}>
+                        Upgrade to VIP to unlock these.
                       </p>
                     )}
-                  </div>
-                ))}
+                  </section>
+                )}
 
-                {/* VIP perks stay visible to Free members, greyed with a badge —
-                    they're the reason to upgrade. */}
-                {data?.vipPerks.map(p => (
-                  <div key={p.id} className="pt-3">
-                    <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                      <span
-                        className="text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded-full flex-shrink-0 text-white"
-                        style={{ backgroundColor: isFree ? '#D1D1DC' : BINPERKS_BLUE }}
-                      >
-                        VIP
-                      </span>
-                      <p className={`text-[14px] font-bold ${isFree ? 'text-[#D1D1DC]' : 'text-[#1A1A2E]'}`}>
-                        {p.title}
-                      </p>
-                    </div>
-                    {p.description && (
-                      <p className={`text-[12px] font-medium mt-1 leading-relaxed ${isFree ? 'text-[#D1D1DC]' : 'text-[#8E8EA8]'}`}>
-                        {p.description}
-                      </p>
-                    )}
-                  </div>
-                ))}
-
-                {isFree && data && data.vipPerks.length > 0 && (
-                  <p className="text-[11px] font-semibold mt-1" style={{ color: BINPERKS_BLUE }}>
-                    Upgrade to VIP to unlock these.
-                  </p>
+                {/* ── Store Message ── Omitted entirely when the store hasn't
+                    written one. */}
+                {data?.storeMessage && (
+                  <section className="pt-3 flex flex-col gap-1.5">
+                    <h3 className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
+                      Store Message
+                    </h3>
+                    <p className="text-[13px] font-medium text-[#1A1A2E] leading-relaxed">
+                      {data.storeMessage}
+                    </p>
+                  </section>
                 )}
               </div>
             )}
