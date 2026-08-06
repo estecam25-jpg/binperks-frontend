@@ -1,11 +1,19 @@
 /**
  * JoinLanding — client component for the member join landing page.
  *
- * Receives store branding as props from the server component (page.tsx)
- * so the brand color is correct from first paint — no loading flash.
+ * This is where referral links and QR codes land, and it is a BinPerks
+ * surface: BinPerks blue, the BinPerks wordmark, Coiny headings. A member is
+ * joining the network, not one store's own loyalty program, and the page has
+ * to read that way before they sign up — otherwise the membership looks
+ * store-scoped from the first screen.
  *
- * On mount: writes store + referral data to sessionStorage so the child
- * funnel pages (signup → vip → thankyou) can read it via signupStore.get().
+ * The store still appears, as context ("You were invited to shop at …"), and
+ * nothing about Origin Store attribution changes: storeId and merchantId are
+ * still passed through to signup exactly as before.
+ *
+ * Store branding is still received as props and still cached to
+ * sessionStorage — the child funnel pages (signup → vip → thankyou) read it
+ * from there. It just isn't rendered here.
  */
 
 'use client'
@@ -14,7 +22,9 @@ import { useEffect, useRef, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 import { signupStore, signupRef, type SignupRef } from '@/lib/signup-session'
-import { headerTextColor, storeInitials } from '@/lib/branding'
+
+/** The only brand color on this page. */
+const BINPERKS_BLUE = '#4A4B98'
 
 interface Props {
   storeKey:          string
@@ -28,7 +38,6 @@ interface Props {
   facebookReviewUrl: string | null
   city:              string | null
   state:             string | null
-  fontFamily:        string | null
   referrer: {
     code:              string
     referrerMemberId:  string
@@ -48,7 +57,6 @@ export default function JoinLanding({
   facebookReviewUrl,
   city,
   state,
-  fontFamily,
   referrer,
 }: Props) {
   const router = useRouter()
@@ -82,17 +90,9 @@ export default function JoinLanding({
     }).catch(() => {})
   }, [storeId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load custom Google Font for headings if set
-  useEffect(() => {
-    if (!fontFamily) return
-    const id = 'bp-store-font'
-    if (document.getElementById(id)) return
-    const link = document.createElement('link')
-    link.id = id
-    link.rel = 'stylesheet'
-    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontFamily)}:wght@700&display=swap`
-    document.head.appendChild(link)
-  }, [fontFamily])
+  // No store Google Font is loaded here any more. Headings on a BinPerks
+  // surface are Coiny, which merchants are not permitted to use — loading the
+  // store's font would put merchant type on a BinPerks page.
 
   // Stamp animation
   useEffect(() => {
@@ -108,11 +108,15 @@ export default function JoinLanding({
     return () => { if (animRef.current) clearTimeout(animRef.current) }
   }, [])
 
-  const textColor         = headerTextColor(brandColor)
-  const textOpacity       = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.75)' : 'rgba(26,26,46,0.65)'
-  const textOpacityStrong = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.92)' : 'rgba(26,26,46,0.9)'
-  const headingFont       = fontFamily ? `'${fontFamily}', sans-serif` : "'Coiny', sans-serif"
-  const locationLine      = [city, state].filter(Boolean).join(', ')
+  // Fixed against BinPerks blue rather than derived from a store color.
+  const textOpacity  = 'rgba(255,255,255,0.75)'
+  const locationLine = [city, state].filter(Boolean).join(', ')
+
+  // The store is context, not the headline. Referral arrivals get the phrasing
+  // that matches how they got here.
+  const storeContext = referrer
+    ? `You were invited to shop at ${storeName}`
+    : `You're joining at ${storeName}`
 
   function handleJoin() {
     router.push(`/member/join/${storeKey}/signup`)
@@ -132,46 +136,31 @@ export default function JoinLanding({
         </div>
       )}
 
-      {/* Hero */}
+      {/* Hero — BinPerks is the brand being joined. */}
       <div
         className="flex flex-col items-center px-5 pt-10 pb-12 gap-6"
-        style={{ backgroundColor: brandColor, color: textColor }}
+        style={{ backgroundColor: BINPERKS_BLUE, color: '#FFFFFF' }}
       >
-        {/* Store logo + name */}
-        <div className="flex flex-col items-center gap-3">
-          {logoUrl ? (
-            <div className="w-20 h-20 rounded-full bg-white overflow-hidden shadow-lg">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={logoUrl}
-                alt={`${brandName} logo`}
-                className="object-cover w-full h-full"
-              />
-            </div>
-          ) : (
-            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-lg">
-              <span
-                className="font-['Coiny'] text-3xl leading-none"
-                style={{ color: brandColor }}
-              >
-                {storeInitials(brandName)}
-              </span>
-            </div>
-          )}
-          <h1
-            className="text-4xl font-bold tracking-wide leading-none text-center"
-            style={{ fontFamily: headingFont }}
-          >
-            {brandName}
+        <div className="flex flex-col items-center gap-2 text-center">
+          <h1 className="font-['Coiny'] text-5xl tracking-wide leading-none text-white">
+            BinPerks
           </h1>
-          {locationLine && (
-            <p className="text-[28px] font-bold" style={{ color: textColor }}>
-              {locationLine}
-            </p>
-          )}
           <p className="text-[13px] font-semibold tracking-wide" style={{ color: textOpacity }}>
-            Rewards Program
+            One membership. Every participating store.
           </p>
+
+          {/* Store context — the location they arrived through, not the brand
+              they're joining. */}
+          <div className="mt-3 rounded-full bg-white/15 px-4 py-2">
+            <p className="text-[13px] font-semibold text-white leading-snug">
+              {storeContext}
+            </p>
+            {locationLine && (
+              <p className="text-[11px] font-medium" style={{ color: textOpacity }}>
+                {locationLine}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Stamp grid */}
@@ -191,7 +180,7 @@ export default function JoinLanding({
                 style={i < stampsFilled ? { transitionDelay: '0ms' } : undefined}
               >
                 {i < stampsFilled && (
-                  <span style={{ color: brandColor }} className="text-[10px] font-black">★</span>
+                  <span style={{ color: BINPERKS_BLUE }} className="text-[10px] font-black">★</span>
                 )}
               </div>
             ))}
@@ -205,7 +194,7 @@ export default function JoinLanding({
         <button
           onClick={handleJoin}
           className="w-full max-w-xs py-5 rounded-2xl font-bold text-[18px] font-['Montserrat'] tracking-wide shadow-lg active:scale-[0.97] transition-transform"
-          style={{ backgroundColor: textColor, color: brandColor }}
+          style={{ backgroundColor: '#FFFFFF', color: BINPERKS_BLUE }}
         >
           {referrer ? 'Claim Your Bonus & Join Free' : 'Join Free — Start Earning'}
         </button>
@@ -225,7 +214,7 @@ export default function JoinLanding({
           <a
             href={`/member/login/${storeKey}`}
             className="font-bold underline"
-            style={{ color: brandColor }}
+            style={{ color: BINPERKS_BLUE }}
           >
             Sign in →
           </a>
@@ -234,10 +223,7 @@ export default function JoinLanding({
 
       {/* How it works */}
       <div className="px-5 py-10 flex flex-col gap-6 max-w-md mx-auto w-full">
-        <h2
-          className="text-2xl font-bold text-[#1A1A2E] text-center"
-          style={{ fontFamily: headingFont }}
-        >
+        <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E] text-center">
           How it works
         </h2>
         <div className="flex flex-col gap-4">
@@ -254,14 +240,14 @@ export default function JoinLanding({
             },
             {
               icon: '🎟️',
-              title: 'Earn coupons to spend here',
-              body: "Hit 20 stamps and you'll earn a coupon to use on your next visit. Bigger rewards as you level up.",
+              title: 'Earn coupons you can spend anywhere',
+              body: "Hit 20 stamps and you'll earn a coupon, good at any participating BinPerks store. Bigger rewards as you level up.",
             },
           ].map((step, i) => (
             <div key={i} className="flex gap-4 items-start">
               <div
                 className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 text-2xl"
-                style={{ backgroundColor: `${brandColor}18` }}
+                style={{ backgroundColor: `${BINPERKS_BLUE}18` }}
               >
                 {step.icon}
               </div>
@@ -289,12 +275,9 @@ export default function JoinLanding({
       <div className="px-5 pb-10 max-w-md mx-auto w-full">
         <div
           className="rounded-2xl p-5 flex flex-col gap-2"
-          style={{ backgroundColor: `${brandColor}12`, border: `1.5px solid ${brandColor}30` }}
+          style={{ backgroundColor: `${BINPERKS_BLUE}12`, border: `1.5px solid ${BINPERKS_BLUE}30` }}
         >
-          <p
-            className="text-xl font-bold"
-            style={{ color: brandColor, fontFamily: headingFont }}
-          >
+          <p className="font-['Coiny'] text-xl" style={{ color: BINPERKS_BLUE }}>
             Bigger rewards as you level up
           </p>
           <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
@@ -304,7 +287,7 @@ export default function JoinLanding({
           <button
             onClick={handleJoin}
             className="mt-1 text-[14px] font-bold self-start"
-            style={{ color: brandColor }}
+            style={{ color: BINPERKS_BLUE }}
           >
             Start earning today →
           </button>

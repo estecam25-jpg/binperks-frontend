@@ -102,7 +102,6 @@ export default async function JoinLandingPage({
       facebookReviewUrl={store.facebook_review_url ?? null}
       city={store.city ?? null}
       state={store.state ?? null}
-      fontFamily={store.font_family ?? 'Montserrat'}
       referrer={referrer}
     />
   )
