@@ -70,14 +70,13 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   const [open, setOpen]         = useState(false)
   const [busy, setBusy]         = useState(false)
   const [result, setResult]     = useState<ScanResult | null>(null)
-  const [choice, setChoice]     = useState<Choice | null>(null)
   const [error, setError]       = useState('')
   const [preview, setPreview]   = useState<string | null>(null)
 
   const fileInput = useRef<HTMLInputElement>(null)
 
   function reset() {
-    setResult(null); setChoice(null); setError(''); setPreview(null); setBusy(false)
+    setResult(null); setError(''); setPreview(null); setBusy(false)
     if (fileInput.current) fileInput.current.value = ''
   }
 
@@ -87,7 +86,7 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    setBusy(true); setError(''); setResult(null); setChoice(null)
+    setBusy(true); setError(''); setResult(null)
 
     try {
       const { dataUrl, mediaType } = await downscale(file)
@@ -122,22 +121,36 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
     }
   }
 
-  async function recordChoice(next: Choice) {
-    if (!result || choice) return
-    setChoice(next)   // optimistic — the choice is a preference, not a transaction
+  /**
+   * Record the member's verdict and go straight back to the camera.
+   *
+   * No confirmation screen: someone standing over a bin is already reaching
+   * for the next item, and a tap-through in between is friction for no
+   * information. The result clearing IS the acknowledgement.
+   *
+   * Fire-and-forget by design. The choice is a stated preference, not a
+   * transaction — nothing downstream blocks on it, so a failed write must not
+   * drag the member back to a screen they have already left. It is logged and
+   * dropped. (A 409 just means it was already recorded, which is not a
+   * failure worth noting at all.)
+   */
+  function recordChoice(next: Choice) {
+    if (!result) return
+    const { scanEventId } = result
 
-    const res = await fetch('/api/member/scan/choice', {
+    reset()
+
+    void fetch('/api/member/scan/choice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scanEventId: result.scanEventId, choice: next }),
+      body: JSON.stringify({ scanEventId, choice: next }),
     })
-
-    // A 409 means it was already recorded (double tap) — that's not an error
-    // worth showing. Anything else rolls the button state back.
-    if (!res.ok && res.status !== 409) {
-      setChoice(null)
-      setError("We couldn't save that. Please try again.")
-    }
+      .then(res => {
+        if (!res.ok && res.status !== 409) {
+          console.error('[Scanner] choice not recorded:', res.status)
+        }
+      })
+      .catch(err => console.error('[Scanner] choice request failed:', err))
   }
 
   const lowConfidence = result !== null && result.confidence < LOW_CONFIDENCE
@@ -163,10 +176,10 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
         <div className="fixed inset-0 z-50 bg-[#F5F5F8] flex flex-col">
 
           {/* Header. Close is deliberately absent once a result is on screen:
-              the member answers Shopping Cart or Back to Bins, and the exit is
-              via "Scan another item" back to the capture screen. Keeping it on
-              the capture screen means they can always back out before scanning
-              rather than being trapped in the overlay. */}
+              the member answers Shopping Cart or Back to Bins, which records
+              the choice and drops them straight back here, where Close is
+              available again. So they can always leave — just not while a
+              result is sitting unanswered. */}
           <div className="px-5 py-4 flex items-center gap-3" style={{ backgroundColor: brandColor }}>
             <span className="font-['Coiny'] text-xl text-white leading-none flex-1">
               BinPerks Scanner
@@ -276,8 +289,9 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
               </div>
             )}
 
-            {/* ── Choice ── */}
-            {result && !busy && !choice && (
+            {/* ── Choice ── Answering either one records it and returns
+                straight to the camera; there is no screen in between. */}
+            {result && !busy && (
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => recordChoice('shopping_cart')}
@@ -292,25 +306,6 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                 >
                   <span className="text-2xl">🗑️</span>
                   Back to Bins
-                </button>
-              </div>
-            )}
-
-            {choice && (
-              <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col items-center gap-3 text-center">
-                <span className="text-3xl">{choice === 'shopping_cart' ? '🛒' : '🗑️'}</span>
-                <p className="text-[14px] font-bold text-[#1A1A2E]">
-                  {choice === 'shopping_cart' ? 'Added to your cart list' : 'Back in the bins it goes'}
-                </p>
-                <p className="text-[12px] text-[#8E8EA8] font-medium">Scan another item?</p>
-                {/* The only option after a choice. Returns to the capture
-                    screen, which is where Close lives. */}
-                <button
-                  onClick={reset}
-                  className="w-full py-4 rounded-2xl font-bold text-[15px] text-white"
-                  style={{ backgroundColor: brandColor }}
-                >
-                  📷 Scan another item
                 </button>
               </div>
             )}

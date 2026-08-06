@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
- * Store finder on the member dashboard (V3 Change 3).
+ * Store finder — the body of /member/stores.
  *
- * Replaces the old single-store perks list. A BinPerks membership works
- * across the network, so the dashboard shows every location a member can
- * visit rather than only the one they enrolled through. Their Origin Store
- * is first and labelled.
+ * A BinPerks membership works across the network, so this lists every
+ * location a member can visit rather than only the one they enrolled
+ * through. Their Origin Store is first and labelled.
+ *
+ * Lives on its own page rather than inside the dashboard: browsing the
+ * network is a distinct errand from checking your stamps, and it pushed
+ * everything below it off the first screen.
  *
  * Perks load lazily when a store is expanded, and are cached per store for
  * the life of the page — reopening a card does not re-fetch.
@@ -104,13 +107,6 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
 
   return (
     <div className="w-full flex flex-col gap-2.5">
-      <div className="px-1">
-        <p className="font-['Coiny'] text-lg text-[#1A1A2E]">Visit a Store</p>
-        <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5">
-          See what&apos;s waiting for you.
-        </p>
-      </div>
-
       {/* Search */}
       <input
         type="search"

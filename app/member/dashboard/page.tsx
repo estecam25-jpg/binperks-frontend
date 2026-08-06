@@ -5,8 +5,8 @@
  *
  * V3: this is a BinPerks surface, not a store surface. It uses BinPerks
  * colors only — the member belongs to the network, and the Origin Store is
- * an attribution fact, not a skin. Store-specific content lives inside the
- * store finder, where each store is one of many.
+ * an attribution fact, not a skin. Store-specific content lives on
+ * /member/stores, where each store is one of many.
  */
 
 import { useEffect, useState } from 'react'
@@ -15,7 +15,6 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import TierBadge from '@/components/stamp/TierBadge'
 import Scanner from './Scanner'
-import StoreFinder from './StoreFinder'
 import { getTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
 
 /** The only brand color on this page. */
@@ -312,10 +311,22 @@ export default function MemberDashboardPage() {
           </div>
         </div>
 
-        {/* Store finder — replaces the old single-store perks list. Perks are
-            merchant-specific offers inside a network-wide membership, so they
-            belong to a store in a list of stores, not to the dashboard. */}
-        <StoreFinder isFree={isFree} />
+        {/* Browsing the network lives on its own page. Inline, the finder
+            pushed coupons, referrals and everything below it off the first
+            screen. */}
+        <Link
+          href="/member/stores"
+          className="w-full rounded-2xl px-5 py-5 flex items-center gap-4 shadow-sm bg-white active:scale-[0.99] transition-transform"
+        >
+          <span className="text-3xl flex-shrink-0">🏪</span>
+          <div className="flex-1">
+            <p className="font-['Coiny'] text-lg text-[#1A1A2E]">Browse Stores &amp; Perks</p>
+            <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">
+              See every BinPerks location and what each one offers.
+            </p>
+          </div>
+          <span className="text-[#D1D1DC] text-xl flex-shrink-0">›</span>
+        </Link>
 
         {/* Member Memo — store-authored content, shown in neutral BinPerks
             styling rather than the store's brand treatment. */}
