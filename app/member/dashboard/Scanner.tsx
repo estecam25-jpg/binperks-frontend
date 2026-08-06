@@ -27,6 +27,10 @@ interface ScanResult {
   /** Display text like "$24.99 – $39.99". Empty when the model had no
    *  estimate. This is typical retail value, not the store's price. */
   estimatedRetailPrice: string
+  /** Stock photo of this product type, '' when the model had none. The model
+   *  can't browse, so the URL is recalled rather than looked up — it often
+   *  404s. Rendered only if it actually loads, and never as the real item. */
+  representativeImageUrl: string
 }
 
 // Below this, we tell the member outright that we're guessing rather than
@@ -73,10 +77,16 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   const [error, setError]       = useState('')
   const [preview, setPreview]   = useState<string | null>(null)
 
+  // The representative image is unverified, so it is hidden until the browser
+  // confirms it actually loaded. Reset per scan — a URL that failed for the
+  // last item says nothing about this one.
+  const [refImageFailed, setRefImageFailed] = useState(false)
+
   const fileInput = useRef<HTMLInputElement>(null)
 
   function reset() {
     setResult(null); setError(''); setPreview(null); setBusy(false)
+    setRefImageFailed(false)
     if (fileInput.current) fileInput.current.value = ''
   }
 
@@ -86,7 +96,7 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    setBusy(true); setError(''); setResult(null)
+    setBusy(true); setError(''); setResult(null); setRefImageFailed(false)
 
     try {
       const { dataUrl, mediaType } = await downscale(file)
@@ -222,6 +232,41 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
             {/* ── Result ── */}
             {result && !busy && (
               <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-2">
+
+                {/* AI disclaimer — on every result, at every confidence level.
+                    The low-confidence banner below is an extra warning, not a
+                    replacement for this. */}
+                <p className="text-[11px] italic text-[#8E8EA8] font-medium leading-relaxed">
+                  AI-powered identification — this is our best guess, not a guarantee.
+                  Always inspect the item before purchasing.
+                </p>
+
+                {/* Representative image. Unverified model-supplied URL, so it
+                    starts hidden and is revealed only if the browser loads it;
+                    onError hides it for good. No placeholder, no broken-image
+                    icon, no alt text on failure — nothing at all. */}
+                {result.representativeImageUrl && !refImageFailed && (
+                  <div className="flex flex-col gap-1">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={result.representativeImageUrl}
+                      alt={`Representative photo of ${result.identifiedProduct}`}
+                      onError={() => setRefImageFailed(true)}
+                      // Deliberately NOT loading="lazy": a lazily-loaded image
+                      // that is still offscreen never requests, so onError
+                      // never fires and a dead URL leaves the caption and an
+                      // empty gap on screen until the member scrolls to it.
+                      // Eager loading is what makes hide-on-failure work.
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                      className="w-full rounded-xl object-contain max-h-48 bg-[#F5F5F8]"
+                    />
+                    <p className="text-[10px] text-[#8E8EA8] font-medium text-center">
+                      Representative image — not the actual item
+                    </p>
+                  </div>
+                )}
+
                 {lowConfidence ? (
                   <p className="text-[12px] font-semibold text-[#8A6A00] bg-[#FFB21725] rounded-lg px-3 py-2 leading-relaxed">
                     We&apos;re not sure what this is — here&apos;s our best guess:

@@ -16,10 +16,16 @@
  *
  * Responses:
  *   200 { scanEventId, identifiedProduct, identifiedCategory, confidence,
- *         description, estimatedRetailPrice }
+ *         description, estimatedRetailPrice, representativeImageUrl }
  *     estimatedRetailPrice — display text like "$24.99 – $39.99", '' if the
  *     model could not estimate. An estimate of typical retail value, NOT a
  *     price this store charges; the UI must label it accordingly.
+ *     representativeImageUrl — https URL of a stock photo of this product
+ *     type, '' when absent or rejected by sanitizeImageUrl. UNVERIFIED: the
+ *     model has no web access, so it is recalled from training rather than
+ *     looked up. It frequently 404s, and it can load while showing a
+ *     different product. Never the member's actual item; the UI hides it on
+ *     load error and must label it as representative.
  *   400 { error: 'missing_image' | 'unsupported_media_type' | 'image_too_large' }
  *   401 { error: 'not_authenticated' }
  *   404 { error: 'member_not_found' }
@@ -32,6 +38,7 @@ import { createHash } from 'crypto'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { sanitizeImageUrl } from '@/lib/scanner-image-url'
 
 // Model is pinned here so it can be changed in one place.
 //
@@ -54,10 +61,13 @@ const MAX_BASE64_LENGTH = 3_500_000
 const SYSTEM_PROMPT =
   "You are a product identification assistant inside a bin store. The member has scanned an item. " +
   "Identify the product as specifically as possible. Return JSON only with these fields: " +
-  "{ identified_product: string, identified_category: string, confidence: number (0-1), description: string, estimated_retail_price: string }. " +
+  "{ identified_product: string, identified_category: string, confidence: number (0-1), description: string, estimated_retail_price: string, representative_image_url: string }. " +
   "Also estimate the average retail price for this item in USD. Add a field: estimated_retail_price " +
   "(string, e.g. '$24.99 – $39.99' or 'Typically $15–$25 at retail'). " +
-  "If you cannot identify the item, return { identified_product: 'Unknown item', identified_category: 'Unknown', confidence: 0, description: 'Could not identify this item.', estimated_retail_price: '' }"
+  "Also provide a representative_image_url — a direct publicly accessible image URL (from Wikipedia, " +
+  "a manufacturer site, or a well-known retailer) that shows what this product typically looks like. " +
+  "Return a real, working URL. If you are not confident in a specific URL, return null. " +
+  "If you cannot identify the item, return { identified_product: 'Unknown item', identified_category: 'Unknown', confidence: 0, description: 'Could not identify this item.', estimated_retail_price: '', representative_image_url: null }"
 
 interface Identification {
   identified_product: string
@@ -67,6 +77,10 @@ interface Identification {
   /** Free text, not a number — the model returns ranges like "$15–$25".
    *  Empty string when it could not estimate. */
   estimated_retail_price: string
+  /** Model-suggested image URL, or '' when absent or rejected by
+   *  sanitizeImageUrl. The model has no web access, so this is recalled from
+   *  training rather than looked up — treat it as a guess that often 404s. */
+  representative_image_url: string
 }
 
 const UNIDENTIFIED: Identification = {
@@ -75,7 +89,9 @@ const UNIDENTIFIED: Identification = {
   confidence: 0,
   description: 'Could not identify this item.',
   estimated_retail_price: '',
+  representative_image_url: '',
 }
+
 
 /**
  * Pull the JSON object out of a plain-text model response.
@@ -114,6 +130,7 @@ function extractJson(text: string): Identification {
       confidence,
       description:         String(parsed.description ?? UNIDENTIFIED.description),
       estimated_retail_price: estimatedRetailPrice,
+      representative_image_url: sanitizeImageUrl(parsed.representative_image_url),
     }
   } catch {
     return UNIDENTIFIED
@@ -229,6 +246,7 @@ export async function POST(req: NextRequest) {
       ai_confidence:       identification.confidence,
       // Stored as null rather than '' so "no estimate" is unambiguous in SQL.
       estimated_retail_price: identification.estimated_retail_price || null,
+      representative_image_url: identification.representative_image_url || null,
       member_choice:       null,   // set later by /api/member/scan/choice
     })
     .select('id')
@@ -240,11 +258,12 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
-    scanEventId:         scanEvent.id,
-    identifiedProduct:   identification.identified_product,
-    identifiedCategory:  identification.identified_category,
-    confidence:          identification.confidence,
-    description:         identification.description,
-    estimatedRetailPrice: identification.estimated_retail_price,
+    scanEventId:            scanEvent.id,
+    identifiedProduct:      identification.identified_product,
+    identifiedCategory:     identification.identified_category,
+    confidence:             identification.confidence,
+    description:            identification.description,
+    estimatedRetailPrice:   identification.estimated_retail_price,
+    representativeImageUrl: identification.representative_image_url,
   })
 }
