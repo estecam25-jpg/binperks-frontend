@@ -7,14 +7,11 @@
  * Supabase magic-link token server-side, and deliver the code over two
  * channels: Resend for email, GHL/Twilio for SMS.
  *
- * ON THE SMS CHANNEL — read before assuming it works:
- * There is no phone column on `merchants`. The only merchant-side phone in
- * the schema is `staff_users.phone` on the owner row, and at the time of
- * writing it is null for the one owner row that exists, while two of three
- * merchants have no owner row at all. So the SMS half is wired end to end but
- * silent until those phone numbers are actually populated. The response says
- * which channels really went out (`sentEmail` / `sentSms`) so the UI can tell
- * the merchant the truth instead of promising a text that was never sent.
+ * ON THE SMS CHANNEL: `merchants.phone` is nullable and not every merchant
+ * has one on file, so SMS is best-effort rather than guaranteed. The response
+ * reports which channels actually went out (`sentEmail` / `sentSms`) so the
+ * UI can tell the merchant the truth instead of promising a text that was
+ * never sent.
  *
  * Request body: { email: string }
  *
@@ -75,7 +72,7 @@ export async function POST(req: NextRequest) {
 
     const { data: merchant } = await admin
       .from('merchants')
-      .select('id, company_name, owner_email, auth_user_id')
+      .select('id, name, company_name, owner_email, phone, auth_user_id')
       .eq('owner_email', email)
       .maybeSingle()
 
@@ -87,18 +84,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
 
-    // Phone and contact name live on the owner staff_users row, which is the
-    // only merchant-side place either exists. Both are optional.
-    const { data: owner } = await admin
-      .from('staff_users')
-      .select('name, phone')
-      .eq('merchant_id', merchant.id)
-      .eq('role', 'owner')
-      .eq('is_active', true)
-      .maybeSingle()
-
-    const phone = owner?.phone?.replace(/\D/g, '') || null
-    const firstName = owner?.name?.trim() || merchant.company_name || 'there'
+    // Phone comes straight off the merchant record. It is still optional —
+    // only some merchants have one on file — so the SMS channel stays
+    // conditional below.
+    const phone = merchant.phone?.replace(/\D/g, '') || null
+    const firstName = merchant.name?.trim() || merchant.company_name || 'there'
 
     // The Supabase side of auth is still a magic-link token; we simply never
     // send the link. The 8-digit code is our own handle for it, and the token
