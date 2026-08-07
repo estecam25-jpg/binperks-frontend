@@ -27,10 +27,6 @@ interface ScanResult {
   /** Display text like "$24.99 – $39.99". Empty when the model had no
    *  estimate. This is typical retail value, not the store's price. */
   estimatedRetailPrice: string
-  /** Stock photo of this product type, '' when the model had none. The model
-   *  can't browse, so the URL is recalled rather than looked up — it often
-   *  404s. Rendered only if it actually loads, and never as the real item. */
-  representativeImageUrl: string
 }
 
 // Below this, we tell the member outright that we're guessing rather than
@@ -75,18 +71,28 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   const [busy, setBusy]         = useState(false)
   const [result, setResult]     = useState<ScanResult | null>(null)
   const [error, setError]       = useState('')
-  const [preview, setPreview]   = useState<string | null>(null)
 
-  // The representative image is unverified, so it is hidden until the browser
-  // confirms it actually loaded. Reset per scan — a URL that failed for the
-  // last item says nothing about this one.
-  const [refImageFailed, setRefImageFailed] = useState(false)
+  // The member's own downscaled photo, as a data URL. Kept after upload so the
+  // result screen can show them what they actually pointed the camera at,
+  // next to the stock photo of what we think it is.
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null)
+
+  // Stock photo from /api/member/scan/image. Null means "nothing found", which
+  // is the common case — DuckDuckGo only has an instant answer for products
+  // with an encyclopedia entry. `stockFailed` additionally covers a URL that
+  // was returned but wouldn't load. Either way the slot renders nothing.
+  const [stockPhoto, setStockPhoto]   = useState<string | null>(null)
+  const [stockFailed, setStockFailed] = useState(false)
 
   const fileInput = useRef<HTMLInputElement>(null)
 
+  /** Guards against a slow lookup for a previous scan landing on a newer one. */
+  const stockLookupSeq = useRef(0)
+
   function reset() {
-    setResult(null); setError(''); setPreview(null); setBusy(false)
-    setRefImageFailed(false)
+    setResult(null); setError(''); setCapturedPhoto(null); setBusy(false)
+    setStockPhoto(null); setStockFailed(false)
+    stockLookupSeq.current++          // orphan any lookup still in flight
     if (fileInput.current) fileInput.current.value = ''
   }
 
@@ -96,11 +102,13 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    setBusy(true); setError(''); setResult(null); setRefImageFailed(false)
+    setBusy(true); setError(''); setResult(null)
+    setStockPhoto(null); setStockFailed(false)
 
     try {
       const { dataUrl, mediaType } = await downscale(file)
-      setPreview(dataUrl)
+      // Held for the result screen, not just as an upload preview.
+      setCapturedPhoto(dataUrl)
 
       const res = await fetch('/api/member/scan', {
         method: 'POST',
@@ -120,7 +128,12 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                 : "We couldn't scan that item. Please try again.",
         )
       } else {
-        setResult(await res.json())
+        const scan = await res.json() as ScanResult
+        setResult(scan)
+        // Not awaited: the result is already usable, and a stock photo is
+        // decoration. Making the member wait on a third-party lookup to see
+        // their own identification would be the wrong trade.
+        void lookupStockPhoto(scan.identifiedProduct)
       }
     } catch {
       setError("We couldn't read that photo. Please try again.")
@@ -128,6 +141,29 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
       setBusy(false)
       // Allow re-picking the same file.
       if (fileInput.current) fileInput.current.value = ''
+    }
+  }
+
+  /**
+   * Ask the server for a stock photo of the identified product.
+   *
+   * Silent on every failure path. DuckDuckGo's instant answers only cover
+   * products with an encyclopedia entry, so "nothing found" is the ordinary
+   * outcome for most bin merchandise — not an error worth showing anyone.
+   */
+  async function lookupStockPhoto(productName: string) {
+    if (!productName) return
+    const seq = ++stockLookupSeq.current
+
+    try {
+      const res = await fetch(`/api/member/scan/image?q=${encodeURIComponent(productName)}`)
+      if (!res.ok) return
+      const { imageUrl } = await res.json() as { imageUrl: string | null }
+      // A newer scan (or a reset) started while this was in flight.
+      if (seq !== stockLookupSeq.current) return
+      if (imageUrl) setStockPhoto(imageUrl)
+    } catch {
+      // Network hiccup on an optional decoration — leave the slot empty.
     }
   }
 
@@ -164,6 +200,10 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   }
 
   const lowConfidence = result !== null && result.confidence < LOW_CONFIDENCE
+
+  // The stock slot appears only once we have a URL that hasn't failed to load.
+  // Both conditions matter: nothing found, and found-but-broken, render alike.
+  const showStock = stockPhoto !== null && !stockFailed
 
   return (
     <>
@@ -207,10 +247,13 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
           <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4 max-w-md mx-auto w-full">
 
-            {preview && (
+            {/* Upload preview — only until the result lands. Once it does,
+                the photo reappears inside the result card paired with the
+                stock photo, so showing it twice would be noise. */}
+            {capturedPhoto && !result && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={preview}
+                src={capturedPhoto}
                 alt="The item you scanned"
                 className="w-full rounded-2xl object-cover max-h-64 shadow-sm"
               />
@@ -241,29 +284,47 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                   Always inspect the item before purchasing.
                 </p>
 
-                {/* Representative image. Unverified model-supplied URL, so it
-                    starts hidden and is revealed only if the browser loads it;
-                    onError hides it for good. No placeholder, no broken-image
-                    icon, no alt text on failure — nothing at all. */}
-                {result.representativeImageUrl && !refImageFailed && (
-                  <div className="flex flex-col gap-1">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={result.representativeImageUrl}
-                      alt={`Representative photo of ${result.identifiedProduct}`}
-                      onError={() => setRefImageFailed(true)}
-                      // Deliberately NOT loading="lazy": a lazily-loaded image
-                      // that is still offscreen never requests, so onError
-                      // never fires and a dead URL leaves the caption and an
-                      // empty gap on screen until the member scrolls to it.
-                      // Eager loading is what makes hide-on-failure work.
-                      decoding="async"
-                      referrerPolicy="no-referrer"
-                      className="w-full rounded-xl object-contain max-h-48 bg-[#F5F5F8]"
-                    />
-                    <p className="text-[10px] text-[#8E8EA8] font-medium text-center">
-                      Representative image — not the actual item
-                    </p>
+                {/* Their photo, and what we think it is, side by side — the
+                    comparison is the whole point, so the member can judge the
+                    match themselves rather than taking our word for it.
+                    When there is no stock photo (the common case) their photo
+                    simply takes the full width; no placeholder, no empty cell. */}
+                {capturedPhoto && (
+                  <div className={`grid gap-2 ${showStock ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    <figure className="flex flex-col gap-1 m-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={capturedPhoto}
+                        alt="The photo you took"
+                        className="w-full rounded-xl object-cover aspect-square bg-[#F5F5F8]"
+                      />
+                      <figcaption className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] text-center">
+                        Your item
+                      </figcaption>
+                    </figure>
+
+                    {showStock && (
+                      <figure className="flex flex-col gap-1 m-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={stockPhoto!}
+                          alt={`Stock photo of ${result.identifiedProduct}`}
+                          onError={() => setStockFailed(true)}
+                          // Deliberately NOT loading="lazy": a lazily-loaded
+                          // image that is still offscreen never requests, so
+                          // onError never fires and a dead URL leaves the
+                          // caption and an empty gap on screen until the
+                          // member scrolls to it. Eager loading is what makes
+                          // hide-on-failure work.
+                          decoding="async"
+                          referrerPolicy="no-referrer"
+                          className="w-full rounded-xl object-contain aspect-square bg-[#F5F5F8]"
+                        />
+                        <figcaption className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] text-center">
+                          Closest match
+                        </figcaption>
+                      </figure>
+                    )}
                   </div>
                 )}
 
