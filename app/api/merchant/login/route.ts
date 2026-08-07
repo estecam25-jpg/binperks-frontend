@@ -45,6 +45,11 @@ const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'BinPerks <noreply@feedback.
 const MAX_SENDS_PER_WINDOW = 5
 const RATE_LIMIT_WINDOW_SECONDS = 15 * 60
 
+/** Ceiling on the awaited GHL call. Long enough for a healthy round trip,
+ *  short enough that a hung GHL doesn't run the function into Vercel's own
+ *  timeout and fail a login whose email already went out. */
+const GHL_TIMEOUT_MS = 5000
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null) as { email?: string } | null
@@ -145,19 +150,40 @@ export async function POST(req: NextRequest) {
     }
 
     // ── SMS (GHL → Twilio) ──────────────────────────────────────────────────
-    // Fire and forget. Skipped entirely without a phone number: posting
-    // phone: null would be a guaranteed no-op that still looks like a send in
-    // the GHL logs.
+    // AWAITED, matching lib/member-otp.ts. This was previously fire-and-forget
+    // and that is what produced the ETIMEDOUT: once the handler returns,
+    // Vercel is free to freeze or tear down the instance, so an unresolved
+    // fetch is suspended mid-connection and the socket dies. The error
+    // surfaces out of band, after the response, and the webhook never lands.
+    //
+    // Fire-and-forget is survivable for a welcome SMS. It is not survivable
+    // for a sign-in code: if this call is dropped the merchant cannot log in.
+    //
+    // Skipped entirely without a phone number — posting phone: null would be a
+    // guaranteed no-op that still looks like a send in the GHL logs.
     let sentSms = false
     const ghlWebhook = process.env.GHL_MERCHANT_OTP_WEBHOOK_URL
     if (ghlWebhook && phone) {
-      sentSms = true
-      // GHL template: "Your BinPerks merchant sign-in code is: {{code}}."
-      void fetch(ghlWebhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merchantId: merchant.id, phone, firstName, code }),
-      }).catch(err => console.error('[/api/merchant/login] GHL webhook error:', err))
+      try {
+        // GHL template: "Your BinPerks merchant sign-in code is: {{code}}."
+        const ghlRes = await fetch(ghlWebhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ merchantId: merchant.id, phone, firstName, code }),
+          // Bounded so a slow GHL cannot hold the function open to Vercel's
+          // own limit and take the whole login down with it. Email has
+          // already been sent by this point, so giving up here costs the SMS
+          // and nothing else.
+          signal: AbortSignal.timeout(GHL_TIMEOUT_MS),
+        })
+        // Only claim the SMS channel on a real success. The previous version
+        // set this to true before firing, so the UI told merchants a text was
+        // on its way even when the call failed outright.
+        if (ghlRes.ok) sentSms = true
+        else console.error('[/api/merchant/login] GHL webhook HTTP', ghlRes.status)
+      } catch (err) {
+        console.error('[/api/merchant/login] GHL webhook error:', err)
+      }
     }
 
     // Every channel failed — the merchant has a live code they cannot see.
