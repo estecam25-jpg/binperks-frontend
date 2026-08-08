@@ -30,7 +30,6 @@ export async function GET(req: NextRequest) {
     { count: newMembersThisMonth },
     { count: newMerchantsThisMonth },
     { count: newVipThisMonth },
-    { count: newActiveMerchantsThisMonth },
     { count: totalMembers },
     { count: totalReferrals },
     { count: qualifiedReferrals },
@@ -43,11 +42,13 @@ export async function GET(req: NextRequest) {
     admin.from('stamp_events').select('stamp_count').throwOnError(),
     admin.from('rewards').select('*', { count: 'exact', head: true }).eq('status', 'earned'),
     admin.from('rewards').select('*', { count: 'exact', head: true }).eq('status', 'redeemed'),
-    admin.from('merchants').select('id, billing_status, subscription_status, location_count, implementation_fee_paid_at').eq('billing_status', 'active'),
+    // created_at is selected so this month's new merchants can be derived from
+    // these rows. A head-only count cannot carry location_count, and MRR
+    // growth needs per-merchant location counts to be priced correctly.
+    admin.from('merchants').select('id, billing_status, subscription_status, location_count, implementation_fee_paid_at, created_at').eq('billing_status', 'active'),
     admin.from('members').select('*', { count: 'exact', head: true }).gte('created_at', som),
     admin.from('merchants').select('*', { count: 'exact', head: true }).gte('created_at', som),
     admin.from('members').select('*', { count: 'exact', head: true }).eq('subscription_status', 'vip').gte('created_at', som),
-    admin.from('merchants').select('*', { count: 'exact', head: true }).eq('billing_status', 'active').gte('created_at', som),
     admin.from('members').select('*', { count: 'exact', head: true }),
     admin.from('referrals').select('*', { count: 'exact', head: true }),
     admin.from('referrals').select('*', { count: 'exact', head: true }).eq('status', 'qualified'),
@@ -83,21 +84,42 @@ export async function GET(req: NextRequest) {
   const oneMonthAgo = new Date()
   oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
 
-  const activeMerchants = (merchants ?? []).filter(m => m.subscription_status === 'active')
-  const merchantMrr = activeMerchants.reduce((sum, m) => {
+  /**
+   * What one merchant bills per month.
+   *
+   * Merchants still inside their first billing cycle are paying the
+   * implementation fee. A null implementation_fee_paid_at means a pre-V3
+   * merchant, who is by definition past their first cycle. Additional
+   * locations are charged in every cycle, including the first.
+   *
+   * Shared by the MRR total and the growth figure so the two can't drift.
+   */
+  const monthlyBilling = (m: {
+    location_count: number | null
+    implementation_fee_paid_at: string | null
+  }) => {
     const locs = Math.max(1, m.location_count ?? 1)
-    // Merchants still inside their first billing cycle are paying the
-    // implementation fee. A null implementation_fee_paid_at means a pre-V3
-    // merchant, who is by definition past their first cycle.
     const paidAt = m.implementation_fee_paid_at ? new Date(m.implementation_fee_paid_at) : null
     const inFirstCycle = paidAt !== null && paidAt > oneMonthAgo
     const basePrice = inFirstCycle ? IMPLEMENTATION_PRICE : PLATFORM_PRICE
-    return sum + basePrice + (locs - 1) * EXTRA_LOCATION_PRICE
-  }, 0)
+    return basePrice + (locs - 1) * EXTRA_LOCATION_PRICE
+  }
+
+  const activeMerchants = (merchants ?? []).filter(m => m.subscription_status === 'active')
+  const merchantMrr = activeMerchants.reduce((sum, m) => sum + monthlyBilling(m), 0)
   const memberMrr  = (totalVip ?? 0) * 29.99
   const totalMrr   = merchantMrr + memberMrr
 
-  const mrrGrowthThisMonth    = (newActiveMerchantsThisMonth ?? 0) * IMPLEMENTATION_PRICE + (newVipThisMonth ?? 0) * 29.99
+  // Growth is priced per merchant, not as a flat implementation fee each. The
+  // old version multiplied a bare count by $299.99, so it both ignored extra
+  // locations and charged the implementation fee to merchants already past
+  // their first cycle. Same billing_status/created_at filter as before.
+  const newActiveMerchantsThisMonth = (merchants ?? []).filter(
+    m => m.created_at != null && new Date(m.created_at) >= startOfMonth
+  )
+  const mrrGrowthThisMonth =
+    newActiveMerchantsThisMonth.reduce((sum, m) => sum + monthlyBilling(m), 0)
+    + (newVipThisMonth ?? 0) * 29.99
   const vipConversionRate     = (totalMembers ?? 0) > 0 ? ((totalVip ?? 0) / (totalMembers ?? 0)) * 100 : 0
   const referralConversionRate = (totalReferrals ?? 0) > 0 ? ((qualifiedReferrals ?? 0) / (totalReferrals ?? 0)) * 100 : 0
 

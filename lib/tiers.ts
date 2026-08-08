@@ -18,11 +18,32 @@ export const TIERS: Tier[] = [
   { name: 'Diamond', minStamps: 2000, maxStamps: null, multiplier: 5, couponValue: 15, visitsPerReward: 4,  badgeClass: 'bg-indigo-50 text-indigo-700' },
 ]
 
+/**
+ * Stamp-count tier ONLY. TIERS contains no Starter entry, so this returns
+ * Bronze for anyone with 0–199 stamps — including free members, who should be
+ * Starter. Never call this on its own to decide what tier to show; use
+ * resolveTierName, or pass subscriptionStatus to <TierBadge>.
+ */
 export function getTier(totalStamps: number): Tier {
   for (let i = TIERS.length - 1; i >= 0; i--) {
     if (totalStamps >= TIERS[i].minStamps) return TIERS[i]
   }
   return TIERS[0]
+}
+
+/**
+ * The tier a member is actually in.
+ *
+ * CORE RULE: Starter → Bronze requires a VIP subscription regardless of stamp
+ * count. A free member with 5,000 stamps is still Starter. getTier alone gets
+ * this wrong every time, which is how free members ended up displaying as
+ * Bronze — so the rule lives here and callers use this.
+ */
+export function resolveTierName(
+  totalStamps: number,
+  subscriptionStatus: string | null | undefined,
+): TierName {
+  return subscriptionStatus === 'free' ? 'Free' : getTier(totalStamps).name
 }
 
 export function cyclePosition(totalStamps: number): number {

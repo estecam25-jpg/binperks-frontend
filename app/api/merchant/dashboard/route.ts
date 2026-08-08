@@ -31,7 +31,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { getTier } from '@/lib/tiers'
+import { resolveTierName } from '@/lib/tiers'
 
 // Origin Merchant commission per VIP member per month while eligible.
 // Source of truth: CLAUDE.md "PRICING (V3 LOCKED)". Mirrored in
@@ -171,7 +171,9 @@ export async function GET(req: NextRequest) {
 
     admin
       .from('members')
-      .select('id, first_name, last_name, total_stamps, created_at')
+      // subscription_status is needed to resolve the tier — a free member is
+      // Starter regardless of stamp count.
+      .select('id, first_name, last_name, total_stamps, subscription_status, created_at')
       .eq('merchant_id', merchant.id)
       .in('home_store_id', storeIds)
       .eq('status', 'active')
@@ -207,17 +209,14 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const recentMembers = (recentMembersRes.data ?? []).map(m => {
-    const tier = getTier(m.total_stamps)
-    return {
-      id:          m.id,
-      firstName:   m.first_name,
-      lastName:    m.last_name,
-      totalStamps: m.total_stamps,
-      tier:        tier.name,
-      joinedAt:    m.created_at,
-    }
-  })
+  const recentMembers = (recentMembersRes.data ?? []).map(m => ({
+    id:          m.id,
+    firstName:   m.first_name,
+    lastName:    m.last_name,
+    totalStamps: m.total_stamps,
+    tier:        resolveTierName(m.total_stamps, m.subscription_status),
+    joinedAt:    m.created_at,
+  }))
 
   const commissionEligible = merchant.commission_eligible ?? false
   const originatedVipMembers = originatedVipRes.count ?? 0

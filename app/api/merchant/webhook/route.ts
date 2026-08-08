@@ -26,6 +26,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { postToGhl } from '@/lib/ghl-webhook'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 const isTest = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test')
@@ -230,26 +231,30 @@ export async function POST(req: NextRequest) {
         if (!merchantRow?.ghl_onboarding_sent_at) {
           const ghlWebhook = process.env.GHL_MERCHANT_ACTIVATED_WEBHOOK_URL
           if (ghlWebhook) {
-            try {
-              await fetch(ghlWebhook, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  merchantId,
-                  merchantEmail: merchantRow?.owner_email ?? '',
-                  companyName:   merchantRow?.company_name ?? '',
-                  subscriptionId,
-                  locationCount,
-                  nextBillingDate,
-                }),
-              })
+            // Bounded (postToGhl) so a hung GHL can't hold this open until
+            // Vercel kills it — Stripe would then see a timeout and retry the
+            // whole event. Non-fatal either way: GHL failure never fails the
+            // Stripe webhook.
+            const delivered = await postToGhl(ghlWebhook, {
+              merchantId,
+              merchantEmail: merchantRow?.owner_email ?? '',
+              companyName:   merchantRow?.company_name ?? '',
+              subscriptionId,
+              locationCount,
+              nextBillingDate,
+            }, 'merchant/webhook onboarding')
+
+            // Only stamp the idempotency marker on real delivery. The previous
+            // version stamped it whenever fetch didn't throw — and a non-2xx
+            // response doesn't throw, so a GHL 500 marked onboarding as sent
+            // and permanently suppressed the retry, leaving the merchant with
+            // no onboarding email. Leaving it unset lets Stripe's retry of this
+            // event have another go.
+            if (delivered) {
               await supabase
                 .from('merchants')
                 .update({ ghl_onboarding_sent_at: new Date().toISOString() })
                 .eq('id', merchantId)
-            } catch (ghlErr) {
-              console.error('[merchant/webhook] GHL onboarding webhook error:', ghlErr)
-              // Non-fatal — GHL failure doesn't fail the Stripe webhook
             }
           }
         }

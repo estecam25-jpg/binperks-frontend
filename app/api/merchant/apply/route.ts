@@ -40,6 +40,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { postToGhl } from '@/lib/ghl-webhook'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 
@@ -186,22 +187,21 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // 7. Notify GHL (fire-and-forget — don't block checkout redirect on this).
+    // 7. Notify GHL. Awaited — a fire-and-forget fetch is killed when the
+    //    handler returns on Vercel, so the welcome SMS was being dropped at
+    //    random. Costs up to 5s before the checkout redirect; postToGhl never
+    //    throws, so a GHL outage cannot block a merchant from paying.
     //    Skipped entirely if the webhook URL isn't configured yet.
     const ghlWebhook = process.env.GHL_MERCHANT_CREATED_WEBHOOK_URL
     if (ghlWebhook) {
-      fetch(ghlWebhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          merchantId:  merchant.id,
-          firstName,
-          lastName,
-          phone,
-          email:       normalizedEmail,
-          companyName,
-        }),
-      }).catch(err => console.error('[/api/merchant/apply] GHL webhook error:', err))
+      await postToGhl(ghlWebhook, {
+        merchantId:  merchant.id,
+        firstName,
+        lastName,
+        phone,
+        email:       normalizedEmail,
+        companyName,
+      }, '/api/merchant/apply')
     }
 
     return NextResponse.json({

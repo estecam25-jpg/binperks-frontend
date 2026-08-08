@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { postToGhl } from '@/lib/ghl-webhook'
 
 const ADMIN_EMAIL = 'enina@estecam.com'
 
@@ -198,16 +199,17 @@ export async function PATCH(req: NextRequest) {
       admin.from('stores').update({ is_active: true }).eq('merchant_id', merchantId),
     ])
 
+    // Awaited — a fire-and-forget fetch is killed when the handler returns on
+    // Vercel, so the activation email was being dropped at random, leaving an
+    // activated merchant with no notice that they can log in. postToGhl never
+    // throws, so a GHL outage cannot fail an activation already written above.
     if (process.env.GHL_MERCHANT_ACTIVATED_WEBHOOK_URL) {
-      fetch(process.env.GHL_MERCHANT_ACTIVATED_WEBHOOK_URL, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          merchantId: merchant.id, firstName: merchant.name ?? '',
-          phone: '', email: merchant.owner_email ?? '',
-          companyName: merchant.company_name ?? '',
-          dashboardUrl: 'https://app.binperks.com/merchant/dashboard',
-        }),
-      }).catch(err => console.error('[admin/merchants] GHL webhook error:', err))
+      await postToGhl(process.env.GHL_MERCHANT_ACTIVATED_WEBHOOK_URL, {
+        merchantId: merchant.id, firstName: merchant.name ?? '',
+        phone: '', email: merchant.owner_email ?? '',
+        companyName: merchant.company_name ?? '',
+        dashboardUrl: 'https://app.binperks.com/merchant/dashboard',
+      }, '/api/admin/merchants')
     }
   } else {
     await Promise.all([

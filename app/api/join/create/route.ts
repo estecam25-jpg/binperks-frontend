@@ -31,6 +31,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { issueMemberOtp } from '@/lib/member-otp'
+import { postToGhl } from '@/lib/ghl-webhook'
 
 const APP_URL = 'https://app.binperks.com'
 
@@ -220,7 +221,10 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 6. Notify GHL (fire-and-forget — don't block the response).
+    // 6. Notify GHL. Awaited — a fire-and-forget fetch is killed when the
+    //    handler returns on Vercel, so the welcome SMS was being dropped at
+    //    random. postToGhl never throws, so a GHL outage cannot fail a signup
+    //    that has already written the member. See lib/ghl-webhook.
     //    Skipped if GHL_MEMBER_CREATED_WEBHOOK_URL is not yet configured.
     //
     //    V3 network language: the SMS/email copy itself lives in the GoHighLevel
@@ -233,20 +237,16 @@ export async function POST(req: NextRequest) {
     const finalReferralUrl = `${APP_URL}/member/join/${store.canonical_key}?ref=${referralCode}`
     const ghlWebhook = process.env.GHL_MEMBER_CREATED_WEBHOOK_URL
     if (ghlWebhook) {
-      fetch(ghlWebhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          memberId,
-          firstName,
-          lastName,
-          phone,
-          email:            normalizedEmail,
-          storeName:        store.display_name,
-          networkStoreName: `BinPerks at ${store.display_name}`,
-          referralUrl:      finalReferralUrl,
-        }),
-      }).catch(err => console.error('[/api/join/create] GHL webhook error:', err))
+      await postToGhl(ghlWebhook, {
+        memberId,
+        firstName,
+        lastName,
+        phone,
+        email:            normalizedEmail,
+        storeName:        store.display_name,
+        networkStoreName: `BinPerks at ${store.display_name}`,
+        referralUrl:      finalReferralUrl,
+      }, '/api/join/create')
     }
 
     // 7. Send the new member an 8-digit sign-in code so they can go straight

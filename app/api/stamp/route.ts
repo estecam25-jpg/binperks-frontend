@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { postToGhl } from '@/lib/ghl-webhook'
 
 export async function POST(req: NextRequest) {
   try {
@@ -272,25 +273,28 @@ export async function POST(req: NextRequest) {
 
     // 10. Fire post-visit webhook to GHL (non-blocking)
     //     Triggers SMS prompt to leave a review / provide feedback
+    //
+    //     Deliberately NOT awaited: a cashier is standing at the counter with
+    //     a member in front of them, and a review request is not worth adding
+    //     up to 5s to every stamp. The bounded timeout is what keeps the
+    //     un-awaited call from lingering.
+    //
+    //     KNOWN LIMITATION: fire-and-forget is unreliable on Vercel. The
+    //     instance may be frozen the moment this handler returns, killing the
+    //     request mid-flight, so some review requests are silently never
+    //     delivered. The timeout bounds the call but does not fix delivery —
+    //     only awaiting does, and that trade was rejected here. If review
+    //     requests turn out to be going missing, the fix is a queue or a
+    //     scheduled job, not a longer timeout.
     if (process.env.GHL_POST_VISIT_WEBHOOK_URL) {
       const feedbackUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.binperks.com') + '/member/feedback'
-      ;(async () => {
-        try {
-          await fetch(process.env.GHL_POST_VISIT_WEBHOOK_URL!, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              memberId,
-              firstName:   member.first_name,
-              phone:       member.phone,
-              storeId,
-              feedbackUrl,
-            }),
-          })
-        } catch (err) {
-          console.error('[stamp] GHL post-visit webhook error:', err)
-        }
-      })()
+      void postToGhl(process.env.GHL_POST_VISIT_WEBHOOK_URL, {
+        memberId,
+        firstName:   member.first_name,
+        phone:       member.phone,
+        storeId,
+        feedbackUrl,
+      }, 'stamp post-visit')
     }
 
     return NextResponse.json({

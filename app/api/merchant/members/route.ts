@@ -24,7 +24,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { getTier } from '@/lib/tiers'
+import { resolveTierName } from '@/lib/tiers'
 
 export async function GET(req: NextRequest) {
   const supabase = await createServerSupabaseClient()
@@ -106,7 +106,9 @@ export async function GET(req: NextRequest) {
       stores: { display_name: string }[]
     }[]
   }) => {
-    const tier = getTier(m.total_stamps)
+    // Free members are Starter no matter how many stamps they have — getTier
+    // alone would report Bronze for anyone under 200.
+    const tierName = resolveTierName(m.total_stamps, m.subscription_status)
     // Get most recent visit
     const sortedVisits = (m.visits ?? []).sort(
       (a, b) => b.date.localeCompare(a.date)
@@ -118,7 +120,7 @@ export async function GET(req: NextRequest) {
       firstName:          m.first_name,
       lastName:           m.last_name,
       phone:              m.phone,
-      tier:               tier.name,
+      tier:               tierName,
       totalStamps:        m.total_stamps,
       subscriptionStatus: m.subscription_status,
       joinedAt:           m.created_at,

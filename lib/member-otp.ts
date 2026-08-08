@@ -27,6 +27,7 @@
 import { Redis } from '@upstash/redis'
 import { randomInt } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { postToGhl } from '@/lib/ghl-webhook'
 
 const APP_URL = 'https://app.binperks.com'
 
@@ -121,17 +122,14 @@ export async function issueMemberOtp(params: IssueParams): Promise<IssueResult> 
   }
 
   // GHL template: "Your BinPerks sign-in code is: {{code}}. Expires in 10 minutes."
+  //
+  // Awaited so Vercel can't freeze the instance out from under the request —
+  // dropping this means the member never receives a code. postToGhl bounds it
+  // at 5s, which the raw fetch here did not: a hung GHL could previously hold
+  // the function open until Vercel's own limit killed the login outright.
   const ghlWebhook = process.env.GHL_MAGIC_LINK_WEBHOOK_URL
   if (ghlWebhook) {
-    try {
-      await fetch(ghlWebhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberId, phone, firstName, code }),
-      })
-    } catch (err) {
-      console.error('[member-otp] GHL webhook error:', err)
-    }
+    await postToGhl(ghlWebhook, { memberId, phone, firstName, code }, 'member-otp')
   }
 
   return { ok: true }

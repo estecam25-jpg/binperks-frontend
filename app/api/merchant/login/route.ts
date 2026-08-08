@@ -33,6 +33,7 @@ import {
   redisClient,
   OTP_TTL_SECONDS,
 } from '@/lib/merchant-otp'
+import { postToGhl } from '@/lib/ghl-webhook'
 
 const APP_URL = 'https://app.binperks.com'
 
@@ -44,11 +45,6 @@ const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'BinPerks <noreply@feedback.
  *  keeps this from becoming a free email/SMS cannon pointed at a merchant. */
 const MAX_SENDS_PER_WINDOW = 5
 const RATE_LIMIT_WINDOW_SECONDS = 15 * 60
-
-/** Ceiling on the awaited GHL call. Long enough for a healthy round trip,
- *  short enough that a hung GHL doesn't run the function into Vercel's own
- *  timeout and fail a login whose email already went out. */
-const GHL_TIMEOUT_MS = 5000
 
 export async function POST(req: NextRequest) {
   try {
@@ -161,29 +157,20 @@ export async function POST(req: NextRequest) {
     //
     // Skipped entirely without a phone number — posting phone: null would be a
     // guaranteed no-op that still looks like a send in the GHL logs.
+    // postToGhl is bounded and never throws, so a slow or broken GHL costs the
+    // SMS and nothing else — email has already gone out by this point. Its
+    // return value is the source of truth for sentSms: an earlier version set
+    // the flag before firing, so the UI told merchants a text was on its way
+    // even when the call failed outright.
     let sentSms = false
     const ghlWebhook = process.env.GHL_MERCHANT_OTP_WEBHOOK_URL
     if (ghlWebhook && phone) {
-      try {
-        // GHL template: "Your BinPerks merchant sign-in code is: {{code}}."
-        const ghlRes = await fetch(ghlWebhook, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ merchantId: merchant.id, phone, firstName, code }),
-          // Bounded so a slow GHL cannot hold the function open to Vercel's
-          // own limit and take the whole login down with it. Email has
-          // already been sent by this point, so giving up here costs the SMS
-          // and nothing else.
-          signal: AbortSignal.timeout(GHL_TIMEOUT_MS),
-        })
-        // Only claim the SMS channel on a real success. The previous version
-        // set this to true before firing, so the UI told merchants a text was
-        // on its way even when the call failed outright.
-        if (ghlRes.ok) sentSms = true
-        else console.error('[/api/merchant/login] GHL webhook HTTP', ghlRes.status)
-      } catch (err) {
-        console.error('[/api/merchant/login] GHL webhook error:', err)
-      }
+      // GHL template: "Your BinPerks merchant sign-in code is: {{code}}."
+      sentSms = await postToGhl(
+        ghlWebhook,
+        { merchantId: merchant.id, phone, firstName, code },
+        '/api/merchant/login',
+      )
     }
 
     // Every channel failed — the merchant has a live code they cannot see.
