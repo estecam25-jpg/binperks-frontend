@@ -32,18 +32,41 @@ export function getTier(totalStamps: number): Tier {
 }
 
 /**
- * The tier a member is actually in.
+ * Starter, the free tier. Deliberately NOT in TIERS: that array is a
+ * stamp-threshold ladder and Starter isn't reachable by stamp count — it is
+ * where you are until you subscribe. minStamps/maxStamps are inert here, and
+ * maxStamps is null rather than 199 because a free member with 5,000 stamps is
+ * still Starter.
+ *
+ * Values from CLAUDE.md "TIER SYSTEM (LOCKED)": 1x multiplier, $5 coupon.
+ */
+export const STARTER_TIER: Tier = {
+  name: 'Free', minStamps: 0, maxStamps: null, multiplier: 1,
+  couponValue: 5, visitsPerReward: 20, badgeClass: 'bg-gray-100 text-gray-500',
+}
+
+/**
+ * The tier a member is actually in, as a full Tier.
  *
  * CORE RULE: Starter → Bronze requires a VIP subscription regardless of stamp
- * count. A free member with 5,000 stamps is still Starter. getTier alone gets
- * this wrong every time, which is how free members ended up displaying as
- * Bronze — so the rule lives here and callers use this.
+ * count. getTier alone gets this wrong every time — it reports Bronze for any
+ * free member under 200 stamps, which is how the stamp tool and the member
+ * dashboard came to promise Starter members a $7 coupon when the real value is
+ * $5. Reach for this whenever you need couponValue or multiplier, not getTier.
  */
+export function resolveTier(
+  totalStamps: number,
+  subscriptionStatus: string | null | undefined,
+): Tier {
+  return subscriptionStatus === 'free' ? STARTER_TIER : getTier(totalStamps)
+}
+
+/** Convenience wrapper on resolveTier for the common display-only case. */
 export function resolveTierName(
   totalStamps: number,
   subscriptionStatus: string | null | undefined,
 ): TierName {
-  return subscriptionStatus === 'free' ? 'Free' : getTier(totalStamps).name
+  return resolveTier(totalStamps, subscriptionStatus).name
 }
 
 export function cyclePosition(totalStamps: number): number {

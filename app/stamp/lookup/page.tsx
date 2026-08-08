@@ -14,7 +14,7 @@ import {
   type FoundMember,
   type RecentLookup,
 } from '@/lib/stamp-session'
-import { getTier } from '@/lib/tiers'
+import { resolveTier } from '@/lib/tiers'
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 10)
@@ -103,7 +103,9 @@ export default function LookupPage() {
       .eq('date', today)
       .single()
 
-    const tier = getTier(member.total_stamps)
+    // resolveTier, not getTier: a free member is Starter with a $5 coupon no
+    // matter how many stamps they have. getTier would say Bronze/$7.
+    const tier = resolveTier(member.total_stamps, member.subscription_status)
 
     const found: FoundMember = {
       id: member.id,

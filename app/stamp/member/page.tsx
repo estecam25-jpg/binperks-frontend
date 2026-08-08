@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import TierBadge from '@/components/stamp/TierBadge'
 import { cashierSession, storeSession, foundMemberSession, type FoundMember } from '@/lib/stamp-session'
-import { getTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
+import { resolveTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
 
 export default function MemberViewPage() {
   const router = useRouter()
@@ -31,7 +31,10 @@ export default function MemberViewPage() {
     const [{ data: fresh }, todayVisitResult] = await Promise.all([
       supabase
         .from('members')
-        .select('total_stamps, coupon_due, is_blacklisted')
+        // subscription_status is refetched rather than taken from the cached
+        // lookup: it decides the tier and coupon value, and a member who
+        // upgraded to VIP since the lookup should see that here.
+        .select('total_stamps, coupon_due, is_blacklisted, subscription_status')
         .eq('id', cached.id)
         .single(),
       supabase
@@ -46,11 +49,14 @@ export default function MemberViewPage() {
     if (!fresh) { router.replace('/stamp/lookup'); return }
     if (fresh.is_blacklisted) { router.replace('/stamp/lookup'); return }
 
-    const tier = getTier(fresh.total_stamps)
+    // resolveTier, not getTier: a free member is Starter with a $5 coupon no
+    // matter how many stamps they have. getTier would say Bronze/$7.
+    const tier = resolveTier(fresh.total_stamps, fresh.subscription_status)
 
     setMember({
       ...cached,
       totalStamps: fresh.total_stamps,
+      subscriptionStatus: fresh.subscription_status,
       couponDue: fresh.coupon_due,
       couponValue: tier.couponValue,
       alreadyStampedToday: !!todayVisitResult.data,
@@ -78,7 +84,7 @@ export default function MemberViewPage() {
     )
   }
 
-  const tier = getTier(member.totalStamps)
+  const tier = resolveTier(member.totalStamps, member.subscriptionStatus)
   const cyclePos = cyclePosition(member.totalStamps)
   const remaining = stampsToNextCoupon(member.totalStamps)
   const filledDots = member.couponDue ? 20 : cyclePos

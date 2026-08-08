@@ -15,7 +15,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import TierBadge from '@/components/stamp/TierBadge'
 import Scanner from './Scanner'
-import { getTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
+import { resolveTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
 
 /** The only brand color on this page. */
 const BINPERKS_BLUE = '#4A4B98'
@@ -173,7 +173,10 @@ export default function MemberDashboardPage() {
     )
   }
 
-  const tier = getTier(member.totalStamps)
+  // resolveTier, not getTier: a free member is Starter with a $5 coupon no
+  // matter how many stamps they have. getTier said Bronze/$7, so Starter
+  // members were being promised a coupon $2 larger than the one they get.
+  const tier = resolveTier(member.totalStamps, member.subscriptionStatus)
   const cyclePos = cyclePosition(member.totalStamps)
   const remaining = stampsToNextCoupon(member.totalStamps)
   const progressPct = Math.min((cyclePos / 20) * 100, 100)

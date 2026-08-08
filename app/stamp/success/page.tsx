@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import TierBadge from '@/components/stamp/TierBadge'
 import { cashierSession, storeSession, foundMemberSession, stampResultSession, signOutCashier, type StampResult } from '@/lib/stamp-session'
-import { getTier, cyclePosition, stampsToNextCoupon, TIER_DISPLAY_NAMES } from '@/lib/tiers'
+import { resolveTier, cyclePosition, stampsToNextCoupon, TIER_DISPLAY_NAMES } from '@/lib/tiers'
 
 export default function SuccessPage() {
   const router = useRouter()
@@ -95,7 +95,11 @@ export default function SuccessPage() {
     )
   }
 
-  const tier = getTier(result.newTotalStamps)
+  // resolveTier, not getTier: a free member is Starter with a $5 coupon no
+  // matter how many stamps they have. getTier would say Bronze/$7 — and this
+  // page reads the value out loud to the member via the cashier script.
+  // This page carries isVip rather than the raw status string.
+  const tier = resolveTier(result.newTotalStamps, result.isVip ? 'vip' : 'free')
   const cyclePos = cyclePosition(result.newTotalStamps)
   const cycleDisplay = result.couponIssued ? 20 : cyclePos
   const remaining = result.couponIssued ? 20 : stampsToNextCoupon(result.newTotalStamps)
@@ -106,7 +110,8 @@ export default function SuccessPage() {
   function buildScriptParts(): { text: string; highlight?: boolean }[] {
     const name = result!.memberFirstName
     const cv = result!.couponValue
-    const tierLabel = !result!.isVip ? TIER_DISPLAY_NAMES['Free'] : TIER_DISPLAY_NAMES[tier.name]
+    // tier already accounts for isVip, so no second free-member check here.
+    const tierLabel = TIER_DISPLAY_NAMES[tier.name]
     const storeName = store.name
     if (leveledUp === 'silver') return [
       { text: `"🥈 Congratulations ` },
