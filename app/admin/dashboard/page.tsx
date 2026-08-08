@@ -75,7 +75,21 @@ interface SettlementStatement {
   netDistribution: number; closingNegativeBalance: number
   statementStatus: string | null; transferStatus: string | null
 }
-type TabId = 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'alerts'
+interface ScannerChoiceStat { count: number; pct: number }
+interface ScannerProduct {
+  product: string; category: string | null; scans: number
+  cartPct: number; binsPct: number
+}
+interface ScannerStats {
+  totalScans: number; scansThisMonth: number
+  choices: {
+    shoppingCart: ScannerChoiceStat
+    backToBins:   ScannerChoiceStat
+    noChoice:     ScannerChoiceStat
+  }
+  topProducts: ScannerProduct[]
+}
+type TabId = 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'scanner' | 'alerts'
 
 // ── Module-level helper components ────────────────────────────────────────
 
@@ -478,6 +492,9 @@ export default function AdminDashboardPage() {
   const [settlementError, setSettlementError] = useState('')
   const [approveConfirm, setApproveConfirm] = useState<SettlementBatch | null>(null)
 
+  // Phase 4: scanner analytics
+  const [scanner, setScanner] = useState<ScannerStats | null>(null)
+
   // Auth check
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
@@ -527,6 +544,13 @@ export default function AdminDashboardPage() {
     if (markLoaded) { setTabLoading(null); setLoadedTabs(p => new Set([...p, 'settlement'])) }
   }, [])
 
+  const loadScanner = useCallback(async () => {
+    setTabLoading('scanner')
+    const res = await fetch('/api/admin/scanner')
+    if (res.ok) setScanner(await res.json())
+    setTabLoading(null); setLoadedTabs(p => new Set([...p, 'scanner']))
+  }, [])
+
   useEffect(() => {
     if (!authed) return
     if (tab === 'overview'  && !loadedTabs.has('overview'))  loadOverview()
@@ -534,7 +558,8 @@ export default function AdminDashboardPage() {
     if (tab === 'stores'    && !loadedTabs.has('stores'))    loadStores()
     if (tab === 'alerts'    && !loadedTabs.has('alerts'))    loadAlerts()
     if (tab === 'settlement' && !loadedTabs.has('settlement')) loadSettlement()
-  }, [tab, authed, loadedTabs, loadOverview, loadMerchants, loadStores, loadAlerts, loadSettlement])
+    if (tab === 'scanner'   && !loadedTabs.has('scanner'))   loadScanner()
+  }, [tab, authed, loadedTabs, loadOverview, loadMerchants, loadStores, loadAlerts, loadSettlement, loadScanner])
 
   const filteredMerchants = useMemo(() => merchants.filter(m => {
     const q = merchantSearch.trim().toLowerCase()
@@ -1013,6 +1038,87 @@ export default function AdminDashboardPage() {
     )
   }
 
+  function renderScanner() {
+    if (tabLoading === 'scanner') return <Spinner />
+    const sc = scanner
+    if (!sc) return <p className="text-[13px] text-[#8E8EA8]">No data.</p>
+
+    const { shoppingCart, backToBins, noChoice } = sc.choices
+
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard label="Total Scans" value={sc.totalScans} sub="all time" />
+          <StatCard label="This Month"  value={sc.scansThisMonth} sub="scans" />
+        </div>
+
+        <div>
+          <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8] px-1 mb-2">
+            What members did next
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard label="🛒 Cart"  value={shoppingCart.count} sub={`${shoppingCart.pct}% of scans`} />
+            <StatCard label="🗑️ Bins"  value={backToBins.count}   sub={`${backToBins.pct}% of scans`} />
+            <StatCard label="No Choice" value={noChoice.count}    sub={`${noChoice.pct}% of scans`} />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#EBEBF2] flex items-baseline justify-between gap-2">
+            <h3 className="font-bold text-[13px] text-[#1A1A2E]">Top Identified Products</h3>
+            <span className="text-[10px] font-medium text-[#8E8EA8]">top {sc.topProducts.length}</span>
+          </div>
+
+          {sc.topProducts.length === 0 ? (
+            <p className="text-[12px] text-[#8E8EA8] font-medium px-4 py-3">
+              No products identified yet.
+            </p>
+          ) : (
+            // Scrolls horizontally on a phone rather than crushing the columns.
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[420px] border-collapse">
+                <thead>
+                  <tr className="bg-[#F5F5F8]">
+                    <th className="text-left  text-[10px] font-bold tracking-wider uppercase text-[#8E8EA8] px-3 py-2">Product</th>
+                    <th className="text-left  text-[10px] font-bold tracking-wider uppercase text-[#8E8EA8] px-3 py-2">Category</th>
+                    <th className="text-right text-[10px] font-bold tracking-wider uppercase text-[#8E8EA8] px-3 py-2">Scans</th>
+                    <th className="text-right text-[10px] font-bold tracking-wider uppercase text-[#8E8EA8] px-3 py-2">🛒</th>
+                    <th className="text-right text-[10px] font-bold tracking-wider uppercase text-[#8E8EA8] px-3 py-2">🗑️</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#EBEBF2]">
+                  {sc.topProducts.map(p => (
+                    <tr key={p.product}>
+                      <td className="px-3 py-2.5 text-[12px] font-semibold text-[#1A1A2E]">{p.product}</td>
+                      <td className="px-3 py-2.5 text-[11px] font-medium text-[#8E8EA8]">{p.category ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-[12px] font-bold text-[#1A1A2E] text-right tabular-nums">{p.scans}</td>
+                      <td className="px-3 py-2.5 text-[11px] font-semibold text-[#2A7D34] text-right tabular-nums">{p.cartPct}%</td>
+                      <td className="px-3 py-2.5 text-[11px] font-semibold text-[#8E8EA8] text-right tabular-nums">{p.binsPct}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="text-[10px] text-[#8E8EA8] font-medium px-4 py-2.5 border-t border-[#EBEBF2] leading-relaxed">
+            Percentages are of each product&apos;s own scans. They fall short of 100% when
+            some of its scans have no choice recorded.
+          </p>
+        </div>
+
+        {/* Plain link, not fetch(): the browser handles the attachment download
+            directly, so there is no blob to build or object URL to revoke. */}
+        <a
+          href="/api/admin/scanner/export"
+          className="w-full py-3 rounded-xl text-[13px] font-bold text-white bg-[#4A4B98] text-center active:opacity-80 transition-opacity"
+        >
+          Export Scanner Data (CSV)
+        </a>
+      </div>
+    )
+  }
+
   function renderAlerts() {
     if (tabLoading === 'alerts') return <Spinner />
     if (!alerts) return <p className="text-[13px] text-[#8E8EA8]">No data.</p>
@@ -1062,6 +1168,7 @@ export default function AdminDashboardPage() {
     { id: 'stores',    label: 'Stores' },
     { id: 'members',   label: 'Members' },
     { id: 'settlement', label: 'Settlement' },
+    { id: 'scanner',   label: 'Scanner' },
     { id: 'alerts',    label: 'Alerts' },
   ]
 
@@ -1102,6 +1209,7 @@ export default function AdminDashboardPage() {
         {tab === 'stores'    && renderStores()}
         {tab === 'members'   && renderMembers()}
         {tab === 'settlement' && renderSettlement()}
+        {tab === 'scanner'   && renderScanner()}
         {tab === 'alerts'    && renderAlerts()}
       </main>
 
