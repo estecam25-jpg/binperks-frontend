@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-
-const ADMIN_EMAIL = 'enina@estecam.com'
+import { verifyAdmin } from '@/lib/admin-auth'
 
 interface AlertItem { id: string; message: string; detail?: string }
 
 export async function GET() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || user.email !== ADMIN_EMAIL) {
+  const adminEmail = await verifyAdmin()
+  if (!adminEmail) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 

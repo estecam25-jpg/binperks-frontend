@@ -1,13 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { verifyAdmin } from '@/lib/admin-auth'
 
-const ADMIN_EMAIL = 'enina@estecam.com'
-
-export async function GET(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || user.email !== ADMIN_EMAIL) {
+export async function GET() {
+  const adminEmail = await verifyAdmin()
+  if (!adminEmail) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 

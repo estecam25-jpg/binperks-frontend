@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-
-const ADMIN_EMAIL = 'enina@estecam.com'
-
-async function verifyAdmin() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user?.email === ADMIN_EMAIL ? user : null
-}
+import { verifyAdmin } from '@/lib/admin-auth'
 
 export async function GET() {
-  const user = await verifyAdmin()
-  if (!user) {
+  const adminEmail = await verifyAdmin()
+  if (!adminEmail) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
@@ -105,8 +97,8 @@ const TOGGLEABLE_FIELDS = ['is_open_for_shopping', 'network_visible', 'enrollmen
 type ToggleableField = typeof TOGGLEABLE_FIELDS[number]
 
 export async function PATCH(req: NextRequest) {
-  const user = await verifyAdmin()
-  if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const adminEmail = await verifyAdmin()
+  if (!adminEmail) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const { storeId, field, value } = await req.json() as {
     storeId?: string; field?: string; value?: boolean

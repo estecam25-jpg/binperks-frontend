@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { resolveTierName } from '@/lib/tiers'
+import { toOne } from '@/lib/supabase-relations'
 
 export async function GET(req: NextRequest) {
   const supabase = await createServerSupabaseClient()
@@ -103,7 +104,10 @@ export async function GET(req: NextRequest) {
     visits: {
       date: string
       store_id: string
-      stores: { display_name: string }[]
+      // visits is to-MANY so it is an array, but the stores embed inside each
+      // visit is to-ONE and comes back as an object. Typed as either because
+      // toOne accepts both — see lib/supabase-relations.
+      stores: { display_name: string } | { display_name: string }[] | null
     }[]
   }) => {
     // Free members are Starter no matter how many stamps they have — getTier
@@ -125,7 +129,9 @@ export async function GET(req: NextRequest) {
       subscriptionStatus: m.subscription_status,
       joinedAt:           m.created_at,
       lastVisitDate:      lastVisit?.date ?? null,
-      lastVisitStore:     lastVisit?.stores[0]?.display_name ?? null,
+      // Was lastVisit?.stores[0], which is always undefined on a to-one embed —
+      // lastVisitStore came back null for every member.
+      lastVisitStore:     toOne(lastVisit?.stores)?.display_name ?? null,
     }
   })
 

@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { toOne } from '@/lib/supabase-relations'
 
 // Auth (identify the logged-in merchant) uses the server client so we read
 // the session cookie. All actual table reads/writes use the admin client.
@@ -56,7 +57,8 @@ export async function GET(req: NextRequest) {
     cashiers: (data ?? []).map((c: {
       id: string; name: string; email: string; role: string
       is_active: boolean; created_at: string
-      stores: { display_name: string }[]
+      // to-ONE embed: an object, not an array — see lib/supabase-relations.
+      stores: { display_name: string } | { display_name: string }[] | null
     }) => ({
       id:        c.id,
       name:      c.name,
@@ -65,7 +67,9 @@ export async function GET(req: NextRequest) {
       // PIN is never returned — it's a bcrypt hash and the merchant doesn't need it
       isActive:  c.is_active,
       createdAt: c.created_at,
-      storeName: c.stores[0]?.display_name ?? null,
+      // Was c.stores[0], always undefined on a to-one embed — every cashier
+      // showed a null store name.
+      storeName: toOne(c.stores)?.display_name ?? null,
     })),
   })
 }

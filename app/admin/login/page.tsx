@@ -7,7 +7,10 @@ import { createClient } from '@/lib/supabase'
 export default function AdminLoginPage() {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
-  const [email, setEmail] = useState('enina@estecam.com')
+  // Blank, not prefilled: the old default (enina@estecam.com) is no longer on
+  // the allow-list, so prefilling it would send every admin down a sign-in that
+  // succeeds at Supabase and then bounces at the dashboard.
+  const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 
   useEffect(() => {

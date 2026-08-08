@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { postToGhl } from '@/lib/ghl-webhook'
-
-const ADMIN_EMAIL = 'enina@estecam.com'
-
-async function verifyAdmin() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user?.email === ADMIN_EMAIL ? user : null
-}
+import { verifyAdmin } from '@/lib/admin-auth'
 
 export async function GET(req: NextRequest) {
-  const user = await verifyAdmin()
-  if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const adminEmail = await verifyAdmin()
+  if (!adminEmail) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const admin = createAdminSupabaseClient()
   // Signed URL for a merchant's W-9 PDF
@@ -171,8 +163,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const user = await verifyAdmin()
-  if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const adminEmail = await verifyAdmin()
+  if (!adminEmail) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const { merchantId, action } = await req.json() as { merchantId?: string; action?: 'activate' | 'deactivate' | 'approve_w9' | 'reject_w9' }
   if (!merchantId || !action) return NextResponse.json({ error: 'missing_fields' }, { status: 400 })

@@ -11,6 +11,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { toOne } from '@/lib/supabase-relations'
+
+/** to-ONE embeds — object-or-array because toOne accepts either. */
+type MemberRelation =
+  | { first_name: string; last_name: string; total_stamps: number }
+  | { first_name: string; last_name: string; total_stamps: number }[]
+  | null
+type StoreRelation =
+  | { display_name: string }
+  | { display_name: string }[]
+  | null
 
 function getFiscalWeekRange(offset: number, fiscalWeekStart = 'friday') {
   const dayMap: Record<string, number> = {
@@ -98,15 +109,22 @@ export async function GET(req: NextRequest) {
       id: string
       coupon_value: number
       redeemed_at: string
-      members: { first_name: string; last_name: string; total_stamps: number }[]
-      stores: { display_name: string }[]
-    }) => ({
-      id:           r.id,
-      couponValue:  r.coupon_value,
-      redeemedAt:   r.redeemed_at,
-      memberName:   r.members[0] ? `${r.members[0].first_name} ${r.members[0].last_name}` : 'Unknown',
-      storeName:    r.stores[0]?.display_name ?? 'Unknown',
-    })),
+      // Both are to-ONE embeds: objects, not arrays — see lib/supabase-relations.
+      members: MemberRelation
+      stores: StoreRelation
+    }) => {
+      // Was r.members[0] / r.stores[0], always undefined on a to-one embed, so
+      // every redemption rendered as "Unknown" for both member and store.
+      const member = toOne(r.members)
+      const store  = toOne(r.stores)
+      return {
+        id:           r.id,
+        couponValue:  r.coupon_value,
+        redeemedAt:   r.redeemed_at,
+        memberName:   member ? `${member.first_name} ${member.last_name}` : 'Unknown',
+        storeName:    store?.display_name ?? 'Unknown',
+      }
+    }),
     total:      count ?? 0,
     page,
     pages:      Math.ceil((count ?? 0) / limit),

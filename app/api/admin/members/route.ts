@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { verifyAdmin } from '@/lib/admin-auth'
+import { toOne } from '@/lib/supabase-relations'
 
-const ADMIN_EMAIL = 'enina@estecam.com'
-
-async function verifyAdmin() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user?.email === ADMIN_EMAIL ? user : null
-}
+/** Shape of the stores:home_store_id embed. Declared as object-or-array because
+ *  toOne accepts either — see lib/supabase-relations. */
+type StoreRelation =
+  | { display_name?: string; canonical_key?: string }
+  | { display_name?: string; canonical_key?: string }[]
+  | null
 
 export async function GET(req: NextRequest) {
-  const user = await verifyAdmin()
-  if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const adminEmail = await verifyAdmin()
+  if (!adminEmail) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const search = new URL(req.url).searchParams.get('search')?.trim() ?? ''
   if (!search) return NextResponse.json({ members: [] })
@@ -33,21 +33,21 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: 'query_failed' }, { status: 500 })
 
-  // Normalize store name — Supabase returns join as array
-  const members = (data ?? []).map(m => {
-    const storesArr = m.stores as { display_name?: string; canonical_key?: string }[] | null
-    return {
-      ...m,
-      storeName: storesArr?.[0]?.display_name ?? 'No Store',
-    }
-  })
+  // stores:home_store_id is a to-ONE embed, so supabase-js hands back an object,
+  // not an array. This previously indexed [0] on it, which is always undefined —
+  // every member in the admin Members tab displayed "No Store". See
+  // lib/supabase-relations for why CORE RULE 9 does not apply to to-one embeds.
+  const members = (data ?? []).map(m => ({
+    ...m,
+    storeName: toOne(m.stores as StoreRelation)?.display_name ?? 'No Store',
+  }))
 
   return NextResponse.json({ members })
 }
 
 export async function PATCH(req: NextRequest) {
-  const user = await verifyAdmin()
-  if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const adminEmail = await verifyAdmin()
+  if (!adminEmail) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const { memberId, reason } = await req.json() as { memberId?: string; reason?: string }
   if (!memberId || !reason?.trim()) {

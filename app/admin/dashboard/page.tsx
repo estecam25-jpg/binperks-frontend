@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-
-const ADMIN_EMAIL = 'enina@estecam.com'
+import { isAdminEmail } from '@/lib/admin-emails'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -498,7 +497,10 @@ export default function AdminDashboardPage() {
   // Auth check
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
-      if (!user || user.email !== ADMIN_EMAIL) { router.replace('/admin/login'); return }
+      // UX guard only — every /api/admin/* route re-checks server-side. Shares
+      // lib/admin-emails with verifyAdmin so the two can't drift; previously
+      // this held its own hardcoded address.
+      if (!isAdminEmail(user?.email)) { router.replace('/admin/login'); return }
       setAuthed(true)
     })
   }, [router])

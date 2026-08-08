@@ -16,6 +16,7 @@
 import { NextResponse } from 'next/server'
 import { verifyAdmin } from '@/lib/admin-auth'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { toOne } from '@/lib/supabase-relations'
 
 const COLUMNS = [
   'scan_id', 'member_id', 'member_name', 'store_id', 'store_name', 'scanned_at',
@@ -38,22 +39,6 @@ function csvCell(value: unknown): string {
   const risky = /^[=+\-@\t\r]/.test(s)
   const escaped = (risky ? `'${s}` : s).replace(/"/g, '""')
   return /[",\r\n]/.test(escaped) ? `"${escaped}"` : escaped
-}
-
-/**
- * Unwrap an embedded to-one relation.
- *
- * CLAUDE.md rule 9 says joins always return arrays. That holds for to-many
- * embeds, but NOT for a to-one embed through a foreign-key column: on
- * supabase-js 2.108.2 `members:member_id ( ... )` comes back as a plain object.
- * Indexing [0] on it yields undefined, which is how you end up silently
- * exporting blank names for every row. Verified directly against this project.
- *
- * Handles both shapes so the export survives a client upgrade either way.
- */
-function toOne<T>(rel: T | T[] | null | undefined): T | undefined {
-  if (!rel) return undefined
-  return Array.isArray(rel) ? rel[0] : rel
 }
 
 export async function GET() {
