@@ -106,7 +106,10 @@ export async function POST(req: NextRequest) {
     .eq('member_id', member.id)
     .maybeSingle()
 
-  if (!scan) return NextResponse.json({ error: 'scan_not_found' }, { status: 404 })
+  if (!scan) {
+    console.warn('[member/product-image] scan not found for this member:', scanEventId)
+    return NextResponse.json({ error: 'scan_not_found' }, { status: 404 })
+  }
 
   try {
     const result = await getProductImage({
@@ -118,6 +121,18 @@ export async function POST(req: NextRequest) {
       brand:              optionalField(body.brand),
       modelNumber:        optionalField(body.modelNumber),
     })
+
+    // Deliberate: while IMAGE_SEARCH_ENABLED is false the service returns
+    // FEATURE_DISABLED *before* writing any image_search_log row, so a
+    // correctly-firing POST leaves no trace in the database at all. Without
+    // this line there is no way to tell "the client never called us" from
+    // "we were called and the flag is off" — which is exactly the confusion
+    // that made this look broken. Logs the resolution only; never the image
+    // URL, which is Brave content and must not be persisted or logged.
+    console.log(
+      `[member/product-image] scan=${scanEventId} resolution=${result.resolution} ` +
+      `catalogHit=${result.catalogHit} hasImage=${result.imageUrl !== null}`
+    )
 
     // imageUrl is transient — display only, never stored.
     return NextResponse.json(result)

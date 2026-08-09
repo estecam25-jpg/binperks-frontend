@@ -204,7 +204,10 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
           modelNumber:        scan.modelNumber,
         }),
       })
-      if (!res.ok) return
+      if (!res.ok) {
+        console.error('[Scanner] product-image HTTP', res.status)
+        return
+      }
       const { imageUrl } = await res.json() as { imageUrl: string | null }
 
       // A newer scan (or a reset) started while this was in flight. Checked
@@ -212,8 +215,15 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
       // be decoding by the time abort lands.
       if (seq !== productImageSeq.current) return
       if (imageUrl) setProductImage(imageUrl)
-    } catch {
-      // Abort or network failure on an optional decoration — leave it empty.
+    } catch (err) {
+      // An abort is expected — a newer scan or the 5s ceiling — and stays
+      // silent. Anything else is a real failure and used to vanish here
+      // without a trace, on the client and the server alike, which made "is
+      // this even firing?" unanswerable. Still never surfaced to the member:
+      // the image is decoration and the scan result is already on screen.
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        console.error('[Scanner] product-image request failed:', err)
+      }
     } finally {
       clearTimeout(timer)
       if (productImageAbort.current === controller) productImageAbort.current = null
