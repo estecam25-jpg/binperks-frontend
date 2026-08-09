@@ -42,6 +42,18 @@ export function isSpecificEnough(identifiedProduct: string): boolean {
   return /[A-Z][a-z]+|[A-Z]{2,}|\d{3,}/.test(identifiedProduct)
 }
 
+/**
+ * Canonical form used by the name-matching tier.
+ *
+ * Punctuation becomes a SPACE, not nothing. Deleting it fused hyphenated words
+ * — "Eczema-Relief" collapsed to "eczemarelief", which then failed to match
+ * the same product written "Eczema Relief" and produced a duplicate catalog
+ * row. Substituting a space makes both normalise to "eczema relief".
+ */
 export function normalizeProductName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim()
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')  // replace with space, not delete
+    .replace(/\s+/g, ' ')
+    .trim()
 }

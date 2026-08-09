@@ -83,16 +83,8 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   const [error, setError]       = useState('')
 
   // The member's own downscaled photo, as a data URL. Kept after upload so the
-  // result screen can show them what they actually pointed the camera at,
-  // next to the stock photo of what we think it is.
+  // result screen can show them what they actually pointed the camera at.
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null)
-
-  // Stock photo from /api/member/scan/image. Null means "nothing found", which
-  // is the common case — DuckDuckGo only has an instant answer for products
-  // with an encyclopedia entry. `stockFailed` additionally covers a URL that
-  // was returned but wouldn't load. Either way the slot renders nothing.
-  const [stockPhoto, setStockPhoto]   = useState<string | null>(null)
-  const [stockFailed, setStockFailed] = useState(false)
 
   // Representative image from the Product Image Service (Brave-backed). A
   // transient URL: rendered once, never persisted by us or by the server.
@@ -103,11 +95,9 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
   const fileInput = useRef<HTMLInputElement>(null)
 
-  /** Guards against a slow lookup for a previous scan landing on a newer one. */
-  const stockLookupSeq = useRef(0)
-
-  /** Same guard for the product-image request, plus a controller so the older
-   *  request is actually aborted rather than merely ignored on arrival. */
+  /** Guards against a slow lookup for a previous scan landing on a newer one,
+   *  plus a controller so the older request is actually aborted rather than
+   *  merely ignored on arrival. */
   const productImageSeq = useRef(0)
   const productImageAbort = useRef<AbortController | null>(null)
 
@@ -122,9 +112,7 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
   function reset() {
     setResult(null); setError(''); setCapturedPhoto(null); setBusy(false)
-    setStockPhoto(null); setStockFailed(false)
     setProductImage(null); setProductImageFailed(false)
-    stockLookupSeq.current++          // orphan any lookup still in flight
     cancelProductImage()
     if (fileInput.current) fileInput.current.value = ''
   }
@@ -136,7 +124,6 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
     if (!file) return
 
     setBusy(true); setError(''); setResult(null)
-    setStockPhoto(null); setStockFailed(false)
     // Kill any image request still running for the previous scan before this
     // one starts — requirement: an older image must never appear on a newer
     // result.
@@ -168,10 +155,9 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
       } else {
         const scan = await res.json() as ScanResult
         setResult(scan)
-        // Neither lookup is awaited: the result is already on screen and both
-        // images are decoration. Making the member wait on a third-party
-        // lookup to see their own identification would be the wrong trade.
-        void lookupStockPhoto(scan.identifiedProduct)
+        // Not awaited: the result is already on screen and the image is
+        // decoration. Making the member wait on a third-party lookup to see
+        // their own identification would be the wrong trade.
         void lookupProductImage(scan)
       }
     } catch {
@@ -180,29 +166,6 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
       setBusy(false)
       // Allow re-picking the same file.
       if (fileInput.current) fileInput.current.value = ''
-    }
-  }
-
-  /**
-   * Ask the server for a stock photo of the identified product.
-   *
-   * Silent on every failure path. DuckDuckGo's instant answers only cover
-   * products with an encyclopedia entry, so "nothing found" is the ordinary
-   * outcome for most bin merchandise — not an error worth showing anyone.
-   */
-  async function lookupStockPhoto(productName: string) {
-    if (!productName) return
-    const seq = ++stockLookupSeq.current
-
-    try {
-      const res = await fetch(`/api/member/scan/image?q=${encodeURIComponent(productName)}`)
-      if (!res.ok) return
-      const { imageUrl } = await res.json() as { imageUrl: string | null }
-      // A newer scan (or a reset) started while this was in flight.
-      if (seq !== stockLookupSeq.current) return
-      if (imageUrl) setStockPhoto(imageUrl)
-    } catch {
-      // Network hiccup on an optional decoration — leave the slot empty.
     }
   }
 
@@ -291,12 +254,10 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
   const lowConfidence = result !== null && result.confidence < LOW_CONFIDENCE
 
-  // The stock slot appears only once we have a URL that hasn't failed to load.
-  // Both conditions matter: nothing found, and found-but-broken, render alike.
-  const showStock = stockPhoto !== null && !stockFailed
-
-  // Same rule for the representative image. Off by default in production, so
-  // this is false on every scan until the feature flag is turned on.
+  // The representative image appears only once we have a URL that hasn't
+  // failed to load. Both conditions matter: nothing found, and found-but-
+  // broken, render alike. Off by default in production, so this is false on
+  // every scan until the feature flag is turned on.
   const showProductImage = productImage !== null && !productImageFailed
 
   return (
@@ -378,48 +339,23 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                   Always inspect the item before purchasing.
                 </p>
 
-                {/* Their photo, and what we think it is, side by side — the
-                    comparison is the whole point, so the member can judge the
-                    match themselves rather than taking our word for it.
-                    When there is no stock photo (the common case) their photo
-                    simply takes the full width; no placeholder, no empty cell. */}
+                {/* The member's own photo — the only picture of the actual
+                    item on this screen. Full width now that the DuckDuckGo
+                    "Closest match" pane is gone; the representative image
+                    below is a separate, clearly-labelled slot rather than a
+                    side-by-side comparison. */}
                 {capturedPhoto && (
-                  <div className={`grid gap-2 ${showStock ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                    <figure className="flex flex-col gap-1 m-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={capturedPhoto}
-                        alt="The photo you took"
-                        className="w-full rounded-xl object-cover aspect-square bg-[#F5F5F8]"
-                      />
-                      <figcaption className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] text-center">
-                        Your item
-                      </figcaption>
-                    </figure>
-
-                    {showStock && (
-                      <figure className="flex flex-col gap-1 m-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={stockPhoto!}
-                          alt={`Stock photo of ${result.identifiedProduct}`}
-                          onError={() => setStockFailed(true)}
-                          // Deliberately NOT loading="lazy": a lazily-loaded
-                          // image that is still offscreen never requests, so
-                          // onError never fires and a dead URL leaves the
-                          // caption and an empty gap on screen until the
-                          // member scrolls to it. Eager loading is what makes
-                          // hide-on-failure work.
-                          decoding="async"
-                          referrerPolicy="no-referrer"
-                          className="w-full rounded-xl object-contain aspect-square bg-[#F5F5F8]"
-                        />
-                        <figcaption className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] text-center">
-                          Closest match
-                        </figcaption>
-                      </figure>
-                    )}
-                  </div>
+                  <figure className="flex flex-col gap-1 m-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={capturedPhoto}
+                      alt="The photo you took"
+                      className="w-full rounded-xl object-cover aspect-square bg-[#F5F5F8]"
+                    />
+                    <figcaption className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] text-center">
+                      Your item
+                    </figcaption>
+                  </figure>
                 )}
 
                 {/* Representative image from the Product Image Service.

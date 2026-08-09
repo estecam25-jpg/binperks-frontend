@@ -15,7 +15,7 @@
  *     mediaType  — required only when `image` has no data-URL prefix
  *
  * Stock photos are NOT requested from the model — see the SYSTEM_PROMPT note.
- * The client fetches one separately from /api/member/scan/image.
+ * The client fetches one separately from /api/member/product-image.
  *
  * Responses:
  *   200 { scanEventId, identifiedProduct, identifiedCategory, confidence,
@@ -60,8 +60,8 @@ const MAX_BASE64_LENGTH = 3_500_000
 
 // No image URL is requested from the model. It has no web access, so any URL
 // it produced was recalled rather than looked up — it usually 404'd, and when
-// it did load it could show a different product. Stock photos now come from
-// /api/member/scan/image, which performs a real lookup.
+// it did load it could show a different product. Representative images now
+// come from /api/member/product-image, which performs a real lookup.
 const SYSTEM_PROMPT =
   "You are a product identification assistant inside a bin store. The member has scanned an item. " +
   "Identify the product as specifically as possible. Return JSON only with these fields: " +
