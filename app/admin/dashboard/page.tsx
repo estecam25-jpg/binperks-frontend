@@ -79,6 +79,15 @@ interface ScannerProduct {
   product: string; category: string | null; scans: number
   cartPct: number; binsPct: number
 }
+interface ScannerImageService {
+  catalogSize: number
+  catalogHit: ScannerChoiceStat
+  imageSearchRequests: ScannerChoiceStat
+  lowConfidenceSkips: ScannerChoiceStat
+  specificitySkips: ScannerChoiceStat
+  searchFailed: number
+  braveCallsThisMonth: number
+}
 interface ScannerStats {
   totalScans: number; scansThisMonth: number
   choices: {
@@ -87,6 +96,8 @@ interface ScannerStats {
     noChoice:     ScannerChoiceStat
   }
   topProducts: ScannerProduct[]
+  /** Absent on a response from before the Product Image Service shipped. */
+  imageService?: ScannerImageService
 }
 type TabId = 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'scanner' | 'alerts'
 
@@ -1108,6 +1119,52 @@ export default function AdminDashboardPage() {
             some of its scans have no choice recorded.
           </p>
         </div>
+
+        {/* ── Product Image Service ── */}
+        {sc.imageService && (
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8] px-1 mb-2">
+              Product Image Service
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard label="Catalog Size" value={sc.imageService.catalogSize} sub="known products" />
+              <StatCard
+                label="Brave Calls"
+                value={sc.imageService.braveCallsThisMonth}
+                sub="this month (billable)" />
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <StatCard
+                label="Catalog Hit"
+                value={sc.imageService.catalogHit.count}
+                sub={`${sc.imageService.catalogHit.pct}% of scans`} />
+              <StatCard
+                label="Image Search"
+                value={sc.imageService.imageSearchRequests.count}
+                sub={`${sc.imageService.imageSearchRequests.pct}% of scans`} />
+            </div>
+            <div className="grid grid-cols-3 gap-3 mt-3">
+              <StatCard
+                label="Low Conf."
+                value={sc.imageService.lowConfidenceSkips.count}
+                sub={`${sc.imageService.lowConfidenceSkips.pct}% skipped`} />
+              <StatCard
+                label="Too Vague"
+                value={sc.imageService.specificitySkips.count}
+                sub={`${sc.imageService.specificitySkips.pct}% skipped`} />
+              <StatCard
+                label="Failed"
+                value={sc.imageService.searchFailed}
+                sub="searches" />
+            </div>
+            <p className="text-[10px] text-[#8E8EA8] font-medium px-1 mt-2 leading-relaxed">
+              Catalog hit and image search are independent — one scan can count toward
+              both, so these do not add up to 100%. Brave calls counts searches and
+              failures together; both hit the API and both are billable. All zero while
+              IMAGE_SEARCH_ENABLED is off.
+            </p>
+          </div>
+        )}
 
         {/* Plain link, not fetch(): the browser handles the attachment download
             directly, so there is no blob to build or object URL to revoke. */}

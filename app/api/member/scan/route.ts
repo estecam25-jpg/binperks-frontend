@@ -19,7 +19,11 @@
  *
  * Responses:
  *   200 { scanEventId, identifiedProduct, identifiedCategory, confidence,
- *         description, estimatedRetailPrice }
+ *         description, estimatedRetailPrice, upc, brand, modelNumber }
+ *     upc / brand / modelNumber — fingerprint hints for the Product Image
+ *     Service, null whenever the model could not read them off the item. This
+ *     route never calls that service; the client does, separately, so a scan
+ *     is never delayed by an image lookup.
  *     estimatedRetailPrice — display text like "$24.99 – $39.99", '' if the
  *     model could not estimate. An estimate of typical retail value, NOT a
  *     price this store charges; the UI must label it accordingly.
@@ -61,10 +65,13 @@ const MAX_BASE64_LENGTH = 3_500_000
 const SYSTEM_PROMPT =
   "You are a product identification assistant inside a bin store. The member has scanned an item. " +
   "Identify the product as specifically as possible. Return JSON only with these fields: " +
-  "{ identified_product: string, identified_category: string, confidence: number (0-1), description: string, estimated_retail_price: string }. " +
+  "{ identified_product: string, identified_category: string, confidence: number (0-1), description: string, estimated_retail_price: string, upc: string | null, brand: string | null, model_number: string | null }. " +
   "Also estimate the average retail price for this item in USD. Add a field: estimated_retail_price " +
   "(string, e.g. '$24.99 – $39.99' or 'Typically $15–$25 at retail'). " +
-  "If you cannot identify the item, return { identified_product: 'Unknown item', identified_category: 'Unknown', confidence: 0, description: 'Could not identify this item.', estimated_retail_price: '' }"
+  "If a barcode or UPC is visible, read it and return it as upc. " +
+  "If a brand name or model number is visible on the product, return them as brand and model_number. " +
+  "If not visible or not applicable, return null for these fields. " +
+  "If you cannot identify the item, return { identified_product: 'Unknown item', identified_category: 'Unknown', confidence: 0, description: 'Could not identify this item.', estimated_retail_price: '', upc: null, brand: null, model_number: null }"
 
 interface Identification {
   identified_product: string
@@ -74,6 +81,13 @@ interface Identification {
   /** Free text, not a number — the model returns ranges like "$15–$25".
    *  Empty string when it could not estimate. */
   estimated_retail_price: string
+  /** Fingerprinting hints for the Product Image Service. Null whenever the
+   *  model could not read them off the item — which is the common case, since
+   *  most bin merchandise is photographed without a visible barcode or plate.
+   *  Never invented: a guessed UPC would key the catalog to the wrong product. */
+  upc: string | null
+  brand: string | null
+  model_number: string | null
 }
 
 const UNIDENTIFIED: Identification = {
@@ -82,8 +96,27 @@ const UNIDENTIFIED: Identification = {
   confidence: 0,
   description: 'Could not identify this item.',
   estimated_retail_price: '',
+  upc: null,
+  brand: null,
+  model_number: null,
 }
 
+
+/**
+ * Coerce an optional model field to a trimmed string, or null.
+ *
+ * The model returns these as JSON null when it cannot read them, but also
+ * sometimes as the strings "null" / "N/A" / "" — all of which would poison the
+ * catalog if treated as a real UPC or brand. Everything falsy or meaningless
+ * collapses to null so generateProductKey falls through to the next tier.
+ */
+function optionalString(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  const s = String(value).trim()
+  if (!s) return null
+  if (/^(null|undefined|n\/a|na|none|unknown)$/i.test(s)) return null
+  return s
+}
 
 /**
  * Pull the JSON object out of a plain-text model response.
@@ -122,6 +155,9 @@ function extractJson(text: string): Identification {
       confidence,
       description:         String(parsed.description ?? UNIDENTIFIED.description),
       estimated_retail_price: estimatedRetailPrice,
+      upc:          optionalString(parsed.upc),
+      brand:        optionalString(parsed.brand),
+      model_number: optionalString(parsed.model_number),
     }
   } catch {
     return UNIDENTIFIED
@@ -250,6 +286,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'scanner_unavailable' }, { status: 503 })
   }
 
+  // The Product Image Service is deliberately NOT called here. The scan
+  // returns the moment it is identified; the client asks /api/member/product-image
+  // separately, so an image lookup can never delay or fail a scan.
   return NextResponse.json({
     scanEventId:          scanEvent.id,
     identifiedProduct:    identification.identified_product,
@@ -257,5 +296,10 @@ export async function POST(req: NextRequest) {
     confidence:           identification.confidence,
     description:          identification.description,
     estimatedRetailPrice: identification.estimated_retail_price,
+    // Fingerprint hints, forwarded so the client can pass them to the image
+    // route. Not stored as columns — they already live in ai_response.parsed.
+    upc:                  identification.upc,
+    brand:                identification.brand,
+    modelNumber:          identification.model_number,
   })
 }

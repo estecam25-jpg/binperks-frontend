@@ -27,7 +27,17 @@ interface ScanResult {
   /** Display text like "$24.99 – $39.99". Empty when the model had no
    *  estimate. This is typical retail value, not the store's price. */
   estimatedRetailPrice: string
+  /** Fingerprint hints from the vision model, null when not readable off the
+   *  item. Forwarded to the Product Image Service; not shown to the member. */
+  upc: string | null
+  brand: string | null
+  modelNumber: string | null
 }
+
+/** Ceiling on the representative-image request, measured from the moment the
+ *  result renders. Past this the slot stays empty for good — a decoration is
+ *  not worth a spinner on a screen the member is already reading. */
+const PRODUCT_IMAGE_TIMEOUT_MS = 5000
 
 // Below this, we tell the member outright that we're guessing rather than
 // presenting the result as an identification.
@@ -84,15 +94,38 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   const [stockPhoto, setStockPhoto]   = useState<string | null>(null)
   const [stockFailed, setStockFailed] = useState(false)
 
+  // Representative image from the Product Image Service (Brave-backed). A
+  // transient URL: rendered once, never persisted by us or by the server.
+  // Null is the normal state — the feature ships disabled, and even enabled it
+  // declines low-confidence and vague identifications.
+  const [productImage, setProductImage]             = useState<string | null>(null)
+  const [productImageFailed, setProductImageFailed] = useState(false)
+
   const fileInput = useRef<HTMLInputElement>(null)
 
   /** Guards against a slow lookup for a previous scan landing on a newer one. */
   const stockLookupSeq = useRef(0)
 
+  /** Same guard for the product-image request, plus a controller so the older
+   *  request is actually aborted rather than merely ignored on arrival. */
+  const productImageSeq = useRef(0)
+  const productImageAbort = useRef<AbortController | null>(null)
+
+  /** Cancels any in-flight product-image request and orphans its response.
+   *  Called on every new scan and on every reset, so an image from scan N can
+   *  never land on the result of scan N+1. */
+  function cancelProductImage() {
+    productImageSeq.current++
+    productImageAbort.current?.abort()
+    productImageAbort.current = null
+  }
+
   function reset() {
     setResult(null); setError(''); setCapturedPhoto(null); setBusy(false)
     setStockPhoto(null); setStockFailed(false)
+    setProductImage(null); setProductImageFailed(false)
     stockLookupSeq.current++          // orphan any lookup still in flight
+    cancelProductImage()
     if (fileInput.current) fileInput.current.value = ''
   }
 
@@ -104,6 +137,11 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
     setBusy(true); setError(''); setResult(null)
     setStockPhoto(null); setStockFailed(false)
+    // Kill any image request still running for the previous scan before this
+    // one starts — requirement: an older image must never appear on a newer
+    // result.
+    setProductImage(null); setProductImageFailed(false)
+    cancelProductImage()
 
     try {
       const { dataUrl, mediaType } = await downscale(file)
@@ -130,10 +168,11 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
       } else {
         const scan = await res.json() as ScanResult
         setResult(scan)
-        // Not awaited: the result is already usable, and a stock photo is
-        // decoration. Making the member wait on a third-party lookup to see
-        // their own identification would be the wrong trade.
+        // Neither lookup is awaited: the result is already on screen and both
+        // images are decoration. Making the member wait on a third-party
+        // lookup to see their own identification would be the wrong trade.
         void lookupStockPhoto(scan.identifiedProduct)
+        void lookupProductImage(scan)
       }
     } catch {
       setError("We couldn't read that photo. Please try again.")
@@ -164,6 +203,57 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
       if (imageUrl) setStockPhoto(imageUrl)
     } catch {
       // Network hiccup on an optional decoration — leave the slot empty.
+    }
+  }
+
+  /**
+   * Ask the Product Image Service for a representative image.
+   *
+   * Fires only after the result is already rendered, and the member never
+   * waits on it. Silent on every failure path, of which there are several
+   * ordinary ones: the feature ships disabled, and even enabled it declines
+   * low-confidence or vague identifications. "No image" is the default
+   * outcome, not an error.
+   *
+   * Bounded twice over — an AbortController that a newer scan can trigger, and
+   * a 5s timeout — so a slow provider leaves the slot empty rather than
+   * arriving late over a result the member has moved past.
+   */
+  async function lookupProductImage(scan: ScanResult) {
+    const seq = ++productImageSeq.current
+
+    const controller = new AbortController()
+    productImageAbort.current = controller
+    const timer = setTimeout(() => controller.abort(), PRODUCT_IMAGE_TIMEOUT_MS)
+
+    try {
+      const res = await fetch('/api/member/product-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          scanEventId:        scan.scanEventId,
+          identifiedProduct:  scan.identifiedProduct,
+          identifiedCategory: scan.identifiedCategory,
+          confidence:         scan.confidence,
+          upc:                scan.upc,
+          brand:              scan.brand,
+          modelNumber:        scan.modelNumber,
+        }),
+      })
+      if (!res.ok) return
+      const { imageUrl } = await res.json() as { imageUrl: string | null }
+
+      // A newer scan (or a reset) started while this was in flight. Checked
+      // even though the request is aborted too, because a response can already
+      // be decoding by the time abort lands.
+      if (seq !== productImageSeq.current) return
+      if (imageUrl) setProductImage(imageUrl)
+    } catch {
+      // Abort or network failure on an optional decoration — leave it empty.
+    } finally {
+      clearTimeout(timer)
+      if (productImageAbort.current === controller) productImageAbort.current = null
     }
   }
 
@@ -204,6 +294,10 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   // The stock slot appears only once we have a URL that hasn't failed to load.
   // Both conditions matter: nothing found, and found-but-broken, render alike.
   const showStock = stockPhoto !== null && !stockFailed
+
+  // Same rule for the representative image. Off by default in production, so
+  // this is false on every scan until the feature flag is turned on.
+  const showProductImage = productImage !== null && !productImageFailed
 
   return (
     <>
@@ -326,6 +420,33 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                       </figure>
                     )}
                   </div>
+                )}
+
+                {/* Representative image from the Product Image Service.
+                    Sits between the disclaimer and the product name, and is
+                    labelled as representative so nobody reads it as a photo of
+                    the item in the bin — the member's own photo above is the
+                    only picture of the actual item. The URL is transient:
+                    rendered here and never stored. */}
+                {showProductImage && (
+                  <figure className="flex flex-col gap-1 m-0 mt-1">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={productImage!}
+                      alt={`Representative image of ${result.identifiedProduct}`}
+                      onError={() => setProductImageFailed(true)}
+                      // Not loading="lazy", for the same reason as the stock
+                      // photo above: an offscreen lazy image never requests, so
+                      // onError never fires and a dead URL leaves a caption over
+                      // an empty gap.
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                      className="w-full rounded-xl object-contain max-h-44 bg-[#F5F5F8]"
+                    />
+                    <figcaption className="text-[10px] font-medium text-[#8E8EA8] text-center">
+                      Representative image — not the actual item
+                    </figcaption>
+                  </figure>
                 )}
 
                 {lowConfidence ? (
