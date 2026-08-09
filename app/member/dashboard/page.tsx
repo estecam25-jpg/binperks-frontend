@@ -15,6 +15,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import TierBadge from '@/components/stamp/TierBadge'
 import Scanner from './Scanner'
+import AddToHomeScreen from './AddToHomeScreen'
 import { resolveTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
 
 /** The only brand color on this page. */
@@ -220,6 +221,10 @@ export default function MemberDashboardPage() {
       </div>
 
       <main className="flex-1 flex flex-col items-center px-4 py-7 gap-4 max-w-md mx-auto w-full">
+
+        {/* Renders nothing once dismissed, when already installed, or on
+            desktop — so it costs an empty node the rest of the time. */}
+        <AddToHomeScreen />
 
         {/* Greeting. The tier badge lives in the header now — one badge, not two. */}
         <div className="w-full flex flex-col items-center text-center gap-1.5">

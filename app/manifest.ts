@@ -22,6 +22,13 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: '/favicon.ico',  sizes: 'any',     type: 'image/x-icon' },
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: '/icon.png',     sizes: '512x512', type: 'image/png', purpose: 'any' },
+
+      // Android needs a maskable icon or it ignores the ones above and falls
+      // back to a generated glyph — which is why the icon appeared on iPhone
+      // but not on Android. A launcher crops this to its own shape (circle,
+      // squircle, rounded square), so the artwork is full-bleed #DA1212 with
+      // the logo confined to the centre 80% safe zone. See public/icon-maskable.png.
+      { src: '/icon-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
   }
 }

@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import GetTheApp from '@/components/member/GetTheApp'
 
 /** The only brand color on this page. */
 const BINPERKS_BLUE = '#4A4B98'
@@ -142,6 +143,10 @@ export default function MemberSettingsPage() {
           </button>
         </div>
         {saved && <p className="text-[12px] font-semibold text-[#2A7D34] self-start">✓ Saved</p>}
+
+        {/* Reference section — always visible, never dismissable, unlike the
+            one-time banner on the dashboard. */}
+        <GetTheApp />
 
         {/* No quick links here by design. Data export is gone — BinPerks owns
             member data, and access requests go through support per the Privacy
