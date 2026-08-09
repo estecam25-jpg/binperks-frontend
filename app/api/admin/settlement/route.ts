@@ -74,5 +74,9 @@ export async function GET() {
     })),
     previousPeriod,
     previousPeriodCalculated: rows.some(b => b.settlement_period === previousPeriod),
+    // Whether approving a batch will actually move money. Server-side env, so
+    // the UI cannot read it directly — and the approve confirmation has to tell
+    // the truth about what the button does. See /api/admin/settlement/approve.
+    transfersEnabled: process.env.STRIPE_TRANSFERS_ENABLED === 'true',
   })
 }

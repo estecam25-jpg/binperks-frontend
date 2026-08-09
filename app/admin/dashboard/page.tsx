@@ -73,6 +73,14 @@ interface SettlementStatement {
   priorNegativeBalance: number; grossDistribution: number
   netDistribution: number; closingNegativeBalance: number
   statementStatus: string | null; transferStatus: string | null
+  // Stripe Connect payout state
+  hasConnectAccount: boolean
+  stripeTransferId: string | null
+}
+interface PayoutSummary {
+  total: number; paid: number; failed: number
+  payable: number; awaitingConnect: number
+  merchantsAwaitingConnect: string[]
 }
 interface ScannerChoiceStat { count: number; pct: number }
 interface ScannerProduct {
@@ -495,8 +503,12 @@ export default function AdminDashboardPage() {
   const [batches, setBatches] = useState<SettlementBatch[]>([])
   const [previousPeriod, setPreviousPeriod] = useState('')
   const [previousPeriodCalculated, setPreviousPeriodCalculated] = useState(true)
+  /** Whether approving a batch will create real Stripe transfers. Off until
+   *  STRIPE_TRANSFERS_ENABLED is set in Vercel. */
+  const [transfersEnabled, setTransfersEnabled] = useState(false)
   const [expandedBatch, setExpandedBatch] = useState<string | null>(null)
   const [statementsByBatch, setStatementsByBatch] = useState<Record<string, SettlementStatement[]>>({})
+  const [payoutByBatch, setPayoutByBatch] = useState<Record<string, PayoutSummary>>({})
   const [statementsLoading, setStatementsLoading] = useState<string | null>(null)
   const [settlementBusy, setSettlementBusy] = useState<string | null>(null)
   const [settlementError, setSettlementError] = useState('')
@@ -553,6 +565,7 @@ export default function AdminDashboardPage() {
       setBatches(d.batches ?? [])
       setPreviousPeriod(d.previousPeriod ?? '')
       setPreviousPeriodCalculated(!!d.previousPeriodCalculated)
+      setTransfersEnabled(!!d.transfersEnabled)
     }
     if (markLoaded) { setTabLoading(null); setLoadedTabs(p => new Set([...p, 'settlement'])) }
   }, [])
@@ -711,6 +724,7 @@ export default function AdminDashboardPage() {
     if (res.ok) {
       const d = await res.json()
       setStatementsByBatch(prev => ({ ...prev, [batchId]: d.statements ?? [] }))
+      if (d.payoutSummary) setPayoutByBatch(prev => ({ ...prev, [batchId]: d.payoutSummary }))
     }
     setStatementsLoading(null)
   }
@@ -957,6 +971,7 @@ export default function AdminDashboardPage() {
         {batches.map(b => {
           const expanded = expandedBatch === b.id
           const stmts    = statementsByBatch[b.id]
+          const payout   = payoutByBatch[b.id]
           return (
             <div key={b.id} className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3">
 
@@ -1006,6 +1021,24 @@ export default function AdminDashboardPage() {
                 </button>
               )}
 
+              {/* Payout roll-up. Only meaningful once the batch is expanded,
+                  since that is when the statements are fetched. */}
+              {expanded && payout && payout.payable > 0 && (
+                <div className="rounded-xl bg-[#F5F5F8] px-3 py-2.5 flex flex-col gap-1">
+                  <p className="text-[11px] font-bold text-[#1A1A2E]">
+                    {payout.paid} of {payout.payable} merchant{payout.payable === 1 ? '' : 's'} paid
+                    {payout.awaitingConnect > 0 && ` · ${payout.awaitingConnect} pending Stripe Connect setup`}
+                    {payout.failed > 0 && ` · ${payout.failed} failed`}
+                  </p>
+                  {payout.merchantsAwaitingConnect.length > 0 && (
+                    <p className="text-[10px] font-semibold text-[#8A6A00] leading-relaxed">
+                      No payout account — follow up with:{' '}
+                      {payout.merchantsAwaitingConnect.join(', ')}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {expanded && (
                 <div className="border border-[#EBEBF2] rounded-xl overflow-hidden">
                   {statementsLoading === b.id ? (
@@ -1024,6 +1057,28 @@ export default function AdminDashboardPage() {
                               {money(s.netDistribution)}
                             </span>
                           </div>
+
+                          {/* Payout state. Only shown for statements that are
+                              actually payable — a zero or negative net is not
+                              waiting on Stripe and flagging it would be noise. */}
+                          {s.netDistribution > 0 && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {s.stripeTransferId ? (
+                                <Pill label="paid" tone="green" />
+                              ) : s.statementStatus === 'failed' ? (
+                                <Pill label={s.transferStatus?.replace(/_/g, ' ') ?? 'failed'} tone="red" />
+                              ) : !s.hasConnectAccount ? (
+                                <Pill label="no payout account" tone="amber" />
+                              ) : (
+                                <Pill label="awaiting transfer" tone="gray" />
+                              )}
+                              {s.stripeTransferId && (
+                                <span className="text-[9px] font-mono text-[#8E8EA8] truncate">
+                                  {s.stripeTransferId}
+                                </span>
+                              )}
+                            </div>
+                          )}
                           <p className="text-[10px] text-[#8E8EA8] font-medium leading-relaxed">
                             commissions {money(s.originCommissionCredits)}
                             {' · '}coupons funded −{money(s.couponDebits)}
@@ -1321,10 +1376,25 @@ export default function AdminDashboardPage() {
               {approveConfirm.merchantCount} merchant{approveConfirm.merchantCount === 1 ? '' : 's'} and
               carries any negative balances into next period.
             </p>
-            <p className="text-[12px] font-semibold text-[#1A1A2E] bg-[#F5F5F8] rounded-xl px-3 py-2.5 leading-relaxed">
-              No money moves. Stripe Connect transfers are a separate step and are not
-              wired up yet.
-            </p>
+
+            {/* The consequence of this button changes with the server flag, so
+                the wording has to change with it. Telling an admin "no money
+                moves" while transfers are live would be the worst possible
+                thing this dialog could say. */}
+            {transfersEnabled ? (
+              <p className="text-[12px] font-bold text-[#DA1212] bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 leading-relaxed">
+                ⚠️ This sends REAL money. Stripe Connect transfers totalling{' '}
+                {money(approveConfirm.merchantDistributions)} will be created immediately for every
+                merchant with a connected payout account. Transfers cannot be undone from this
+                screen.
+              </p>
+            ) : (
+              <p className="text-[12px] font-semibold text-[#1A1A2E] bg-[#F5F5F8] rounded-xl px-3 py-2.5 leading-relaxed">
+                No money moves. STRIPE_TRANSFERS_ENABLED is off, so this records the approval
+                only — the batch stays unlocked and can be paid once transfers are turned on.
+              </p>
+            )}
+
             <p className="text-[11px] text-[#8E8EA8] font-medium">
               Approval cannot be undone from this screen.
             </p>

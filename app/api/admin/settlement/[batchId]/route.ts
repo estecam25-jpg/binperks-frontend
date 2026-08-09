@@ -58,12 +58,18 @@ export async function GET(
   // joins return arrays and complicate typing for no benefit here.
   const merchantIds = [...new Set(rows.map(s => s.merchant_id))]
   const { data: merchants } = merchantIds.length > 0
-    ? await admin.from('merchants').select('id, company_name, name').in('id', merchantIds)
-    : { data: [] as { id: string; company_name: string | null; name: string | null }[] }
+    ? await admin.from('merchants').select('id, company_name, name, stripe_connect_id').in('id', merchantIds)
+    : { data: [] as { id: string; company_name: string | null; name: string | null; stripe_connect_id: string | null }[] }
 
   const nameById = new Map<string, string>()
+  const connectById = new Map<string, boolean>()
   for (const m of (merchants ?? [])) {
     nameById.set(m.id, (m.company_name || m.name) ?? '')
+    // Presence of an account id only. Whether payouts are actually enabled is
+    // checked live at transfer time — doing it here would mean one Stripe call
+    // per merchant on every page load, and the answer would still be stale by
+    // the time anyone acted on it.
+    connectById.set(m.id, !!m.stripe_connect_id)
   }
 
   return NextResponse.json({
@@ -90,10 +96,27 @@ export async function GET(
       lockedAt:              batch.locked_at,
       createdAt:             batch.created_at,
     },
+    // Payout readiness at a glance, so an admin can see who to chase without
+    // opening each statement. "paid" counts statements with a Stripe transfer
+    // recorded; "awaitingConnect" is the follow-up list.
+    payoutSummary: {
+      total:           rows.length,
+      paid:            rows.filter(s => !!s.stripe_transfer_id).length,
+      failed:          rows.filter(s => s.statement_status === 'failed').length,
+      payable:         rows.filter(s => Number(s.net_distribution ?? 0) > 0).length,
+      awaitingConnect: rows.filter(s =>
+        Number(s.net_distribution ?? 0) > 0 && !connectById.get(s.merchant_id)
+      ).length,
+      merchantsAwaitingConnect: rows
+        .filter(s => Number(s.net_distribution ?? 0) > 0 && !connectById.get(s.merchant_id))
+        .map(s => nameById.get(s.merchant_id) ?? s.merchant_id),
+    },
     statements: rows.map(s => ({
       id:                      s.id,
       merchantId:              s.merchant_id,
       merchantName:            nameById.get(s.merchant_id) ?? '',
+      hasConnectAccount:       connectById.get(s.merchant_id) ?? false,
+      stripeTransferId:        s.stripe_transfer_id,
       settlementPeriod:        s.settlement_period,
       originCommissionCredits: Number(s.origin_commission_credits ?? 0),
       couponDebits:            Number(s.coupon_debits ?? 0),
