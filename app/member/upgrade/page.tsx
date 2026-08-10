@@ -55,9 +55,17 @@ export default function MemberUpgradePage() {
     if (result.checkoutUrl) {
       window.location.href = result.checkoutUrl
     } else {
-      setError(result.error === 'merchant_not_stripe_connected'
-        ? 'VIP upgrades aren\'t available for this store yet.'
-        : 'Could not start checkout. Please try again.')
+      setError(
+        result.error === 'already_vip'
+          // The guard fired — they are already paying. Saying "try again" here
+          // would invite the exact double-subscription this prevents.
+          ? "You're already a VIP member. Refresh this page to see your membership."
+          : result.error === 'member_inactive'
+            ? 'This account is not active. Email support@binperks.com for help.'
+            : result.error === 'merchant_not_stripe_connected'
+              ? "VIP upgrades aren't available for this store yet."
+              : 'Could not start checkout. Please try again.',
+      )
       setCheckingOut(false)
     }
   }

@@ -22,6 +22,7 @@ export default function VipUpsellPage() {
 
   const [store, setStore] = useState<SignupStore | null>(null)
   const [loading, setLoading] = useState<'vip' | 'free' | null>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     const s = signupStore.get()
@@ -38,6 +39,7 @@ export default function VipUpsellPage() {
     if (!member) return
 
     setLoading('vip')
+    setError('')
 
     // merchantId is resolved to the merchant's Stripe Connect ID server-side
     // (never trust a connect ID supplied by the client)
@@ -56,6 +58,16 @@ export default function VipUpsellPage() {
     if (data.checkoutUrl) {
       window.location.href = data.checkoutUrl  // full redirect to Stripe Checkout
     } else {
+      // Previously this failed silently — the button just stopped spinning and
+      // the member had no idea why. The duplicate guard makes a real rejection
+      // possible now, so it has to say something.
+      setError(
+        data.error === 'already_vip'
+          ? "You're already a VIP member — no need to subscribe again."
+          : data.error === 'member_inactive'
+            ? 'This account is not active. Email support@binperks.com for help.'
+            : 'Could not start checkout. Please try again.',
+      )
       setLoading(null)
     }
   }
@@ -137,6 +149,12 @@ export default function VipUpsellPage() {
               )}
               {loading === 'vip' ? 'Redirecting to payment…' : `Start VIP — ${VIP_PRICE}/mo`}
             </button>
+
+            {error && (
+              <p className="text-[12px] font-semibold text-[#DA1212] text-center leading-snug">
+                {error}
+              </p>
+            )}
 
             {/* Same accuracy fix as /member/upgrade — cancellation takes
                 effect at period end, not immediately. */}
