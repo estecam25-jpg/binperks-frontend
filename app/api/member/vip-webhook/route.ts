@@ -131,12 +131,23 @@ export async function POST(req: NextRequest) {
           break
         }
 
+        // session.subscription is the id in mode: 'subscription'. Stored so the
+        // member can later cancel — without it there is no handle to cancel
+        // with, which is how deactivation ended up unable to stop billing.
+        const subscriptionId = typeof session.subscription === 'string'
+          ? session.subscription
+          : session.subscription?.id ?? null
+
         await supabase
           .from('members')
-          .update({ subscription_status: 'vip', vip_billing_cycle: 'monthly' })
+          .update({
+            subscription_status:    'vip',
+            vip_billing_cycle:      'monthly',
+            stripe_subscription_id: subscriptionId,
+          })
           .eq('id', memberId)
 
-        console.log(`[member/vip-webhook] Member ${memberId} upgraded to VIP via checkout`)
+        console.log(`[member/vip-webhook] Member ${memberId} upgraded to VIP via checkout (sub=${subscriptionId})`)
         await markCompleted(supabase, event.id)
       } catch (err) {
         console.error('[member/vip-webhook] checkout.session.completed error:', err)
@@ -162,12 +173,21 @@ export async function POST(req: NextRequest) {
           break
         }
 
+        // NOTE: this fires on `updated` too, including the update that sets
+        // cancel_at_period_end. A subscription pending cancellation is still
+        // status 'active', so the member correctly keeps VIP until the period
+        // actually ends — that is the intended behaviour, not a bug. The
+        // downgrade happens on customer.subscription.deleted.
         await supabase
           .from('members')
-          .update({ subscription_status: 'vip', vip_billing_cycle: 'monthly' })
+          .update({
+            subscription_status:    'vip',
+            vip_billing_cycle:      'monthly',
+            stripe_subscription_id: subscription.id,
+          })
           .eq('id', memberId)
 
-        console.log(`[member/vip-webhook] Member ${memberId} set to VIP via ${event.type}`)
+        console.log(`[member/vip-webhook] Member ${memberId} set to VIP via ${event.type} (sub=${subscription.id})`)
         await markCompleted(supabase, event.id)
       } catch (err) {
         console.error(`[member/vip-webhook] ${event.type} error:`, err)
@@ -350,12 +370,30 @@ export async function POST(req: NextRequest) {
         }
 
         // Downgrade to Free — stamps and coupon history are NEVER touched.
+        //
+        // Scoped to this subscription id so a stale event for an older
+        // subscription cannot clear the id of a newer, live one. Cleared
+        // because the subscription no longer exists: leaving it would let the
+        // cancel route try to cancel something already gone.
+        await supabase
+          .from('members')
+          .update({
+            subscription_status:    'free',
+            vip_billing_cycle:      null,
+            stripe_subscription_id: null,
+          })
+          .eq('id', memberId)
+          .eq('stripe_subscription_id', subscription.id)
+
+        // A member whose stored id is null or points elsewhere still needs the
+        // downgrade — the scoped update above would have matched nothing.
         await supabase
           .from('members')
           .update({ subscription_status: 'free', vip_billing_cycle: null })
           .eq('id', memberId)
+          .is('stripe_subscription_id', null)
 
-        console.log(`[member/vip-webhook] Member ${memberId} downgraded to Free`)
+        console.log(`[member/vip-webhook] Member ${memberId} downgraded to Free (sub=${subscription.id})`)
         await markCompleted(supabase, event.id)
       } catch (err) {
         console.error('[member/vip-webhook] customer.subscription.deleted error:', err)

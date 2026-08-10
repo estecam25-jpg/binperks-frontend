@@ -138,8 +138,11 @@ export default function VipUpsellPage() {
               {loading === 'vip' ? 'Redirecting to payment…' : `Start VIP — ${VIP_PRICE}/mo`}
             </button>
 
+            {/* Same accuracy fix as /member/upgrade — cancellation takes
+                effect at period end, not immediately. */}
             <p className="text-[11px] text-[#8E8EA8] text-center font-medium">
-              Cancel anytime · 30-day grace period on payment issues
+              Cancel anytime — continues until the end of your billing period · 30-day grace
+              period on payment issues
             </p>
           </div>
         </div>

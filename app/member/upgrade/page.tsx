@@ -104,7 +104,12 @@ export default function MemberUpgradePage() {
       <main className="flex-1 flex flex-col items-center px-4 py-8 gap-5 max-w-md mx-auto w-full">
         <div className="w-full text-center">
           <p className="font-['Coiny'] text-3xl text-[#1A1A2E] mb-1">Upgrade to VIP</p>
-          <p className="text-[14px] text-[#8E8EA8] font-medium">Cancel anytime. Keep all your stamps either way.</p>
+          {/* Accurate as of the cancel-vip route: cancellation is scheduled for
+              period end, not immediate, so the claim has to say so. */}
+          <p className="text-[14px] text-[#8E8EA8] font-medium">
+            Cancel anytime — your membership continues until the end of your billing period.
+            Keep all your stamps either way.
+          </p>
         </div>
 
         <div className="w-full rounded-2xl overflow-hidden shadow-lg" style={{ boxShadow: `0 4px 24px ${brandColor}30, 0 2px 8px rgba(0,0,0,0.08)` }}>
