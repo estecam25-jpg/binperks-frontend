@@ -29,8 +29,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { findMerchantForRequest } from '@/lib/merchant-auth'
 import { resolveTierName } from '@/lib/tiers'
 
 // Origin Merchant commission per VIP member per month while eligible.
@@ -62,23 +62,24 @@ function getFiscalWeekRange(fiscalWeekStart: string = 'friday') {
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export async function GET(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Resolved through lib/merchant-auth, which falls back to owner_email when
+  // merchants.auth_user_id is stale. A plain auth_user_id lookup returning 404
+  // here is what made every dashboard tab render empty at once.
+  const merchant = await findMerchantForRequest<{
+    id: string
+    company_name: string | null
+    location_count: number | null
+    billing_status: string | null
+    stripe_customer_id: string | null
+    commission_eligible: boolean | null
+    commission_suspension_reason: string | null
+  }>('id, company_name, location_count, billing_status, stripe_customer_id, commission_eligible, commission_suspension_reason')
 
-  // Auth uses the server client (session cookie). All table reads below use
-  // the admin client — RLS blocks these queries otherwise (see CLAUDE.md
-  // CRITICAL RLS RULE).
+  if (!merchant) return NextResponse.json({ error: 'Merchant not found' }, { status: 404 })
+
+  // All table reads below use the admin client — RLS blocks these queries
+  // otherwise (see CLAUDE.md CRITICAL RLS RULE).
   const admin = createAdminSupabaseClient()
-
-  const { data: merchant } = await admin
-    .from('merchants')
-    .select('id, company_name, location_count, billing_status, stripe_customer_id, commission_eligible, commission_suspension_reason')
-    .eq('auth_user_id', user.id)
-    .single()
-
-  console.log('[merchant/dashboard] user.id:', user?.id)
-  if (!merchant) return NextResponse.json({ error: 'Merchant not found', userId: user?.id }, { status: 404 })
 
   const storeIdParam = new URL(req.url).searchParams.get('storeId')
 

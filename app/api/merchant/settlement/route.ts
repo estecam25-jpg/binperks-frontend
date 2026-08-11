@@ -20,25 +20,17 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { findMerchantForRequest } from '@/lib/merchant-auth'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 export async function GET() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  // Server client for auth only; admin client for all table reads (RLS would
-  // block these otherwise — see CLAUDE.md CRITICAL RLS RULE).
-  const admin = createAdminSupabaseClient()
-
-  const { data: merchant } = await admin
-    .from('merchants')
-    .select('id')
-    .eq('auth_user_id', user.id)
-    .single()
-
+  // See lib/merchant-auth — resilient to a stale merchants.auth_user_id.
+  const merchant = await findMerchantForRequest()
   if (!merchant) return NextResponse.json({ error: 'Merchant not found' }, { status: 404 })
+
+  // Admin client for all table reads (RLS would block these otherwise — see
+  // CLAUDE.md CRITICAL RLS RULE).
+  const admin = createAdminSupabaseClient()
 
   // Scoped to this merchant's own id — a merchant never sees another's statements.
   const { data: statements, error } = await admin

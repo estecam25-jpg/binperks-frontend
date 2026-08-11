@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import TierBadge from '@/components/stamp/TierBadge'
+import StampProgress from '@/components/stamp/StampProgress'
 import Scanner from './Scanner'
 import AddToHomeScreen from './AddToHomeScreen'
 import { resolveTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
@@ -180,7 +181,9 @@ export default function MemberDashboardPage() {
   const tier = resolveTier(member.totalStamps, member.subscriptionStatus)
   const cyclePos = cyclePosition(member.totalStamps)
   const remaining = stampsToNextCoupon(member.totalStamps)
-  const progressPct = Math.min((cyclePos / 20) * 100, 100)
+  // Same rule the stamp tool uses: a due coupon shows a full card rather than
+  // wrapping back to zero, so the member sees why it is ready.
+  const filledDots = member.couponDue ? 20 : cyclePos
 
   const activeRewards = rewards.filter(r => r.status === 'earned')
   const pastRewards = rewards.filter(r => r.status !== 'earned')
@@ -244,23 +247,22 @@ export default function MemberDashboardPage() {
               {member.totalStamps}
             </span>
           </div>
+          {/* The same 20-dot card the cashier sees in the stamp tool, from the
+              shared component — a member should recognise their card across the
+              counter. Replaces the bare progress bar that used to sit here;
+              StampProgress renders its own bar, so keeping both would have
+              shown two. */}
           <div className="w-full mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[12px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
-                Toward next coupon
-              </span>
-              <span className="text-[13px] font-bold text-[#1A1A2E]">{cyclePos} / 20</span>
-            </div>
-            <div className="h-2 rounded-full bg-[#EBEBF2] overflow-hidden mb-2">
-              <div
-                className="h-full rounded-full bg-[#FFB217] transition-all duration-500"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <p className="text-[12px] font-semibold text-[#8E8EA8]">
-              <strong className="text-[#1A1A2E]">{remaining} more stamp{remaining !== 1 ? 's' : ''}</strong>
-              {' '}to earn a <strong className="text-[#1A1A2E]">${tier.couponValue} coupon</strong>
-            </p>
+            <StampProgress
+              filled={filledDots}
+              label="Toward next coupon"
+              caption={member.couponDue ? (
+                <><strong className="text-[#1A1A2E]">Coupon ready!</strong> Redeem it on your next visit</>
+              ) : (
+                <><strong className="text-[#1A1A2E]">{remaining} more stamp{remaining !== 1 ? 's' : ''}</strong>{' '}
+                to earn a <strong className="text-[#1A1A2E]">${tier.couponValue} coupon</strong></>
+              )}
+            />
           </div>
         </div>
 

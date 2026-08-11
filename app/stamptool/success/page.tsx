@@ -17,11 +17,11 @@ export default function SuccessPage() {
 
   useEffect(() => {
     const c = cashierSession.get()
-    if (!c) { router.replace('/stamp'); return }
+    if (!c) { router.replace('/stamptool'); return }
     const s = storeSession.get()
     if (s) setStore({ name: s.name, brandColor: s.brandColor, logoUrl: s.logoUrl })
     const r = stampResultSession.get()
-    if (!r) { router.replace('/stamp/lookup'); return }
+    if (!r) { router.replace('/stamptool/lookup'); return }
     setResult(r)
 
     if (!hasAnimated.current) {
@@ -39,12 +39,12 @@ export default function SuccessPage() {
   function handleNextMember() {
     foundMemberSession.clear()
     stampResultSession.clear()
-    router.push('/stamp/lookup')
+    router.push('/stamptool/lookup')
   }
 
   function handleReturnToSignIn() {
     signOutCashier()
-    router.push('/stamp')
+    router.push('/stamptool')
   }
 
   if (!result) {

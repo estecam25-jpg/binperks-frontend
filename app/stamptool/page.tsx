@@ -2,7 +2,7 @@
  * /stamp — Stamp tool entry point.
  *
  * Shows all active stores. Cashier selects their store to proceed to
- * /stamp/[storeKey] where they enter their PIN.
+ * /stamptool/[storeKey] where they enter their PIN.
  *
  * Server component — uses admin client to bypass RLS.
  */
@@ -55,7 +55,7 @@ export default async function StampHomePage() {
             {stores.map(store => (
               <Link
                 key={store.id}
-                href={`/stamp/${store.canonical_key}`}
+                href={`/stamptool/${store.canonical_key}`}
                 className="w-full flex items-center gap-4 bg-white rounded-2xl px-5 py-4 shadow-sm active:scale-[0.98] transition-transform"
               >
                 {/* Brand color accent bar */}

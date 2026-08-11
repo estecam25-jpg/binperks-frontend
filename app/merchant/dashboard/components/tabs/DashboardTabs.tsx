@@ -132,6 +132,57 @@ const VIP_PERK_DEFAULTS: Perk[] = [
   { slot: 5, title: 'BOGO $1 Day', description: 'Buy One Get One free on Dollar Day.', isActive: true },
 ]
 
+/**
+ * One editable perk.
+ *
+ * MUST stay at module scope. This was previously declared inside PerksTab, so
+ * every keystroke — which sets state and re-renders the tab — produced a NEW
+ * function identity for this component. React compares element types by
+ * identity, saw a different type in the same position, and unmounted the whole
+ * subtree to mount a fresh one. The DOM input was destroyed and recreated on
+ * every character, which is why focus jumped out after each letter.
+ *
+ * Declaring it here gives it one stable identity for the life of the module,
+ * so React reconciles the existing input instead of replacing it.
+ */
+function PerkCard({
+  perk, label, onChange,
+}: {
+  perk: Perk
+  label: string
+  onChange: (slot: number, field: keyof Perk, value: string | boolean) => void
+}) {
+  return (
+    <div className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">{label}</span>
+        <button
+          onClick={() => onChange(perk.slot, 'isActive', !perk.isActive)}
+          className={`relative w-10 h-6 rounded-full transition-colors ${perk.isActive ? 'bg-[#4A4B98]' : 'bg-[#D1D1DC]'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${perk.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
+        </button>
+      </div>
+      <input
+        type="text"
+        placeholder="Perk title..."
+        value={perk.title}
+        onChange={e => onChange(perk.slot, 'title', e.target.value)}
+        maxLength={60}
+        className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-bold text-[#1A1A2E] placeholder:font-normal placeholder:text-[#D1D1DC]"
+      />
+      <textarea
+        rows={2}
+        placeholder="Short description members will see..."
+        value={perk.description}
+        onChange={e => onChange(perk.slot, 'description', e.target.value)}
+        maxLength={140}
+        className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[13px] font-medium text-[#1A1A2E] placeholder:text-[#D1D1DC] resize-none"
+      />
+    </div>
+  )
+}
+
 export function PerksTab({ storeId, stores }: { storeId: string | null; stores: StoreRef[] }) {
   const activeStoreId = storeId ?? stores[0]?.id
   const [freePerks, setFreePerks] = useState<Perk[]>(FREE_PERK_DEFAULTS)
@@ -178,44 +229,6 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
     })
     setSaving(false)
     if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000) }
-  }
-
-  function PerkCard({
-    perk, label, onChange,
-  }: {
-    perk: Perk
-    label: string
-    onChange: (slot: number, field: keyof Perk, value: string | boolean) => void
-  }) {
-    return (
-      <div className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">{label}</span>
-          <button
-            onClick={() => onChange(perk.slot, 'isActive', !perk.isActive)}
-            className={`relative w-10 h-6 rounded-full transition-colors ${perk.isActive ? 'bg-[#4A4B98]' : 'bg-[#D1D1DC]'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${perk.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
-          </button>
-        </div>
-        <input
-          type="text"
-          placeholder="Perk title..."
-          value={perk.title}
-          onChange={e => onChange(perk.slot, 'title', e.target.value)}
-          maxLength={60}
-          className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-bold text-[#1A1A2E] placeholder:font-normal placeholder:text-[#D1D1DC]"
-        />
-        <textarea
-          rows={2}
-          placeholder="Short description members will see..."
-          value={perk.description}
-          onChange={e => onChange(perk.slot, 'description', e.target.value)}
-          maxLength={140}
-          className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[13px] font-medium text-[#1A1A2E] placeholder:text-[#D1D1DC] resize-none"
-        />
-      </div>
-    )
   }
 
   if (loading) {
@@ -784,113 +797,10 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   )
 }
 
-// --- W9Section (inside SettingsTab) ---
-
-function W9Section() {
-  const [w9Status,     setW9Status]     = useState<'pending' | 'approved' | 'rejected' | null>(null)
-  const [submittedAt,  setSubmittedAt]  = useState<string | null>(null)
-  const [loading,      setLoading]      = useState(true)
-  const [uploading,    setUploading]    = useState(false)
-  const [uploadError,  setUploadError]  = useState('')
-
-  useEffect(() => {
-    fetch('/api/merchant/w9')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d?.w9) { setW9Status(d.w9.status); setSubmittedAt(d.w9.submitted_at) }
-        setLoading(false)
-      })
-  }, [])
-
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (file.type !== 'application/pdf') { setUploadError('Please upload a PDF file.'); return }
-    setUploading(true); setUploadError('')
-    const form = new FormData()
-    form.append('file', file)
-    const res = await fetch('/api/merchant/w9', { method: 'POST', body: form })
-    if (res.ok) {
-      setW9Status('pending')
-      setSubmittedAt(new Date().toISOString())
-    } else {
-      const d = await res.json()
-      setUploadError(d.error ?? 'Upload failed. Please try again.')
-    }
-    setUploading(false)
-    // reset input
-    e.target.value = ''
-  }
-
-  const statusBanner =
-    w9Status === 'approved' ? { icon: '✅', text: 'W-9 approved.', color: 'text-green-700', bg: 'bg-green-50 border-green-200' } :
-    w9Status === 'rejected' ? { icon: '❌', text: 'Your W-9 was rejected. Please re-upload.', color: 'text-red-700', bg: 'bg-red-50 border-red-200' } :
-    w9Status === 'pending'  ? { icon: '✅', text: 'W-9 submitted' + (submittedAt ? ' on ' + new Date(submittedAt).toLocaleDateString() : '') + '. Under review.', color: 'text-green-700', bg: 'bg-green-50 border-green-200' } :
-    null
-
-  return (
-    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-[#EBEBF2]">
-        <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">W-9 Tax Form</h2>
-        <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
-          The IRS requires us to collect a W-9 form for tax reporting purposes.
-        </p>
-      </div>
-
-      {loading ? (
-        <div className="p-5 flex flex-col gap-2">
-          <div className="h-10 bg-[#F5F5F8] rounded-xl animate-pulse" />
-          <div className="h-10 bg-[#F5F5F8] rounded-xl animate-pulse" />
-        </div>
-      ) : (
-        <div className="p-5 flex flex-col gap-4">
-
-          {statusBanner && (
-            <div className={'border rounded-xl px-4 py-3 flex items-start gap-2 ' + statusBanner.bg}>
-              <span className="text-[16px] flex-shrink-0">{statusBanner.icon}</span>
-              <p className={'text-[13px] font-semibold ' + statusBanner.color}>{statusBanner.text}</p>
-            </div>
-          )}
-
-          {/* Download link */}
-          <div className="flex flex-col gap-1.5">
-            <p className="text-[13px] font-semibold text-[#1A1A2E]">Instructions</p>
-            <ol className="text-[12px] text-[#8E8EA8] font-medium list-decimal list-inside space-y-1">
-              <li>Download and complete the W-9 form</li>
-              <li>Upload the completed PDF below</li>
-            </ol>
-            <a
-              href="https://www.irs.gov/forms-pubs/about-form-w-9"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 mt-1 px-4 py-2.5 rounded-xl bg-[#F5F5F8] text-[13px] font-bold text-[#4A4B98] hover:bg-[#EBEBF2] transition-colors w-fit"
-            >
-              📄 Download W-9 Form
-            </a>
-          </div>
-
-          {/* Upload */}
-          <div className="flex flex-col gap-2">
-            <label className="cursor-pointer inline-flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-bold text-[14px] text-white bg-[#1A1A2E] hover:bg-[#2a2a3e] transition-colors disabled:opacity-50">
-              {uploading ? 'Uploading...' : (w9Status === 'rejected' ? 'Re-upload W-9 PDF' : 'Upload W-9 PDF')}
-              <input
-                type="file"
-                accept=".pdf,application/pdf"
-                className="hidden"
-                disabled={uploading}
-                onChange={handleUpload}
-              />
-            </label>
-            {uploadError && (
-              <p className="text-[12px] font-semibold text-[#DA1212]">{uploadError}</p>
-            )}
-          </div>
-
-        </div>
-      )}
-    </div>
-  )
-}
+// W-9 collection moved to DocuSeal, bundled with the Merchant Agreement.
+// The upload UI that lived here is gone; /api/merchant/w9 and every
+// merchant_w9 record are deliberately untouched, so the admin W-9 review
+// screen still works on already-submitted forms.
 
 // --- SettingsTab ---
 
@@ -1234,9 +1144,6 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
         </form>
       </div>
 
-      {/* W-9 Tax Form */}
-      <W9Section />
-
       {/* Sign out */}
       <div className="bg-white rounded-2xl shadow-sm px-5 py-5">
         <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] mb-3">Account</h2>
@@ -1277,7 +1184,12 @@ interface OnboardingItem {
 export function GettingStartedTab({ storeId }: { storeId: string | null }) {
   const [items,          setItems]          = useState<OnboardingItem[]>([])
   const [completedCount, setCompletedCount] = useState(0)
+  // Denominator comes from the API, not a constant. It was hardcoded to 13
+  // while the route builds 12 items, so the checklist could never reach 100%
+  // and read as "x/13" against a list of 12.
+  const [total,          setTotal]          = useState(0)
   const [loading,        setLoading]        = useState(true)
+  const [loadFailed,     setLoadFailed]     = useState(false)
   const [confirming,     setConfirming]     = useState(false)
   const [confirmed,      setConfirmed]      = useState(false)
 
@@ -1285,9 +1197,18 @@ export function GettingStartedTab({ storeId }: { storeId: string | null }) {
     fetch('/api/merchant/onboarding')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d) { setItems(d.items ?? []); setCompletedCount(d.completedCount ?? 0) }
+        if (d) {
+          setItems(d.items ?? [])
+          setCompletedCount(d.completedCount ?? 0)
+          setTotal(d.total ?? (d.items ?? []).length)
+        } else {
+          // Previously this left an empty checklist behind with no explanation,
+          // which reads as "the tab is broken" rather than "we could not load".
+          setLoadFailed(true)
+        }
         setLoading(false)
       })
+      .catch(() => { setLoadFailed(true); setLoading(false) })
   }, [])
 
   async function handleConfirmTraining() {
@@ -1312,8 +1233,24 @@ export function GettingStartedTab({ storeId }: { storeId: string | null }) {
     )
   }
 
-  const pct = Math.round((completedCount / 13) * 100)
-  const allDone = completedCount >= 13
+  if (loadFailed || items.length === 0) {
+    return (
+      <div className="flex flex-col gap-4 p-4 pb-16">
+        <div className="bg-white rounded-2xl py-14 px-6 text-center flex flex-col items-center gap-3">
+          <span className="text-3xl">📋</span>
+          <p className="text-[14px] font-semibold text-[#8E8EA8] max-w-xs leading-relaxed">
+            We couldn&apos;t load your setup checklist. Please refresh, or email{' '}
+            <a href="mailto:support@binperks.com" className="underline text-[#4A4B98]">
+              support@binperks.com
+            </a>.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const pct = total > 0 ? Math.round((completedCount / total) * 100) : 0
+  const allDone = total > 0 && completedCount >= total
   const binPerksItems = items.filter(i => i.binPerks)
   const merchantItems = items.filter(i => !i.binPerks)
 
@@ -1324,7 +1261,7 @@ export function GettingStartedTab({ storeId }: { storeId: string | null }) {
       <div className="bg-[#1A1A2E] rounded-2xl px-5 py-5 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <h2 className="font-['Coiny'] text-2xl text-white">Getting Started</h2>
-          <span className="font-['Coiny'] text-2xl text-[#FFB217]">{completedCount}/13</span>
+          <span className="font-['Coiny'] text-2xl text-[#FFB217]">{completedCount}/{total}</span>
         </div>
         <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden">
           <div

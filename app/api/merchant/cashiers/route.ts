@@ -14,19 +14,15 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { findMerchantForRequest } from '@/lib/merchant-auth'
 import { toOne } from '@/lib/supabase-relations'
 
 // Auth (identify the logged-in merchant) uses the server client so we read
 // the session cookie. All actual table reads/writes use the admin client.
 async function getOwnerMerchant() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const admin = createAdminSupabaseClient()
-  const { data: m } = await admin.from('merchants').select('id').eq('auth_user_id', user.id).single()
+  // See lib/merchant-auth — resilient to a stale merchants.auth_user_id.
+  const m = await findMerchantForRequest()
   return m?.id ? { merchantId: m.id } : null
 }
 

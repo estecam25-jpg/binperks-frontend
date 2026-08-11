@@ -109,7 +109,7 @@ export default function StampSignInPage() {
         pin:        enteredPin,  // stored for per-stamp bcrypt re-verification in /api/stamp
       }
       cashierSession.set(session)
-      router.push('/stamp/lookup')
+      router.push('/stamptool/lookup')
     } catch {
       setStatus('error')
       setPin('')
@@ -137,7 +137,7 @@ export default function StampSignInPage() {
           </p>
         </div>
         <button
-          onClick={() => router.replace('/stamp')}
+          onClick={() => router.replace('/stamptool')}
           className="text-[13px] font-semibold text-[#4A4B98] underline"
         >
           Back to store list

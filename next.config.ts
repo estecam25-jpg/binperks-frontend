@@ -26,6 +26,25 @@ const nextConfig: NextConfig = {
         destination: '/member/join/:storeKey',
         permanent: false,
       },
+
+      // The stamp tool moved from /stamp to /stamptool. Cashiers have the old
+      // URL bookmarked on store tablets and it is printed on materials, so both
+      // the sub-pages and the bare route have to keep working.
+      //
+      // Order matters: the catch-all must come AFTER the bare route, or
+      // '/stamp' would match ':path*' as an empty segment and redirect to
+      // '/stamptool/'. Temporary (307) to match the /join redirects above —
+      // nothing here should be cached permanently by a browser yet.
+      {
+        source: '/stamp',
+        destination: '/stamptool',
+        permanent: false,
+      },
+      {
+        source: '/stamp/:path*',
+        destination: '/stamptool/:path*',
+        permanent: false,
+      },
     ]
   },
 };

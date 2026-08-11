@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { findMerchantForRequest } from '@/lib/merchant-auth'
 
+/** See lib/merchant-auth. A stale auth_user_id used to 401 here, which the
+ *  Getting Started tab renders as an empty checklist. */
 async function getMerchant() {
-  const server = await createServerSupabaseClient()
-  const { data: { user } } = await server.auth.getUser()
-  if (!user) return null
-  const admin = createAdminSupabaseClient()
-  const { data: merchant } = await admin
-    .from('merchants')
-    .select('id, billing_status')
-    .eq('auth_user_id', user.id)
-    .single()
-  return merchant ?? null
+  return findMerchantForRequest<{ id: string; billing_status: string | null }>(
+    'id, billing_status',
+  )
 }
 
 export async function GET() {

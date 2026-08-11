@@ -49,7 +49,7 @@ export default function LookupPage() {
 
   useEffect(() => {
     const c = cashierSession.get()
-    if (!c) { router.replace(`/stamp/${storeSession.get()?.storeKey ?? ''}`); return }
+    if (!c) { router.replace(`/stamptool/${storeSession.get()?.storeKey ?? ''}`); return }
     setCashier({ name: c.name, role: c.role })
     const s = storeSession.get()
     if (s) setStore({ name: s.name, brandColor: s.brandColor, logoUrl: s.logoUrl })
@@ -80,7 +80,7 @@ export default function LookupPage() {
     setFoundMember(null)
 
     const c = cashierSession.get()
-    if (!c) { router.replace(`/stamp/${storeSession.get()?.storeKey ?? ''}`); return }
+    if (!c) { router.replace(`/stamptool/${storeSession.get()?.storeKey ?? ''}`); return }
 
     const supabase = createClient()
 
@@ -135,7 +135,7 @@ export default function LookupPage() {
   function handleProceed() {
     if (!foundMember) return
     foundMemberSession.set(foundMember)
-    router.push('/stamp/member')
+    router.push('/stamptool/member')
   }
 
   function handleRecentTap(entry: RecentLookup) {
@@ -147,7 +147,7 @@ export default function LookupPage() {
 
   function handleSwitchCashier() {
     signOutCashier()
-    router.replace(`/stamp/${storeSession.get()?.storeKey ?? ''}`)
+    router.replace(`/stamptool/${storeSession.get()?.storeKey ?? ''}`)
   }
 
   const isLoading = lookupState === 'loading'
@@ -238,31 +238,37 @@ export default function LookupPage() {
           )}
 
           {lookupState === 'found' && foundMember && (
-            <button
-              onClick={handleProceed}
-              className="flex flex-col gap-4 bg-green-50 border border-green-200 rounded-2xl p-4 w-full text-left active:bg-green-100 transition-colors"
-            >
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-full bg-[#4A4B98] flex items-center justify-center font-['Coiny'] text-xl text-white flex-shrink-0">
-                  {foundMember.firstName[0]}{foundMember.lastName[0]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[17px] font-bold text-[#1A1A2E] truncate">
-                    {foundMember.firstName} {foundMember.lastName}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <TierBadge totalStamps={foundMember.totalStamps} subscriptionStatus={foundMember.subscriptionStatus} />
-                    <span className="text-[12px] font-semibold text-[#8E8EA8]">
-                      {foundMember.totalStamps} stamps
-                    </span>
+            <>
+              {/* The card is now a plain panel, not a button. The tap target is
+                  the Continue button below it, styled to match the big blue
+                  primary button used everywhere else in this tool — a button
+                  cannot be nested inside a button. */}
+              <div className="flex flex-col gap-4 bg-green-50 border border-green-200 rounded-2xl p-4 w-full text-left">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-full bg-[#4A4B98] flex items-center justify-center font-['Coiny'] text-xl text-white flex-shrink-0">
+                    {foundMember.firstName[0]}{foundMember.lastName[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[17px] font-bold text-[#1A1A2E] truncate">
+                      {foundMember.firstName} {foundMember.lastName}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <TierBadge totalStamps={foundMember.totalStamps} subscriptionStatus={foundMember.subscriptionStatus} />
+                      <span className="text-[12px] font-semibold text-[#8E8EA8]">
+                        {foundMember.totalStamps} stamps
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center justify-between pt-1 border-t border-green-200">
-                <span className="text-[13px] font-semibold text-[#2A7D34]">Tap to continue</span>
-                <span className="text-[18px] text-[#2A7D34]">→</span>
-              </div>
-            </button>
+
+              <button
+                onClick={handleProceed}
+                className="w-full py-[18px] rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide bg-[#4A4B98] disabled:opacity-35 disabled:cursor-not-allowed active:scale-[0.97] transition-all flex items-center justify-center gap-2"
+              >
+                Continue
+              </button>
+            </>
           )}
 
           {lookupState === 'found' ? (

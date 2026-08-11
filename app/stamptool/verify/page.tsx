@@ -25,13 +25,13 @@ export default function VerifyPage() {
     hasRun.current = true
 
     const c = cashierSession.get()
-    if (!c) { router.replace('/stamp'); return }
+    if (!c) { router.replace('/stamptool'); return }
 
     const s = storeSession.get()
     if (s) setStore({ name: s.name, brandColor: s.brandColor, logoUrl: s.logoUrl })
 
     const member = foundMemberSession.get()
-    if (!member) { router.replace('/stamp/lookup'); return }
+    if (!member) { router.replace('/stamptool/lookup'); return }
     setMemberFirstName(member.firstName)
 
     runTransaction(member.id, c.storeId, c.id, c.merchantId, member.firstName, member.lastName, c.pin)
@@ -93,7 +93,7 @@ export default function VerifyPage() {
         setRingProgress(100)
         setVerifyState('success')
         await tick(600)
-        router.push('/stamp/success')
+        router.push('/stamptool/success')
         return
       }
 
@@ -115,7 +115,7 @@ export default function VerifyPage() {
       setRingProgress(100)
       setVerifyState('success')
       await tick(600)
-      router.push('/stamp/success')
+      router.push('/stamptool/success')
 
     } catch {
       setVerifyState('error')
@@ -138,7 +138,7 @@ export default function VerifyPage() {
   }
 
   function handleBack() {
-    router.push('/stamp/member')
+    router.push('/stamptool/member')
   }
 
   const strokeOffset = CIRCUMFERENCE - (ringProgress / 100) * CIRCUMFERENCE

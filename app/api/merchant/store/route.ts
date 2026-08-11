@@ -16,21 +16,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { findMerchantForRequest } from '@/lib/merchant-auth'
 
+/** See lib/merchant-auth — resilient to a stale merchants.auth_user_id. */
 async function getAuthenticatedMerchant() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const admin = createAdminSupabaseClient()
-  const { data: merchant } = await admin
-    .from('merchants')
-    .select('id')
-    .eq('auth_user_id', user.id)
-    .single()
-
+  const merchant = await findMerchantForRequest()
   return merchant?.id ? { merchantId: merchant.id } : null
 }
 

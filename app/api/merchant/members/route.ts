@@ -22,28 +22,20 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { findMerchantForRequest } from '@/lib/merchant-auth'
 import { resolveTierName } from '@/lib/tiers'
 import { toOne } from '@/lib/supabase-relations'
 
 export async function GET(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  // Auth uses the server client (session cookie). All table reads below use
-  // the admin client — RLS blocks these queries otherwise (see CLAUDE.md
-  // CRITICAL RLS RULE).
-  const admin = createAdminSupabaseClient()
-
-  const { data: merchant } = await admin
-    .from('merchants')
-    .select('id')
-    .eq('auth_user_id', user.id)
-    .single()
-
+  // See lib/merchant-auth — resolves by auth_user_id, falls back to
+  // owner_email so a stale id does not read as "this merchant has no members".
+  const merchant = await findMerchantForRequest()
   if (!merchant) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // All table reads below use the admin client — RLS blocks these queries
+  // otherwise (see CLAUDE.md CRITICAL RLS RULE).
+  const admin = createAdminSupabaseClient()
 
   const url = new URL(req.url)
   const storeId = url.searchParams.get('storeId')

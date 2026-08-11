@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import TierBadge from '@/components/stamp/TierBadge'
+import StampProgress from '@/components/stamp/StampProgress'
 import { cashierSession, storeSession, foundMemberSession, type FoundMember } from '@/lib/stamp-session'
 import { resolveTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
 
@@ -16,11 +17,11 @@ export default function MemberViewPage() {
 
   useEffect(() => {
     const c = cashierSession.get()
-    if (!c) { router.replace('/stamp'); return }
+    if (!c) { router.replace('/stamptool'); return }
     const s = storeSession.get()
     if (s) setStore({ name: s.name, brandColor: s.brandColor, logoUrl: s.logoUrl })
     const cached = foundMemberSession.get()
-    if (!cached) { router.replace('/stamp/lookup'); return }
+    if (!cached) { router.replace('/stamptool/lookup'); return }
     refreshMember(cached, c.storeId)
   }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -46,8 +47,8 @@ export default function MemberViewPage() {
         .single(),
     ])
 
-    if (!fresh) { router.replace('/stamp/lookup'); return }
-    if (fresh.is_blacklisted) { router.replace('/stamp/lookup'); return }
+    if (!fresh) { router.replace('/stamptool/lookup'); return }
+    if (fresh.is_blacklisted) { router.replace('/stamptool/lookup'); return }
 
     // resolveTier, not getTier: a free member is Starter with a $5 coupon no
     // matter how many stamps they have. getTier would say Bronze/$7.
@@ -65,12 +66,12 @@ export default function MemberViewPage() {
   }
 
   function handleAwardStamp() {
-    router.push('/stamp/verify')
+    router.push('/stamptool/verify')
   }
 
   function handleReturnToLookup() {
     foundMemberSession.clear()
-    router.push('/stamp/lookup')
+    router.push('/stamptool/lookup')
   }
 
   if (refreshing || !member) {
@@ -126,47 +127,16 @@ export default function MemberViewPage() {
           </div>
         </div>
 
+        {/* Shared with the member dashboard — see components/stamp/StampProgress. */}
         <div className="bg-white rounded-2xl px-5 py-5 w-full max-w-md shadow-sm">
-          <div className="flex items-baseline justify-between mb-4">
-            <span className="font-['Coiny'] text-[18px] text-[#1A1A2E]">Stamp progress</span>
-            <span className="text-[13px] font-bold text-[#8E8EA8]">
-              <span className="text-[#1A1A2E]">{filledDots}</span> / 20
-            </span>
-          </div>
-
-          <div className="grid grid-cols-10 gap-1.5 mb-4">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div
-                key={i}
-                className={`
-                  aspect-square rounded-full border-2 flex items-center justify-center
-                  ${i < filledDots
-                    ? 'bg-[#FFB217] border-[#FFB217]'
-                    : 'bg-[#F5F5F8] border-[#EBEBF2]'
-                  }
-                `}
-              >
-                {i < filledDots && (
-                  <span className="text-white/80 text-[8px]">★</span>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="h-1.5 rounded-full bg-[#EBEBF2] overflow-hidden mb-2.5">
-            <div
-              className="h-full rounded-full bg-[#FFB217] transition-all duration-500"
-              style={{ width: `${Math.min((filledDots / 20) * 100, 100)}%` }}
-            />
-          </div>
-
-          <p className="text-[13px] font-semibold text-[#8E8EA8] text-center">
-            {member.couponDue ? (
+          <StampProgress
+            filled={filledDots}
+            caption={member.couponDue ? (
               <><strong className="text-[#1A1A2E]">Coupon ready!</strong> Redeem before next stamp</>
             ) : (
               <><strong className="text-[#1A1A2E]">{remaining} more {remaining === 1 ? 'stamp' : 'stamps'}</strong> to earn a <strong className="text-[#1A1A2E]">${tier.couponValue} coupon</strong></>
             )}
-          </p>
+          />
         </div>
 
         <div className="w-full max-w-md flex flex-col gap-2.5 mt-1">
@@ -181,9 +151,14 @@ export default function MemberViewPage() {
               </span>
             </button>
           ) : (
+            /* Matches the big blue primary button used across the tool —
+               same width, radius, weight, size, font and press animation. The
+               second line stays: when a coupon is due this single tap also
+               redeems it, and dropping that warning would hide a consequence
+               from the cashier. */
             <button
               onClick={handleAwardStamp}
-              className="w-full py-5 rounded-2xl font-bold text-[18px] text-white font-['Montserrat'] bg-[#2A7D34] active:scale-[0.97] active:bg-green-900 transition-all flex flex-col items-center gap-1"
+              className="w-full py-[18px] rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide bg-[#4A4B98] disabled:opacity-35 disabled:cursor-not-allowed active:scale-[0.97] transition-all flex flex-col items-center justify-center gap-1"
             >
               <span className="flex items-center gap-2">
                 <span>🏷️</span>
