@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import StoreCard from '@/components/member/StoreCard'
+import type { TodayPrice } from '@/lib/store-pricing'
 
 /**
  * Store finder — the body of /member/stores.
@@ -32,6 +33,9 @@ interface Store {
   city: string
   state: string
   brandColor: string
+  /** Resolved by the API in the store's timezone. null = no price published. */
+  todayPrice: TodayPrice | null
+  restocksToday: boolean
   isOriginStore: boolean
 }
 

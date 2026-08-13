@@ -6,10 +6,13 @@
  * Each PHYSICAL LOCATION is its own card — locations are never grouped under a
  * merchant brand, because a member visits a location, not a company.
  *
- * Distance and today's bin price are placeholders: neither exists in the
- * schema yet. They render as visible "coming soon" / "—" rather than being
- * hidden, so the layout Phase 2 fills is the layout shipping today.
+ * Today's bin price is real as of Phase 2A — resolved server-side in the
+ * STORE's timezone, so a member in another zone still sees what they will
+ * actually be charged. Distance is still a placeholder: no coordinates are
+ * stored and there is no GPS yet.
  */
+
+import { formatPrice, type TodayPrice } from '@/lib/store-pricing'
 
 const BINPERKS_BLUE = '#4A4B98'
 
@@ -21,6 +24,9 @@ export interface StoreCardStore {
   city: string
   state: string
   brandColor: string
+  /** null when the merchant has published no price for today. Not $0. */
+  todayPrice: TodayPrice | null
+  restocksToday: boolean
   isOriginStore: boolean
 }
 
@@ -77,17 +83,47 @@ export default function StoreCard({
         </div>
       </div>
 
-      {/* Distance and bin price — MOCK DATA, connect to real API in Phase 2 */}
+      {/* Distance is still MOCK — no coordinates in the schema. Price is real. */}
       <div className="grid grid-cols-2 gap-2 px-4 pt-3">
         <div className="rounded-xl bg-[#F5F5F8] px-3 py-2">
           <p className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">Distance</p>
           <p className="text-[12px] font-bold text-[#B0B0C8] mt-0.5">Coming soon</p>
         </div>
-        <div className="rounded-xl bg-[#F5F5F8] px-3 py-2">
+        <div
+          className="rounded-xl px-3 py-2"
+          style={{ backgroundColor: store.todayPrice ? `${BINPERKS_BLUE}12` : '#F5F5F8' }}
+        >
           <p className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">Today&apos;s bin price</p>
-          <p className="text-[12px] font-bold text-[#B0B0C8] mt-0.5">—</p>
+          {/* "—" for null, never "$0" — an unset price is not a free one. */}
+          <p
+            className="text-[12px] font-bold mt-0.5"
+            style={{ color: store.todayPrice ? BINPERKS_BLUE : '#B0B0C8' }}
+          >
+            {store.todayPrice ? formatPrice(store.todayPrice.price) : '—'}
+          </p>
         </div>
       </div>
+
+      {(store.todayPrice?.label || store.restocksToday) && (
+        <div className="flex flex-wrap gap-1.5 px-4 pt-2">
+          {store.todayPrice?.label && (
+            <span
+              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: '#DA121215', color: '#DA1212' }}
+            >
+              {store.todayPrice.label}
+            </span>
+          )}
+          {store.restocksToday && (
+            <span
+              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: '#FFB21725', color: '#8A5A00' }}
+            >
+              Restocks today
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-2 px-4 py-3">
         <a

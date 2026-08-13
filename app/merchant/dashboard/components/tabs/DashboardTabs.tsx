@@ -2,6 +2,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import PricingScheduleCard from '../PricingScheduleCard'
 
 interface Redemption {
   id: string; couponValue: number; redeemedAt: string
@@ -1072,6 +1073,9 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
           </div>
         )}
       </div>
+
+      {/* Pricing schedule — own card, own fetch/save against the same route. */}
+      <PricingScheduleCard storeId={activeStoreId ?? null} />
 
       {/* Cashier PIN management */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">

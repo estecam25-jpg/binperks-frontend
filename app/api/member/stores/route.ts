@@ -21,7 +21,10 @@
  *       city and canonical_key
  *
  * Responses:
- *   200 { stores: [{ id, canonicalKey, displayName, brandName, city, state, isOriginStore }] }
+ *   200 { stores: [{ id, canonicalKey, displayName, brandName, city, state,
+ *                     brandColor, todayPrice, restocksToday, isOriginStore }] }
+ *        todayPrice is resolved in each STORE's own timezone, and is null when
+ *        that merchant has published no price for today.
  *   401 { error: 'not_authenticated' }
  *   404 { error: 'member_not_found' }
  */
@@ -29,6 +32,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { todayPrice, restocksToday, type PricingSchedule } from '@/lib/store-pricing'
 
 /** Enough to browse the whole network today, small enough to stay a fast
  *  payload once it grows. The search box narrows anything past this. */
@@ -44,6 +48,10 @@ interface StoreRow {
   /** Display only — lets the member store card show the store's own colour
    *  instead of a generic swatch. */
   brand_color: string | null
+  pricing_schedule: PricingSchedule | null
+  restock_days: unknown
+  /** Drives which day "today" is — see lib/store-pricing. */
+  timezone: string | null
 }
 
 export async function GET(req: NextRequest) {
@@ -73,7 +81,7 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from('stores')
-    .select('id, canonical_key, display_name, brand_name, city, state, brand_color')
+    .select('id, canonical_key, display_name, brand_name, city, state, brand_color, pricing_schedule, restock_days, timezone')
     .eq('is_active', true)
     .eq('network_visible', true)
 
@@ -118,6 +126,11 @@ export async function GET(req: NextRequest) {
       city:          s.city ?? '',
       state:         s.state ?? '',
       brandColor:    s.brand_color ?? '#4A4B98',
+      // Resolved per store, in that store's timezone. null means the merchant
+      // has published no price for today — which is NOT the same as $0, so
+      // the UI shows "—" rather than "free".
+      todayPrice:    todayPrice(s.pricing_schedule, s.timezone),
+      restocksToday: restocksToday(s.restock_days, s.timezone),
       isOriginStore: s.id === originId,
     })),
   })
