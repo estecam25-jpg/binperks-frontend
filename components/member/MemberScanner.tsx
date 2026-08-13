@@ -3,7 +3,13 @@
 import { useRef, useState } from 'react'
 
 /**
- * AI Product Scanner (V3 Phase 4A MVP).
+ * AI Product Scanner — the Scan tab.
+ *
+ * Lifted from the dashboard overlay in the Phase 1 redesign. Every piece of
+ * working logic came across untouched: capture and downscale, /api/member/scan,
+ * the product-image lookup with its abort + 5s ceiling, and the choice write.
+ * Only the chrome changed — it is a full screen now, not a modal over the
+ * dashboard, so the trigger button and Close control are gone.
  *
  * Available to ALL members — Starter and VIP alike.
  *
@@ -16,6 +22,12 @@ import { useRef, useState } from 'react'
  * In-store verification is Phase 4B.
  */
 
+/**
+ * The values /api/member/scan/choice accepts. The UI no longer shows a
+ * "Shopping Cart" button, but the stored value is unchanged: 'shopping_cart'
+ * is the interest signal the admin Scanner tab reports as cart%, and dropping
+ * it would silently zero an existing metric. "Save to My Finds" records it.
+ */
 type Choice = 'shopping_cart' | 'back_to_bins'
 
 interface ScanResult {
@@ -46,6 +58,9 @@ const LOW_CONFIDENCE = 0.5
 // Longest edge, in pixels, that we upload. Matches the resolution tier the
 // scanner model actually uses — anything larger is wasted upload time and
 // wasted image tokens with no accuracy gain.
+// MOCK DATA — connect to real API in Phase 2 (/api/member/stores).
+const MOCK_SCAN_STORES = ['EstaBins Tampa', 'WinBin Main St', 'TEST05 Liquidation']
+
 const MAX_EDGE = 1568
 const JPEG_QUALITY = 0.8
 
@@ -77,8 +92,17 @@ async function downscale(file: File): Promise<{ dataUrl: string; mediaType: stri
 }
 
 export default function Scanner({ brandColor }: { brandColor: string }) {
-  const [open, setOpen]         = useState(false)
   const [busy, setBusy]         = useState(false)
+
+  // Store selector — MOCK DATA, connect to real API in Phase 2. Picking a
+  // store is what will unlock estimated savings; today it only labels the
+  // session so the flow and layout are already in place.
+  const [selectedStore, setSelectedStore]       = useState<string | null>(null)
+  const [storePickerOpen, setStorePickerOpen]   = useState(false)
+
+  /** "Save to My Finds" is one-shot per scan — the choice endpoint records the
+   *  first answer only, so offering it twice would just 409. */
+  const [saved, setSaved] = useState(false)
   const [result, setResult]     = useState<ScanResult | null>(null)
   const [error, setError]       = useState('')
 
@@ -113,11 +137,10 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   function reset() {
     setResult(null); setError(''); setCapturedPhoto(null); setBusy(false)
     setProductImage(null); setProductImageFailed(false)
+    setSaved(false)
     cancelProductImage()
     if (fileInput.current) fileInput.current.value = ''
   }
-
-  function close() { setOpen(false); reset() }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -243,11 +266,12 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
    * dropped. (A 409 just means it was already recorded, which is not a
    * failure worth noting at all.)
    */
-  function recordChoice(next: Choice) {
+  function recordChoice(next: Choice, opts?: { keepResult?: boolean }) {
     if (!result) return
     const { scanEventId } = result
 
-    reset()
+    // Saving keeps the member on the result; the primary actions clear it.
+    if (!opts?.keepResult) reset()
 
     void fetch('/api/member/scan/choice', {
       method: 'POST',
@@ -272,43 +296,36 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
   return (
     <>
-      {/* Entry point on the dashboard */}
-      <button
-        onClick={() => setOpen(true)}
-        className="w-full rounded-2xl px-5 py-5 flex items-center gap-4 text-left shadow-sm bg-white active:scale-[0.99] transition-transform"
-      >
-        <span className="text-3xl flex-shrink-0">📷</span>
-        <div className="flex-1">
-          <p className="font-['Coiny'] text-lg text-[#1A1A2E]">Scan an item</p>
-          <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">
-            Point your camera at anything in the bins and we&apos;ll tell you what it is.
+      <div className="flex flex-col min-h-dvh">
+
+        {/* Header */}
+        <div className="px-5 py-4 flex flex-col gap-1" style={{ backgroundColor: brandColor }}>
+          <span className="font-['Coiny'] text-xl text-white leading-none">
+            BinPerks Scanner
+          </span>
+          <p className="text-[11px] text-white/75 font-medium leading-relaxed">
+            AI-powered identification — this is our best guess, not a guarantee.
+            Always inspect the item before purchasing.
           </p>
         </div>
-        <span className="text-[#D1D1DC] text-xl flex-shrink-0">›</span>
-      </button>
 
-      {!open ? null : (
-        <div className="fixed inset-0 z-50 bg-[#F5F5F8] flex flex-col">
-
-          {/* Header. Close is deliberately absent once a result is on screen:
-              the member answers Shopping Cart or Back to Bins, which records
-              the choice and drops them straight back here, where Close is
-              available again. So they can always leave — just not while a
-              result is sitting unanswered. */}
-          <div className="px-5 py-4 flex items-center gap-3" style={{ backgroundColor: brandColor }}>
-            <span className="font-['Coiny'] text-xl text-white leading-none flex-1">
-              BinPerks Scanner
+        {/* Store selector — MOCK DATA, connect to real API in Phase 2.
+            Phase 2 turns this into the basis for estimated savings. */}
+        <button
+          onClick={() => setStorePickerOpen(true)}
+          className="mx-4 mt-3 px-4 py-3 rounded-2xl bg-white shadow-sm flex items-center gap-3 text-left"
+        >
+          <span className="text-[16px]">📍</span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[10px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
+              Shopping at
             </span>
-            {!result && (
-              <button
-                onClick={close}
-                className="text-white/70 text-[13px] font-bold px-2 py-1"
-                aria-label="Close scanner"
-              >
-                Close
-              </button>
-            )}
-          </div>
+            <span className="block text-[14px] font-bold text-[#1A1A2E] truncate">
+              {selectedStore ?? 'Select Store'}
+            </span>
+          </span>
+          <span className="text-[#D1D1DC] text-lg">›</span>
+        </button>
 
           <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4 max-w-md mx-auto w-full">
 
@@ -459,26 +476,59 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                     />
                   </div>
                 </div>
+
+                {/* Estimated savings — MOCK DATA, connect to real API in
+                    Phase 2. Needs the store's bin price, which nothing
+                    records yet, so it states the prerequisite instead of
+                    showing a made-up number. */}
+                <div className="mt-2 rounded-xl bg-[#F5F5F8] px-3.5 py-2.5">
+                  <p className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
+                    Estimated savings
+                  </p>
+                  <p className="text-[13px] font-semibold text-[#B0B0C8] mt-0.5">
+                    {selectedStore
+                      ? 'Coming soon'
+                      : 'Select a store to see estimated savings'}
+                  </p>
+                </div>
+
+                {/* Records the same 'shopping_cart' interest signal the old
+                    button did — see the Choice type. Unlike the primary
+                    actions it does NOT reset, so the member can save and keep
+                    reading the result. */}
+                <button
+                  onClick={() => { if (!saved) { setSaved(true); recordChoice('shopping_cart', { keepResult: true }) } }}
+                  disabled={saved}
+                  className="mt-2 self-start text-[13px] font-bold disabled:opacity-60"
+                  style={{ color: brandColor }}
+                >
+                  {saved ? '♥ Saved to My Finds' : '♡ Save to My Finds'}
+                </button>
               </div>
             )}
 
-            {/* ── Choice ── Answering either one records it and returns
-                straight to the camera; there is no screen in between. */}
+            {/* ── Primary actions ──
+                Both return straight to the camera; there is no screen in
+                between. "Back to the Bins" records the same back_to_bins value
+                it always did. "Scan Another" records nothing — the member
+                neither kept nor rejected the item, and inventing a value would
+                pollute the cart/bins split the admin tab measures. */}
             {result && !busy && (
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => recordChoice('shopping_cart')}
-                  className="py-5 rounded-2xl font-bold text-[15px] text-white bg-[#2A7D34] active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
+                  onClick={reset}
+                  className="py-5 rounded-2xl font-bold text-[15px] text-white active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
+                  style={{ backgroundColor: brandColor }}
                 >
-                  <span className="text-2xl">🛒</span>
-                  Shopping Cart
+                  <span className="text-2xl">📷</span>
+                  Scan Another
                 </button>
                 <button
                   onClick={() => recordChoice('back_to_bins')}
                   className="py-5 rounded-2xl font-bold text-[15px] text-[#1A1A2E] bg-white border-2 border-[#EBEBF2] active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
                 >
                   <span className="text-2xl">🗑️</span>
-                  Back to Bins
+                  Back to the Bins
                 </button>
               </div>
             )}
@@ -511,6 +561,46 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
               className="hidden"
               onChange={handleFile}
             />
+        </div>
+      </div>
+
+      {/* Store picker — MOCK DATA, connect to real API in Phase 2.
+          Phase 2 swaps MOCK_SCAN_STORES for /api/member/stores and uses the
+          selection to compute estimated savings. */}
+      {storePickerOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <button
+            aria-label="Close store picker"
+            onClick={() => setStorePickerOpen(false)}
+            className="absolute inset-0 bg-black/40"
+          />
+          <div
+            role="dialog"
+            aria-label="Select a store"
+            className="relative bg-white rounded-t-3xl px-5 pt-5 pb-8 max-w-md w-full mx-auto shadow-2xl"
+          >
+            <div className="w-10 h-1 rounded-full bg-[#EBEBF2] mx-auto mb-4" />
+            <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] mb-1">Where are you shopping?</h2>
+            <p className="text-[12px] text-[#8E8EA8] font-medium mb-4">
+              Used to estimate your savings. Coming soon.
+            </p>
+            <div className="flex flex-col gap-2">
+              {MOCK_SCAN_STORES.map(name => (
+                <button
+                  key={name}
+                  onClick={() => { setSelectedStore(name); setStorePickerOpen(false) }}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-[#F5F5F8] text-[14px] font-bold text-[#1A1A2E] active:bg-[#EBEBF2] transition-colors"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setStorePickerOpen(false)}
+              className="w-full mt-4 py-3 rounded-xl text-[13px] font-bold text-[#8E8EA8] border-2 border-[#EBEBF2]"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

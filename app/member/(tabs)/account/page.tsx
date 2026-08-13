@@ -10,8 +10,10 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import GetTheApp from '@/components/member/GetTheApp'
+import AppHeader from '@/components/member/AppHeader'
 
 /** The only brand color on this page. */
 const BINPERKS_BLUE = '#4A4B98'
@@ -153,12 +155,10 @@ export default function MemberSettingsPage() {
 
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
-      <div className="px-5 py-3 flex items-center gap-2.5" style={{ backgroundColor: BINPERKS_BLUE }}>
-        <span className="font-['Coiny'] text-xl leading-none text-white">BinPerks Member</span>
-      </div>
+      <AppHeader />
 
       <main className="flex-1 flex flex-col items-center px-4 py-8 gap-4 max-w-md mx-auto w-full">
-        <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E] self-start">Settings</h1>
+        <h1 className="font-['Coiny'] text-[26px] text-[#1A1A2E] self-start leading-tight">Account</h1>
 
         {/* Profile (read-only) */}
         <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
@@ -180,23 +180,28 @@ export default function MemberSettingsPage() {
           </p>
         </div>
 
-        {/* SMS opt-in */}
-        <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex items-center gap-3">
-          <div className="flex-1">
-            <p className="text-[14px] font-bold text-[#1A1A2E]">SMS notifications</p>
-            <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
-              Stamp confirmations, coupon alerts, and rewards updates.
+
+        {/* ── Membership: Starter ──
+            The VIP block below covers members who have one; this covers those
+            who don't, so the section is never simply absent. */}
+        {vip && !vip.vip && (
+          <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
+            <p className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">
+              Membership
             </p>
+            <p className="text-[14px] font-bold text-[#1A1A2E]">🪨 Starter Membership — Free</p>
+            <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">
+              Starter members earn one lifetime reward. Upgrade to VIP to keep earning.
+            </p>
+            <Link
+              href="/member/upgrade"
+              className="w-full py-3.5 rounded-xl font-bold text-[15px] text-white text-center active:opacity-80 transition-opacity"
+              style={{ backgroundColor: BINPERKS_BLUE }}
+            >
+              Upgrade to VIP
+            </Link>
           </div>
-          <button
-            onClick={handleSmsToggle}
-            disabled={saving}
-            className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 ${smsOptIn ? 'bg-[#4A4B98]' : 'bg-[#D1D1DC]'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${smsOptIn ? 'translate-x-5' : 'translate-x-0'}`} />
-          </button>
-        </div>
-        {saved && <p className="text-[12px] font-semibold text-[#2A7D34] self-start">✓ Saved</p>}
+        )}
 
         {/* ── VIP membership ──
             Only for members who actually have one. Cancelling is a downgrade
@@ -278,6 +283,24 @@ export default function MemberSettingsPage() {
           </div>
         )}
 
+        {/* SMS opt-in */}
+        <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex items-center gap-3">
+          <div className="flex-1">
+            <p className="text-[14px] font-bold text-[#1A1A2E]">SMS notifications</p>
+            <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
+              Stamp confirmations, coupon alerts, and rewards updates.
+            </p>
+          </div>
+          <button
+            onClick={handleSmsToggle}
+            disabled={saving}
+            className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 ${smsOptIn ? 'bg-[#4A4B98]' : 'bg-[#D1D1DC]'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${smsOptIn ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+        </div>
+        {saved && <p className="text-[12px] font-semibold text-[#2A7D34] self-start">✓ Saved</p>}
+
         {/* Reference section — always visible, never dismissable, unlike the
             one-time banner on the dashboard. */}
         <GetTheApp />
@@ -287,16 +310,22 @@ export default function MemberSettingsPage() {
             Policy. Feedback is gone too: members get a GHL SMS invite an hour
             after a stamp, which is when they have something to say. */}
 
-        {/* Sign out */}
-        <button
-          onClick={handleSignOut}
-          className="w-full py-4 rounded-2xl font-semibold text-[14px] font-['Montserrat'] text-[#8E8EA8] border-2 border-[#EBEBF2] active:border-[#1A1A2E] active:text-[#1A1A2E] transition-colors mt-2"
-        >
-          Sign out
-        </button>
+        {/* ── Account actions ──
+            Set apart from everything above: these end a session or a
+            membership, and should not sit flush against a settings toggle. */}
+        <div className="w-full mt-4 pt-5 border-t-2 border-[#EBEBF2] flex flex-col gap-3">
+          <p className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8] px-1">
+            Account actions
+          </p>
 
-        {/* Deactivate */}
-        <div className="w-full pt-4 border-t border-[#EBEBF2] flex flex-col items-center gap-2">
+          <button
+            onClick={handleSignOut}
+            className="w-full py-4 rounded-2xl font-semibold text-[14px] font-['Montserrat'] text-[#8E8EA8] border-2 border-[#EBEBF2] active:border-[#1A1A2E] active:text-[#1A1A2E] transition-colors"
+          >
+            Sign out
+          </button>
+
+        <div className="w-full flex flex-col items-center gap-2">
           {!confirmingDeactivate ? (
             <button onClick={() => setConfirmingDeactivate(true)} className="text-[12px] font-semibold text-[#DA1212]">
               Deactivate my account
@@ -332,6 +361,7 @@ export default function MemberSettingsPage() {
               </div>
             </div>
           )}
+        </div>
         </div>
       </main>
     </div>

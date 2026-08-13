@@ -41,6 +41,9 @@ interface StoreRow {
   brand_name: string | null
   city: string | null
   state: string | null
+  /** Display only — lets the member store card show the store's own colour
+   *  instead of a generic swatch. */
+  brand_color: string | null
 }
 
 export async function GET(req: NextRequest) {
@@ -70,7 +73,7 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from('stores')
-    .select('id, canonical_key, display_name, brand_name, city, state')
+    .select('id, canonical_key, display_name, brand_name, city, state, brand_color')
     .eq('is_active', true)
     .eq('network_visible', true)
 
@@ -114,6 +117,7 @@ export async function GET(req: NextRequest) {
       brandName:     s.brand_name ?? s.display_name,
       city:          s.city ?? '',
       state:         s.state ?? '',
+      brandColor:    s.brand_color ?? '#4A4B98',
       isOriginStore: s.id === originId,
     })),
   })

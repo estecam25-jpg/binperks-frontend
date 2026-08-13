@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import StoreCard from '@/components/member/StoreCard'
 
 /**
  * Store finder — the body of /member/stores.
@@ -30,6 +31,7 @@ interface Store {
   brandName: string
   city: string
   state: string
+  brandColor: string
   isOriginStore: boolean
 }
 
@@ -50,6 +52,8 @@ interface PerkData {
 
 export default function StoreFinder({ isFree }: { isFree: boolean }) {
   const [query, setQuery]       = useState('')
+  /** Only 'All Stores' is selectable until Phase 2 adds location + favourites. */
+  const [filter, setFilter]     = useState<'Near Me' | 'Favorites' | 'All Stores'>('All Stores')
   const [stores, setStores]     = useState<Store[]>([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState(false)
@@ -114,6 +118,37 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
 
   return (
     <div className="w-full flex flex-col gap-2.5">
+
+      {/* Filters. "All Stores" is the only one backed by data today — the
+          other two need member location and a favourites table.
+          MOCK DATA — connect to real API in Phase 2. */}
+      <div className="flex gap-2" role="tablist" aria-label="Store filters">
+        {(['Near Me', 'Favorites', 'All Stores'] as const).map(f => {
+          const active = f === filter
+          const enabled = f === 'All Stores'
+          return (
+            <button
+              key={f}
+              role="tab"
+              aria-selected={active}
+              disabled={!enabled}
+              onClick={() => enabled && setFilter(f)}
+              title={enabled ? undefined : 'Coming soon'}
+              className={`flex-1 py-2 rounded-full text-[12px] font-bold transition-colors ${
+                active
+                  ? 'text-white'
+                  : enabled
+                    ? 'bg-white text-[#1A1A2E] border border-[#EBEBF2]'
+                    : 'bg-white text-[#D1D1DC] border border-[#EBEBF2] cursor-not-allowed'
+              }`}
+              style={active ? { backgroundColor: BINPERKS_BLUE } : undefined}
+            >
+              {f}
+            </button>
+          )
+        })}
+      </div>
+
       {/* Search */}
       <input
         type="search"
@@ -154,45 +189,15 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
       {!loading && !error && stores.map(store => {
         const isExpanded = expandedId === store.id
         const data = perks[store.id]
-        const location = [store.city, store.state].filter(Boolean).join(', ')
 
         return (
-          <div key={store.id} className="w-full bg-white rounded-2xl shadow-sm overflow-hidden">
-            <button
-              onClick={() => toggleStore(store)}
-              aria-expanded={isExpanded}
-              className="w-full flex items-center gap-3.5 px-5 py-4 text-left active:scale-[0.99] transition-transform"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-medium text-[#B0B0C8] tracking-wide truncate">
-                  {store.canonicalKey}
-                </p>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <p className="text-[15px] font-bold text-[#1A1A2E] leading-tight">
-                    {store.displayName}
-                  </p>
-                  {store.isOriginStore && (
-                    <span
-                      className="text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: `${BINPERKS_BLUE}15`, color: BINPERKS_BLUE }}
-                    >
-                      Your store
-                    </span>
-                  )}
-                </div>
-                {location && (
-                  <p className="text-[12px] text-[#8E8EA8] font-medium">{location}</p>
-                )}
-              </div>
-              <span
-                className={`text-[18px] text-[#D1D1DC] flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-              >
-                ›
-              </span>
-            </button>
-
-            {isExpanded && (
-              <div className="px-5 pb-5 pt-1 border-t border-[#F0F0F5] flex flex-col gap-2.5">
+          <StoreCard
+            key={store.id}
+            store={store}
+            expanded={isExpanded}
+            onToggle={() => toggleStore(store)}
+          >
+            <>
 
                 {perksLoading === store.id && (
                   <div className="py-5 flex items-center justify-center">
@@ -271,9 +276,8 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
                     </p>
                   </section>
                 )}
-              </div>
-            )}
-          </div>
+            </>
+          </StoreCard>
         )
       })}
 

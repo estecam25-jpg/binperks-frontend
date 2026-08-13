@@ -45,6 +45,22 @@ const nextConfig: NextConfig = {
         destination: '/stamptool/:path*',
         permanent: false,
       },
+
+      // Phase 1 member redesign moved the dashboard into a 5-tab layout.
+      // /member/dashboard is baked into a lot of places that are NOT safe to
+      // rewrite — the magic-link redirectTo in lib/member-otp, /auth/callback,
+      // /api/member/verify-code — so the old URL has to keep resolving rather
+      // than those flows being edited.
+      {
+        source: '/member/dashboard',
+        destination: '/member/home',
+        permanent: false,
+      },
+      {
+        source: '/member/settings',
+        destination: '/member/account',
+        permanent: false,
+      },
     ]
   },
 };
