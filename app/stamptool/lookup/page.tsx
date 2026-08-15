@@ -84,14 +84,38 @@ export default function LookupPage() {
 
     const supabase = createClient()
 
-    const { data: member } = await supabase
+    // Phone and active status ONLY — deliberately not scoped to this merchant.
+    //
+    // A BinPerks membership belongs to the network, not to the store that
+    // happened to enrol the member. Origin Store decides who receives the
+    // commission and nothing else; it has no bearing on where stamps can be
+    // earned. Filtering by merchant_id here made every member invisible to
+    // every store except their own, which is the opposite of a network.
+    //
+    // Not .single(): the uniqueness index on members is (phone, merchant_id),
+    // so the same phone can legitimately exist under two merchants today.
+    // .single() errors on more than one row, and the cashier would be told
+    // "not found" about a member who in fact exists twice. Take the earliest
+    // enrolment — the one whose Origin Store attribution is the real one — and
+    // log the collision so the duplicate can be merged.
+    const { data: matches } = await supabase
       .from('members')
       .select('id, first_name, last_name, phone, total_stamps, subscription_status, coupon_due, is_blacklisted')
       .eq('phone', digits)
-      .eq('merchant_id', c.merchantId)
-      .single()
+      .eq('status', 'active')
+      .order('created_at', { ascending: true })
+      .limit(2)
 
+    const member = matches?.[0]
     if (!member) { setLookupState('not_found'); return }
+
+    if (matches!.length > 1) {
+      console.warn(
+        `[stamptool] phone ${digits} matches more than one active member — ` +
+        'stamping the earliest enrolment. These memberships need merging.',
+      )
+    }
+
     if (member.is_blacklisted) { setLookupState('inactive'); return }
 
     const today = new Date().toISOString().split('T')[0]
@@ -218,7 +242,10 @@ export default function LookupPage() {
               <div>
                 <p className="text-[14px] font-bold text-[#1A1A2E] mb-0.5">Member not found</p>
                 <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">
-                  No member with that number at this location.<br />
+                  {/* Not "at this location" — the lookup now searches the whole
+                      BinPerks network, so that wording would tell a cashier to
+                      re-enrol a member who already exists at another store. */}
+                  No BinPerks member with that number.<br />
                   Ask them to scan the QR code to sign up.
                 </p>
               </div>

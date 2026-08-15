@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import { cashierSession, storeSession, foundMemberSession, stampResultSession } from '@/lib/stamp-session'
 
-type VerifyState = 'writing' | 'success' | 'duplicate' | 'error'
+type VerifyState = 'writing' | 'success' | 'duplicate' | 'inactive' | 'error'
 
 export default function VerifyPage() {
   const router = useRouter()
@@ -71,6 +71,11 @@ export default function VerifyPage() {
       const data = await res.json()
 
       if (res.status === 409) { setVerifyState('duplicate'); return }
+      // The member was deactivated or blacklisted. The lookup screen filters
+      // these out, so this only fires if it happened mid-transaction — but the
+      // generic error copy tells the cashier to check their connection, which
+      // would send them chasing a network fault that does not exist.
+      if (data.error === 'member_inactive') { setVerifyState('inactive'); return }
       if (!res.ok) { setVerifyState('error'); return }
 
       // Free member lifetime coupon exhausted — stamp was BLOCKED server-side.
@@ -142,7 +147,7 @@ export default function VerifyPage() {
   }
 
   const strokeOffset = CIRCUMFERENCE - (ringProgress / 100) * CIRCUMFERENCE
-  const isError = verifyState === 'duplicate' || verifyState === 'error'
+  const isError = verifyState === 'duplicate' || verifyState === 'error' || verifyState === 'inactive'
   const ringColor = verifyState === 'success' ? '#2A7D34' : isError ? '#DA1212' : '#2A7D34'
 
   const STEP_LABELS = ['Recording visit', 'Awarding stamp', 'Checking for coupon']
@@ -177,6 +182,9 @@ export default function VerifyPage() {
           {verifyState === 'duplicate' && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl">!</div>
           )}
+          {verifyState === 'inactive' && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl">!</div>
+          )}
           {verifyState === 'error' && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl">✕</div>
           )}
@@ -186,6 +194,7 @@ export default function VerifyPage() {
           {verifyState === 'writing'   && `Stamping ${memberFirstName}'s card…`}
           {verifyState === 'success'   && 'Stamp awarded!'}
           {verifyState === 'duplicate' && 'Already stamped today'}
+          {verifyState === 'inactive'  && 'This membership is not active'}
           {verifyState === 'error'     && 'Something went wrong'}
         </h1>
 
@@ -193,6 +202,7 @@ export default function VerifyPage() {
           {verifyState === 'writing'   && 'This takes just a second'}
           {verifyState === 'success'   && `${memberFirstName} has been stamped. Navigating…`}
           {verifyState === 'duplicate' && `${memberFirstName} already received a stamp today. No stamp was added.`}
+          {verifyState === 'inactive'  && 'No stamp was awarded. Ask them to contact BinPerks support.'}
           {verifyState === 'error'     && "The stamp wasn't saved. Check your connection and try again."}
         </p>
 

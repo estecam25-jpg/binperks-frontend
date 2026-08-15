@@ -44,17 +44,33 @@ export async function POST(req: NextRequest) {
 
     const merchantId = cashier.merchant_id
 
-    // Verify the member belongs to this merchant — cross-merchant stamp attempt
-    // must be rejected (Core Rule #5).
-    const { data: memberOwnership } = await supabase
+    // 0a. Load the member and decide whether they may be stamped HERE.
+    //
+    //     Deliberately NOT scoped to the cashier's merchant. This route used to
+    //     require members.merchant_id === the cashier's merchant, which rejected
+    //     every member visiting any store other than the one that enrolled them.
+    //     A BinPerks membership is network-wide: Origin Store governs commission
+    //     attribution only and never restricts where stamps are earned.
+    //
+    //     What does still gate a stamp: the member must exist, be active, and
+    //     not be blacklisted. The stamp tool checks the last two before showing
+    //     the Award button, but the UI is not enforcement — a direct POST to
+    //     this route bypasses it entirely.
+    //
+    //     origin_store_id / origin_merchant_id are read for the activity_events
+    //     dual-write (step 5a) — permanent attribution, never recomputed here.
+    const { data: member, error: memberError } = await supabase
       .from('members')
-      .select('id')
+      .select('total_stamps, coupon_due, subscription_status, first_name, phone, status, is_blacklisted, origin_store_id, origin_merchant_id')
       .eq('id', memberId)
-      .eq('merchant_id', merchantId)
-      .maybeSingle()
+      .single()
 
-    if (!memberOwnership) {
+    if (memberError || !member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+    }
+
+    if (member.status !== 'active' || member.is_blacklisted) {
+      return NextResponse.json({ error: 'member_inactive' }, { status: 403 })
     }
 
     // 1. Check for duplicate visit today
@@ -68,19 +84,6 @@ export async function POST(req: NextRequest) {
 
     if (existingVisit) {
       return NextResponse.json({ error: 'already_stamped' }, { status: 409 })
-    }
-
-    // 2. Get member current stamps, coupon_due, subscription_status, and phone.
-    //    origin_store_id / origin_merchant_id are read for the activity_events
-    //    dual-write (step 5a) — permanent attribution, never recomputed here.
-    const { data: member, error: memberError } = await supabase
-      .from('members')
-      .select('total_stamps, coupon_due, subscription_status, first_name, phone, origin_store_id, origin_merchant_id')
-      .eq('id', memberId)
-      .single()
-
-    if (memberError || !member) {
-      return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
 
     // 2a. Check if free member has already used their one lifetime coupon.
