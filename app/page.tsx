@@ -20,7 +20,10 @@ export default function HomePage() {
         className="flex flex-col items-center px-5 pt-14 pb-20 gap-2"
         style={{ backgroundColor: '#4A4B98' }}
       >
-        <h1 className="font-['Coiny'] text-5xl text-white tracking-wide">BinPerks</h1>
+        {/* Same asset and sizing as AppHeader. Width is left to the intrinsic
+            aspect ratio — never set both, or the wordmark stretches. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/BinPerks_Landscape_Logo.png" alt="BinPerks" className="h-8 w-auto" />
         <p className="text-white/70 text-[14px] font-semibold">
           Your rewards, everywhere you shop
         </p>

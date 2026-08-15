@@ -13,13 +13,15 @@
  *               commissionEligible, commissionSuspensionReason },
  *   stores: [{ id, storeName, storeKey, city, state, isActive }],
  *   stats: {
- *     totalMembers, stampsToday, couponsRedeemedThisWeek, referralsThisWeek,
- *     newMembersThisWeek
+ *     totalMembers, visitsToday, stampsToday, couponsRedeemedThisWeek,
+ *     referralsThisWeek, newMembersThisWeek
  *   },
  *   originMetrics: { originatedMembers, originatedVipMembers, monthlyCommissionPotential },
- *   fiscalWeekChart: [{ date, dayLabel, stampCount }],
- *   recentMembers: [{ id, firstName, lastName, tier, totalStamps, joinedAt }]
+ *   fiscalWeekChart: [{ date, dayLabel, visitCount, stampCount }]
  * }
+ *
+ * No member identities are returned. Merchants see aggregates only — BinPerks
+ * owns the member relationship (CLAUDE.md rule 16).
  *
  * NOTE ON SCOPE: commissionEligible and originMetrics are MERCHANT-level and are
  * deliberately NOT filtered by the storeId param. Commission eligibility belongs
@@ -31,7 +33,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
-import { resolveTierName } from '@/lib/tiers'
 
 // Origin Merchant commission per VIP member per month while eligible.
 // Source of truth: CLAUDE.md "PRICING (V3 LOCKED)". Mirrored in
@@ -104,7 +105,6 @@ export async function GET(req: NextRequest) {
       stats:           null,
       originMetrics:   null,
       fiscalWeekChart: [],
-      recentMembers:   [],
     })
   }
 
@@ -121,12 +121,10 @@ export async function GET(req: NextRequest) {
 
   const [
     totalMembersRes,
-    stampsTodayRes,
     couponsThisWeekRes,
     referralsThisWeekRes,
     newMembersThisWeekRes,
     fiscalChartRes,
-    recentMembersRes,
     originatedMembersRes,
     originatedVipRes,
   ] = await Promise.all([
@@ -137,11 +135,6 @@ export async function GET(req: NextRequest) {
       .eq('status', 'active')
       .in('home_store_id', storeIds),
 
-    admin
-      .from('visits')
-      .select('id', { count: 'exact', head: true })
-      .in('store_id', storeIds)
-      .eq('date', todayStr),
 
     admin
       .from('rewards')
@@ -163,23 +156,23 @@ export async function GET(req: NextRequest) {
       .in('home_store_id', storeIds)
       .gte('created_at', weekStart.toISOString()),
 
+    // Both metrics come from ONE source so they can never disagree.
+    //
+    // A VISIT is one row: the stamp route writes exactly one activity_events
+    // row per awarded stamp, and visits.date carries a UNIQUE
+    // (member_id, store_id, date) index, so one row IS one qualifying visit.
+    //
+    // Deliberately NOT sum(stamps_awarded) for visits: the Phase 1 backfill
+    // could not recover the base/multiplier split out of stamp_events and put
+    // the TOTAL in stamps_awarded with multiplier 1.00, so summing it reports
+    // 52 "visits" for 18 real ones on backfilled days. Live rows are correct
+    // (base 1, effective 2 for a Bronze VIP); counting rows is right for both.
     admin
-      .from('visits')
-      .select('date')
+      .from('activity_events')
+      .select('occurred_at, effective_stamps')
       .in('store_id', storeIds)
-      .gte('date', weekStart.toISOString().split('T')[0])
-      .lte('date', weekEnd.toISOString().split('T')[0]),
-
-    admin
-      .from('members')
-      // subscription_status is needed to resolve the tier — a free member is
-      // Starter regardless of stamp count.
-      .select('id, first_name, last_name, total_stamps, subscription_status, created_at')
-      .eq('merchant_id', merchant.id)
-      .in('home_store_id', storeIds)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(10),
+      .gte('occurred_at', weekStart.toISOString())
+      .lte('occurred_at', weekEnd.toISOString()),
 
     // Origin Store attribution — merchant-scoped and all-time, never filtered by
     // storeIds or by member status. A member this merchant originated stays
@@ -197,27 +190,28 @@ export async function GET(req: NextRequest) {
       .eq('subscription_status', 'vip'),
   ])
 
-  const chartDays: { date: string; dayLabel: string; stampCount: number }[] = []
+  const weekActivity = (fiscalChartRes.data ?? []) as
+    { occurred_at: string; effective_stamps: number | null }[]
+
+  const chartDays: {
+    date: string; dayLabel: string; visitCount: number; stampCount: number
+  }[] = []
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart)
     d.setDate(weekStart.getDate() + i)
     const dateStr = d.toISOString().split('T')[0]
-    const count = (fiscalChartRes.data ?? []).filter(v => v.date === dateStr).length
+    const rows = weekActivity.filter(a => a.occurred_at?.slice(0, 10) === dateStr)
     chartDays.push({
       date: dateStr,
       dayLabel: DAY_LABELS[d.getDay()],
-      stampCount: count,
+      visitCount: rows.length,
+      stampCount: rows.reduce((sum, a) => sum + (a.effective_stamps ?? 0), 0),
     })
   }
 
-  const recentMembers = (recentMembersRes.data ?? []).map(m => ({
-    id:          m.id,
-    firstName:   m.first_name,
-    lastName:    m.last_name,
-    totalStamps: m.total_stamps,
-    tier:        resolveTierName(m.total_stamps, m.subscription_status),
-    joinedAt:    m.created_at,
-  }))
+  const todayRows = weekActivity.filter(a => a.occurred_at?.slice(0, 10) === todayStr)
+  const visitsToday = todayRows.length
+  const stampsToday = todayRows.reduce((sum, a) => sum + (a.effective_stamps ?? 0), 0)
 
   const commissionEligible = merchant.commission_eligible ?? false
   const originatedVipMembers = originatedVipRes.count ?? 0
@@ -244,7 +238,10 @@ export async function GET(req: NextRequest) {
     })),
     stats: {
       totalMembers:            totalMembersRes.count ?? 0,
-      stampsToday:             stampsTodayRes.count ?? 0,
+      // Raw qualifying visits vs stamps actually awarded (visits x tier
+      // multiplier). The Overview tab toggles between them.
+      visitsToday,
+      stampsToday,
       couponsRedeemedThisWeek: couponsThisWeekRes.count ?? 0,
       referralsThisWeek:       referralsThisWeekRes.count ?? 0,
       newMembersThisWeek:      newMembersThisWeekRes.count ?? 0,
@@ -261,7 +258,6 @@ export async function GET(req: NextRequest) {
         : null,
     },
     fiscalWeekChart: chartDays,
-    recentMembers,
     fiscalWeekStart,
   })
 }

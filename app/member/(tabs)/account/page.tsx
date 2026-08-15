@@ -140,7 +140,7 @@ export default function MemberSettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-[#F5F5F8]">
+      <div className="flex-1 flex items-center justify-center bg-[#F5F5F8]">
         <span className="w-8 h-8 border-[3px] border-[#EBEBF2] border-t-[#4A4B98] rounded-full animate-spin" />
       </div>
     )
@@ -154,7 +154,7 @@ export default function MemberSettingsPage() {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
+    <div className="flex-1 flex flex-col bg-[#F5F5F8]">
       <AppHeader />
 
       <main className="flex-1 flex flex-col items-center px-4 py-8 gap-4 max-w-md mx-auto w-full">

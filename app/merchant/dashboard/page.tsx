@@ -4,7 +4,6 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import MerchantNav, { type TabId, type Store } from './components/MerchantNav'
 import OverviewTab from './components/tabs/OverviewTab'
-import MembersTab from './components/tabs/MembersTab'
 import SettlementTab from './components/tabs/SettlementTab'
 import { RedemptionsTab, PerksTab, MarketingTab, SettingsTab, GettingStartedTab } from './components/tabs/DashboardTabs'
 
@@ -20,7 +19,12 @@ function DashboardShell() {
   const [resuming, setResuming] = useState(false)
 
   // Tab and store from URL params — enables deep linking + back button
-  const activeTab = (searchParams.get('tab') as TabId) || 'overview'
+  // Validated rather than cast straight through: ?tab=members is still in
+  // merchants' history and bookmarks, and an unrecognised value would render a
+  // dashboard with an empty content area.
+  const VALID_TABS: TabId[] = ['start', 'overview', 'redemptions', 'perks', 'marketing', 'settlement', 'settings']
+  const tabParam = searchParams.get('tab') as TabId | null
+  const activeTab: TabId = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'overview'
   // activeStoreId is local state (not just derived from searchParams) so the
   // auto-select can update it immediately without a full-page navigation.
   const [activeStoreId, setActiveStoreId] = useState<string | null>(searchParams.get('store'))
@@ -151,9 +155,6 @@ function DashboardShell() {
         )}
         {activeTab === 'overview' && (
           <OverviewTab storeId={activeStoreId} />
-        )}
-        {activeTab === 'members' && (
-          <MembersTab storeId={activeStoreId} />
         )}
         {activeTab === 'redemptions' && (
           <RedemptionsTab storeId={activeStoreId} />

@@ -28,10 +28,16 @@ import {
  */
 
 /**
- * The values /api/member/scan/choice accepts. The UI no longer shows a
- * "Shopping Cart" button, but the stored value is unchanged: 'shopping_cart'
- * is the interest signal the admin Scanner tab reports as cart%, and dropping
- * it would silently zero an existing metric. "Save to My Finds" records it.
+ * The values /api/member/scan/choice accepts.
+ *
+ * Only 'back_to_bins' is ever sent now. The "Save to My Finds" button that
+ * recorded 'shopping_cart' was removed — every scan belongs to My Finds
+ * automatically, so there is nothing to save manually.
+ *
+ * CONSEQUENCE: nothing writes 'shopping_cart' any more, so the cart% figure on
+ * the admin Scanner tab will read 0 from here on. The column and the route
+ * still accept the value; if the interest signal is wanted back it needs a new
+ * source, not a new button.
  */
 type Choice = 'shopping_cart' | 'back_to_bins'
 
@@ -119,16 +125,17 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   // The store used to price a saving. Resolved SILENTLY and never shown: the
   // scanner screen has no store selector by design.
   //
-  // The signal is the member's Origin Store, because it is the only one
-  // available — there is no GPS and no check-in. That makes it a guess: a
-  // member shopping elsewhere in the network is priced against their home
-  // store. The savings block is therefore labelled as an estimate and the
-  // store name is never claimed on screen. A real in-store signal is Phase 4B.
+  // Order: the store where this member was last stamped, then their Origin
+  // Store. Last-stamped is the better guess — it is where they actually shop,
+  // whereas the Origin Store is only where they happened to sign up and may be
+  // a location they have not visited since.
+  //
+  // It is still a GUESS: there is no GPS and no check-in, so a member scanning
+  // somewhere new is priced against their last visit. The savings block is
+  // labelled an estimate and never names a store. Phase 4B adds a real
+  // in-store signal.
   const [silentStore, setSilentStore] = useState<ScanStore | null>(null)
 
-  /** "Save to My Finds" is one-shot per scan — the choice endpoint records the
-   *  first answer only, so offering it twice would just 409. */
-  const [saved, setSaved] = useState(false)
   const [result, setResult]     = useState<ScanResult | null>(null)
   const [error, setError]       = useState('')
 
@@ -153,7 +160,12 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         const list = (d?.stores ?? []) as ScanStore[]
-        setSilentStore(list.find(st => st.isOriginStore) ?? null)
+        const lastId = d?.lastStampedStoreId as string | null | undefined
+        setSilentStore(
+          (lastId ? list.find(st => st.id === lastId) : null)
+            ?? list.find(st => st.isOriginStore)
+            ?? null,
+        )
       })
       .catch(() => { /* no savings figure; the scan itself is unaffected */ })
   }, [])
@@ -176,7 +188,6 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   function reset() {
     setResult(null); setError(''); setCapturedPhoto(null); setBusy(false)
     setProductImage(null); setProductImageFailed(false)
-    setSaved(false)
     cancelProductImage()
     if (fileInput.current) fileInput.current.value = ''
   }
@@ -305,12 +316,11 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
    * dropped. (A 409 just means it was already recorded, which is not a
    * failure worth noting at all.)
    */
-  function recordChoice(next: Choice, opts?: { keepResult?: boolean }) {
+  function recordChoice(next: Choice) {
     if (!result) return
     const { scanEventId } = result
 
-    // Saving keeps the member on the result; the primary actions clear it.
-    if (!opts?.keepResult) reset()
+    reset()
 
     void fetch('/api/member/scan/choice', {
       method: 'POST',
@@ -346,7 +356,7 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
   return (
     <>
-      <div className="flex flex-col min-h-dvh">
+      <div className="flex flex-col flex-1">
 
         {/* Header */}
         <div className="px-5 py-4 flex flex-col gap-1" style={{ backgroundColor: brandColor }}>
@@ -359,7 +369,7 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
           </p>
         </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4 max-w-md mx-auto w-full">
+          <div className="flex-1 px-4 py-6 flex flex-col gap-4 max-w-md mx-auto w-full">
 
             {/* Upload preview — only until the result lands. Once it does,
                 the photo reappears inside the result card paired with the
@@ -573,18 +583,6 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                   </div>
                 )}
 
-                {/* Records the same 'shopping_cart' interest signal the old
-                    button did — see the Choice type. Unlike the primary
-                    actions it does NOT reset, so the member can save and keep
-                    reading the result. */}
-                <button
-                  onClick={() => { if (!saved) { setSaved(true); recordChoice('shopping_cart', { keepResult: true }) } }}
-                  disabled={saved}
-                  className="mt-2 self-start text-[13px] font-bold disabled:opacity-60"
-                  style={{ color: brandColor }}
-                >
-                  {saved ? '♥ Saved to My Finds' : '♡ Save to My Finds'}
-                </button>
               </div>
             )}
 

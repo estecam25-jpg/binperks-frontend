@@ -2,8 +2,17 @@
 
 import { useEffect, useState } from 'react'
 
-interface ChartDay { date: string; dayLabel: string; stampCount: number }
-interface RecentMember { id: string; firstName: string; lastName: string; tier: string; totalStamps: number; joinedAt: string }
+interface ChartDay { date: string; dayLabel: string; visitCount: number; stampCount: number }
+
+/**
+ * Visits vs stamps.
+ *
+ * A VISIT is one qualifying trip — one member, one location, one day. STAMPS
+ * are what that visit actually awarded, which is the visit times the member's
+ * tier multiplier, so a Diamond VIP's single visit is 5 stamps. The two used
+ * to be conflated: the tile read "Stamps today" while counting visit rows.
+ */
+type Metric = 'visits' | 'stamps'
 
 interface OriginMetrics {
   originatedMembers: number
@@ -19,6 +28,7 @@ interface OverviewData {
   } | null
   stats: {
     totalMembers: number
+    visitsToday: number
     stampsToday: number
     couponsRedeemedThisWeek: number
     referralsThisWeek: number
@@ -26,17 +36,13 @@ interface OverviewData {
   } | null
   originMetrics: OriginMetrics | null
   fiscalWeekChart: ChartDay[]
-  recentMembers: RecentMember[]
   fiscalWeekStart: string
-}
-
-const TIER_COLORS: Record<string, string> = {
-  Free: '#8E8EA8', Bronze: '#A05C00', Silver: '#5A5A7A', Gold: '#8A6A00', Diamond: '#3A3B80',
 }
 
 export default function OverviewTab({ storeId }: { storeId: string | null }) {
   const [data, setData] = useState<OverviewData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [metric, setMetric] = useState<Metric>('visits')
 
   useEffect(() => {
     setLoading(true)
@@ -49,8 +55,10 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
   if (loading) return <LoadingSkeleton />
   if (!data?.stats) return <EmptyState />
 
-  const { stats, fiscalWeekChart, recentMembers, merchant, originMetrics } = data
-  const maxStamps = Math.max(...fiscalWeekChart.map(d => d.stampCount), 1)
+  const { stats, fiscalWeekChart, merchant, originMetrics } = data
+  const showStamps = metric === 'stamps'
+  const valueFor = (d: ChartDay) => showStamps ? d.stampCount : d.visitCount
+  const maxValue = Math.max(...fiscalWeekChart.map(valueFor), 1)
   const eligible = merchant?.commissionEligible ?? false
 
   return (
@@ -90,7 +98,11 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
       <div className="grid grid-cols-2 gap-3">
         {[
           { label: 'Total members',   value: stats.totalMembers.toLocaleString(),             icon: '👥', color: '#4A4B98' },
-          { label: 'Stamps today',    value: stats.stampsToday.toLocaleString(),              icon: '🏷️', color: '#FFB217' },
+          {
+            label: showStamps ? 'Stamps today' : 'Visits today',
+            value: (showStamps ? stats.stampsToday : stats.visitsToday).toLocaleString(),
+            icon: '🏷️', color: '#FFB217',
+          },
           { label: 'Coupons this week', value: stats.couponsRedeemedThisWeek.toLocaleString(), icon: '🎟️', color: '#DA1212' },
           { label: 'New members',     value: stats.newMembersThisWeek.toLocaleString(),        icon: '✨', color: '#2A7D34' },
         ].map(stat => (
@@ -168,31 +180,51 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
 
       {/* ── Fiscal week chart — the signature element ── */}
       <div className="bg-white rounded-2xl px-4 py-5 shadow-sm">
-        <div className="flex items-baseline justify-between mb-4">
+        <div className="flex items-center justify-between gap-3 mb-1">
           <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">This fiscal week</h2>
-          <span className="text-[10px] font-bold tracking-widest uppercase text-[#8E8EA8]">
-            Stamps per day
-          </span>
+
+          <div className="flex rounded-lg bg-[#F5F5F8] p-0.5" role="group" aria-label="Metric">
+            {(['visits', 'stamps'] as Metric[]).map(m => (
+              <button
+                key={m}
+                onClick={() => setMetric(m)}
+                aria-pressed={metric === m}
+                className="px-2.5 py-1 rounded-md text-[11px] font-bold capitalize transition-colors"
+                style={metric === m
+                  ? { backgroundColor: '#4A4B98', color: '#fff' }
+                  : { color: '#8E8EA8' }}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
         </div>
+
+        <p className="text-[11px] text-[#8E8EA8] font-medium mb-4 leading-relaxed">
+          {showStamps
+            ? 'Stamps awarded — visits multiplied by each member’s tier.'
+            : 'Qualifying visits — one per member, per location, per day.'}
+        </p>
 
         {/* Bar chart */}
         <div className="flex items-end gap-1.5 h-24">
           {fiscalWeekChart.map((day, i) => {
-            const pct = maxStamps > 0 ? day.stampCount / maxStamps : 0
+            const value = valueFor(day)
+            const pct = maxValue > 0 ? value / maxValue : 0
             const isToday = day.date === new Date().toISOString().split('T')[0]
             return (
               <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
                 <span className="text-[10px] font-bold text-[#8E8EA8] tabular-nums">
-                  {day.stampCount > 0 ? day.stampCount : ''}
+                  {value > 0 ? value : ''}
                 </span>
                 <div className="w-full flex items-end" style={{ height: '64px' }}>
                   <div
                     className="w-full rounded-t-md transition-all duration-500"
                     style={{
-                      height: `${Math.max(pct * 100, day.stampCount > 0 ? 8 : 0)}%`,
+                      height: `${Math.max(pct * 100, value > 0 ? 8 : 0)}%`,
                       backgroundColor: isToday ? '#FFB217' : '#4A4B98',
-                      opacity: day.stampCount === 0 ? 0.15 : 1,
-                      minHeight: day.stampCount > 0 ? '6px' : '0',
+                      opacity: value === 0 ? 0.15 : 1,
+                      minHeight: value > 0 ? '6px' : '0',
                     }}
                   />
                 </div>
@@ -208,40 +240,6 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
         </div>
       </div>
 
-      {/* ── Recent members ── */}
-      {recentMembers.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3.5 border-b border-[#EBEBF2]">
-            <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Recent members</h2>
-          </div>
-          <div className="divide-y divide-[#EBEBF2]">
-            {recentMembers.slice(0, 8).map(m => (
-              <div key={m.id} className="px-4 py-3 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-[#4A4B98] flex items-center justify-center font-['Coiny'] text-sm text-white flex-shrink-0">
-                  {m.firstName[0]}{m.lastName[0]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-bold text-[#1A1A2E] truncate">
-                    {m.firstName} {m.lastName}
-                  </p>
-                  <p className="text-[11px] text-[#8E8EA8] font-medium">
-                    {m.totalStamps} stamps
-                  </p>
-                </div>
-                <span
-                  className="text-[10px] font-bold tracking-wide uppercase px-2 py-0.5 rounded-full"
-                  style={{
-                    backgroundColor: `${TIER_COLORS[m.tier] ?? '#8E8EA8'}15`,
-                    color: TIER_COLORS[m.tier] ?? '#8E8EA8',
-                  }}
-                >
-                  {m.tier}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -327,8 +327,10 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
 
   return (
     <>
-      <div className="w-full text-center">
-        <h1 className="font-['Coiny'] text-3xl text-[#1A1A2E] mb-1">Welcome back</h1>
+      <div className="w-full flex flex-col items-center text-center">
+        {/* Same asset and sizing as AppHeader. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/BinPerks_Landscape_Logo.png" alt="BinPerks" className="h-8 w-auto mb-3" />
         <p className="text-[14px] text-[#8E8EA8] font-medium">
           Enter your phone number and we&apos;ll text you a sign-in code.
         </p>

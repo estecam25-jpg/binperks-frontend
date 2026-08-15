@@ -45,8 +45,13 @@ export default async function MemberTabsLayout({
 
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
-      {/* Padded by the nav height so fixed-position nav never covers content. */}
-      <div style={{ paddingBottom: BOTTOM_NAV_HEIGHT_PX + 16 }}>
+      {/* Padded by the covered height so the fixed nav never hides content.
+          The safe-area inset is added on top for notched phones, where the
+          home indicator sits below the bar and pushes it further up. */}
+      <div
+        className="flex-1 flex flex-col"
+        style={{ paddingBottom: `calc(${BOTTOM_NAV_HEIGHT_PX + 16}px + env(safe-area-inset-bottom))` }}
+      >
         {children}
       </div>
       <BottomNavigation />

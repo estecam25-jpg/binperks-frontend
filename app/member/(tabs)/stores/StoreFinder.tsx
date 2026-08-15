@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import StoreCard from '@/components/member/StoreCard'
 import type { TodayPrice } from '@/lib/store-pricing'
+import Link from 'next/link'
 
 /**
  * Store finder — the body of /member/stores.
@@ -158,8 +159,8 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
         type="search"
         value={query}
         onChange={e => setQuery(e.target.value)}
-        placeholder="Search by store name or city"
-        aria-label="Search BinPerks stores by name or city"
+        placeholder="Search by store name or state"
+        aria-label="Search BinPerks stores by name or state"
         className="w-full px-4 py-3.5 rounded-2xl border-2 border-transparent bg-white font-['Montserrat'] text-[14px] font-semibold text-[#1A1A2E] outline-none transition-colors placeholder:text-[#D1D1DC] placeholder:font-medium focus:border-[#4A4B98]"
       />
 
@@ -248,6 +249,20 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
                     <h3 className="text-[22px] font-bold tracking-[0.01em] uppercase text-black leading-tight">
                       VIP <span style={{ color: BINPERKS_BLUE }}>Paid</span> Member Perks
                     </h3>
+
+                    {/* Directly under the header, not after the list: a Starter
+                        member should know these are locked BEFORE reading them.
+                        Hidden for VIP members, who already have them. */}
+                    {isFree && (
+                      <Link
+                        href="/member/upgrade"
+                        className="text-[13px] font-bold underline -mt-1"
+                        style={{ color: BINPERKS_BLUE }}
+                      >
+                        Upgrade to VIP to unlock these.
+                      </Link>
+                    )}
+
                     {data.vipPerks.map(p => (
                       <div key={p.id}>
                         <p className={`text-[14px] font-bold ${isFree ? 'text-[#D1D1DC]' : 'text-[#4A4A5C]'}`}>
@@ -260,11 +275,6 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
                         )}
                       </div>
                     ))}
-                    {isFree && (
-                      <p className="text-[11px] font-semibold" style={{ color: BINPERKS_BLUE }}>
-                        Upgrade to VIP to unlock these.
-                      </p>
-                    )}
                   </section>
                 )}
 

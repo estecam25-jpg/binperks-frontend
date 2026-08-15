@@ -17,8 +17,16 @@ import { usePathname } from 'next/navigation'
 
 const BINPERKS_BLUE = '#4A4B98'
 
-/** Height reserved for the bar, exported so layouts pad by the same amount. */
-export const BOTTOM_NAV_HEIGHT_PX = 68
+/**
+ * Height a page must keep clear at the bottom, exported so layouts pad by the
+ * same amount.
+ *
+ * This is NOT just the bar. The bar measures 58px, but the SCAN pill is raised
+ * with -mt-4 and overhangs 15px ABOVE it, so 73px of the viewport bottom is
+ * actually covered. The old value of 68 was under that, which is why the last
+ * element on a tab still sat under the pill.
+ */
+export const BOTTOM_NAV_HEIGHT_PX = 73
 
 interface Tab {
   href: string

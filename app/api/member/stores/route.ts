@@ -17,11 +17,12 @@
  * sorted by canonical_key ASC (CORE RULE 13).
  *
  * Query params:
- *   q — optional free-text filter, matched against store name, brand name,
- *       city and canonical_key
+ *   q — optional free-text filter, matched against store name, brand name and
+ *       state. State is stored two-letter, so "FL" matches and "Florida" does
+ *       not.
  *
  * Responses:
- *   200 { stores: [{ id, canonicalKey, displayName, brandName, city, state,
+ *   200 { lastStampedStoreId, stores: [{ id, canonicalKey, displayName, brandName, city, state,
  *                     brandColor, todayPrice, restocksToday, isOriginStore }] }
  *        todayPrice is resolved in each STORE's own timezone, and is null when
  *        that merchant has published no price for today.
@@ -77,6 +78,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'not_authenticated' }, { status: 401 })
   }
 
+  // Where this member most recently earned a stamp. The scanner uses it to
+  // price a saving without asking them which store they are standing in.
+  //
+  // activity_events is the V3 canonical activity source and the Phase 1
+  // backfill carried the stamp_events history into it, so this reaches back
+  // past the dual-write cutover. A member who has never been stamped returns
+  // null and the caller falls back to their Origin Store.
+  const { data: lastActivity } = await admin
+    .from('activity_events')
+    .select('store_id')
+    .eq('member_id', member.id)
+    .order('occurred_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const lastStampedStoreId = lastActivity?.store_id ?? null
+
   const q = req.nextUrl.searchParams.get('q')?.trim() ?? ''
 
   let query = admin
@@ -89,11 +107,16 @@ export async function GET(req: NextRequest) {
     // Escape PostgREST's or() delimiters before interpolating. A comma or a
     // paren in the search box would otherwise be parsed as filter syntax.
     const safe = q.replace(/[,()]/g, ' ')
+    // Store NAME or STATE only. City was removed deliberately: there are not
+    // enough stores in any one city for city search to be useful, and it made
+    // "FL" miss stores whose city happened not to contain those letters.
+    //
+    // canonical_key went with it — the key embeds the city ("FL-Tampa-EstaBins"),
+    // so matching on it would have quietly reintroduced city search.
     query = query.or(
       `display_name.ilike.%${safe}%,` +
       `brand_name.ilike.%${safe}%,` +
-      `city.ilike.%${safe}%,` +
-      `canonical_key.ilike.%${safe}%`
+      `state.ilike.%${safe}%`
     )
   }
 
@@ -118,6 +141,12 @@ export async function GET(req: NextRequest) {
   ]
 
   return NextResponse.json({
+    // Null when the member has never been stamped anywhere, or when that store
+    // is not in this response (hidden from discovery, or filtered out by ?q=).
+    lastStampedStoreId:
+      lastStampedStoreId && ordered.some(s => s.id === lastStampedStoreId)
+        ? lastStampedStoreId
+        : null,
     stores: ordered.map(s => ({
       id:            s.id,
       canonicalKey:  s.canonical_key,

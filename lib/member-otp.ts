@@ -27,9 +27,22 @@
 import { Redis } from '@upstash/redis'
 import { randomInt } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
 import { postToGhl } from '@/lib/ghl-webhook'
 
 const APP_URL = 'https://app.binperks.com'
+
+/** Same sender the merchant OTP uses. Overridable without a deploy; the
+ *  default sits on feedback.binperks.com because that is currently the only
+ *  Resend-verified sending domain. */
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'BinPerks <noreply@feedback.binperks.com>'
+
+/** A member row can carry a blank or malformed email — it is collected at
+ *  signup and never verified — and Resend rejects the whole send on a bad
+ *  address. Checked here so a typo costs the email channel, not the SMS. */
+function isSendableEmail(email: string | null | undefined): email is string {
+  return !!email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+}
 
 /** Code lifetime. Shorter than Supabase's own token expiry (~60 min) so the
  *  code is always the binding constraint. */
@@ -73,16 +86,17 @@ interface IssueParams {
 }
 
 type IssueResult =
-  | { ok: true }
+  | { ok: true; sentEmail: boolean }
   | { ok: false; reason: 'generate_link_failed' | 'redis_failed' }
 
 /**
- * Mint a sign-in code, store it, and hand it to GHL for SMS delivery.
+ * Mint a sign-in code, store it, and deliver it by SMS (GHL) and email
+ * (Resend). Both carry the same code; whichever arrives first works.
  *
- * The GHL call is awaited but its failure is not fatal: the code is already
- * valid in Redis, so a member who does not get the text can hit Resend rather
- * than be told the whole sign-in failed. A Redis failure IS fatal — without it
- * there is no code to verify against.
+ * Neither delivery failure is fatal: the code is already valid in Redis, so a
+ * member who misses one channel can use the other rather than be told the
+ * whole sign-in failed. A Redis failure IS fatal — without it there is no code
+ * to verify against.
  */
 export async function issueMemberOtp(params: IssueParams): Promise<IssueResult> {
   const { admin, memberId, phone, firstName, email, authUserId } = params
@@ -121,6 +135,7 @@ export async function issueMemberOtp(params: IssueParams): Promise<IssueResult> 
     return { ok: false, reason: 'redis_failed' }
   }
 
+  // ── SMS (GHL → Twilio) ────────────────────────────────────────────────────
   // GHL template: "Your BinPerks sign-in code is: {{code}}. Expires in 10 minutes."
   //
   // Awaited so Vercel can't freeze the instance out from under the request —
@@ -132,5 +147,27 @@ export async function issueMemberOtp(params: IssueParams): Promise<IssueResult> 
     await postToGhl(ghlWebhook, { memberId, phone, firstName, code }, 'member-otp')
   }
 
-  return { ok: true }
+  // ── Email (Resend) ────────────────────────────────────────────────────────
+  // A second delivery channel for the SAME code, matching the merchant flow.
+  // Never fatal: the code is already valid in Redis and the SMS has already
+  // gone out, so a member with a stale address on file still signs in by text.
+  // A member with no usable email simply skips this, silently by design.
+  let sentEmail = false
+  if (isSendableEmail(email) && process.env.RESEND_API_KEY) {
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY)
+      const { error: sendError } = await resend.emails.send({
+        from: FROM_EMAIL,
+        to: email.trim(),
+        subject: 'Your BinPerks sign-in code',
+        text: `Your BinPerks sign-in code is: ${code}. Expires in 10 minutes.`,
+      })
+      if (sendError) console.error('[member-otp] Resend error:', sendError)
+      else sentEmail = true
+    } catch (err) {
+      console.error('[member-otp] Resend threw:', err)
+    }
+  }
+
+  return { ok: true, sentEmail }
 }

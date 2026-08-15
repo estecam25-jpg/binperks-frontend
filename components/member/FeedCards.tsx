@@ -52,38 +52,55 @@ function ImagePlaceholder({ label, size = 'w-16 h-16' }: { label: string; size?:
   )
 }
 
-// ── BinPerks promos — horizontal carousel ────────────────────────────────────
+// ── Horizontal carousel ──────────────────────────────────────────────────────
+
+/**
+ * The scroll track every Home feed section uses.
+ *
+ * Extracted from PromoCarousel so all four sections scroll identically rather
+ * than each re-implementing the classes. The negative margin lets cards bleed
+ * to the screen edge while the padding keeps the first one aligned with the
+ * section heading; the page itself never scrolls sideways.
+ */
+export function FeedCarousel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="w-full overflow-x-auto -mx-4 px-4 pb-1">
+      <div className="flex gap-3 w-max">{children}</div>
+    </div>
+  )
+}
+
+/** Shared card width — cards in a track must be a fixed width, or flex sizes
+ *  them to content and the row stops looking like a carousel. */
+const CARD_W = 'w-[248px] flex-shrink-0'
 
 export function PromoCarousel({ promos }: { promos: PromoCard[] }) {
   return (
-    // Scrolls inside its own track; the page never moves sideways.
-    <div className="w-full overflow-x-auto -mx-4 px-4 pb-1">
-      <div className="flex gap-3 w-max">
-        {promos.map(p => (
-          <article
-            key={p.id}
-            className="w-[248px] rounded-2xl px-4 py-4 flex flex-col gap-2 shadow-sm"
-            style={{ backgroundColor: p.accent }}
-          >
-            <h3 className="text-[15px] font-extrabold text-white leading-tight">{p.title}</h3>
-            <p className="text-[12px] font-medium text-white/85 leading-relaxed flex-1">{p.body}</p>
-            {p.href ? (
-              <Link
-                href={p.href}
-                className="self-start mt-1 px-3.5 py-1.5 rounded-full bg-white text-[12px] font-bold"
-                style={{ color: p.accent }}
-              >
-                {p.cta}
-              </Link>
-            ) : (
-              <span className="self-start mt-1 px-3.5 py-1.5 rounded-full bg-white/90 text-[12px] font-bold" style={{ color: p.accent }}>
-                {p.cta}
-              </span>
-            )}
-          </article>
-        ))}
-      </div>
-    </div>
+    <FeedCarousel>
+      {promos.map(p => (
+        <article
+          key={p.id}
+          className={`${CARD_W} rounded-2xl px-4 py-4 flex flex-col gap-2 shadow-sm`}
+          style={{ backgroundColor: p.accent }}
+        >
+          <h3 className="text-[15px] font-extrabold text-white leading-tight">{p.title}</h3>
+          <p className="text-[12px] font-medium text-white/85 leading-relaxed flex-1">{p.body}</p>
+          {p.href ? (
+            <Link
+              href={p.href}
+              className="self-start mt-1 px-3.5 py-1.5 rounded-full bg-white text-[12px] font-bold"
+              style={{ color: p.accent }}
+            >
+              {p.cta}
+            </Link>
+          ) : (
+            <span className="self-start mt-1 px-3.5 py-1.5 rounded-full bg-white/90 text-[12px] font-bold" style={{ color: p.accent }}>
+              {p.cta}
+            </span>
+          )}
+        </article>
+      ))}
+    </FeedCarousel>
   )
 }
 
@@ -136,8 +153,8 @@ export function FindCard({ find }: { find: Find }) {
 
 export function OnlineStoreCard({ store }: { store: OnlineStore }) {
   return (
-    <article className="w-full bg-white rounded-2xl px-4 py-4 shadow-sm flex items-center gap-3.5">
-      <ImagePlaceholder label="🛍️" />
+    <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
+      <ImagePlaceholder label="🛍️" size="w-12 h-12" />
       <div className="flex-1 min-w-0">
         <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] truncate">
           {store.storeName}
@@ -145,7 +162,7 @@ export function OnlineStoreCard({ store }: { store: OnlineStore }) {
         <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{store.featuredProduct}</p>
         <p className="text-[12px] font-medium text-[#8E8EA8] mt-0.5">{store.platform}</p>
       </div>
-      <span className="text-[12px] font-bold flex-shrink-0" style={{ color: BINPERKS_BLUE }}>
+      <span className="text-[12px] font-bold" style={{ color: BINPERKS_BLUE }}>
         {store.cta} ›
       </span>
     </article>
@@ -156,7 +173,7 @@ export function OnlineStoreCard({ store }: { store: OnlineStore }) {
 
 export function LocalEventCard({ event }: { event: LocalEvent }) {
   return (
-    <article className="w-full bg-white rounded-2xl px-4 py-4 shadow-sm flex items-center gap-3.5">
+    <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
       <div
         className="w-12 h-12 rounded-xl bg-[#FFB21725] flex items-center justify-center flex-shrink-0"
         aria-hidden="true"
@@ -176,13 +193,13 @@ export function LocalEventCard({ event }: { event: LocalEvent }) {
 
 export function BeyondBinsCard({ partner }: { partner: BeyondBinsPartner }) {
   return (
-    <article className="w-full bg-white rounded-2xl px-4 py-4 shadow-sm flex items-center gap-3.5">
+    <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
       <ImagePlaceholder label="🤝" size="w-12 h-12" />
       <div className="flex-1 min-w-0">
         <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{partner.partner}</p>
         <p className="text-[12px] font-medium text-[#8E8EA8] mt-0.5 leading-snug">{partner.description}</p>
       </div>
-      <span className="text-[12px] font-bold flex-shrink-0" style={{ color: BINPERKS_BLUE }}>
+      <span className="text-[12px] font-bold" style={{ color: BINPERKS_BLUE }}>
         {partner.cta} ›
       </span>
     </article>

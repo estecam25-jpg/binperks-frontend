@@ -17,7 +17,7 @@ import GreetingCard from '@/components/member/GreetingCard'
 import AddToHomeScreen from '@/components/member/AddToHomeScreen'
 import MembershipStampCard from '@/components/member/MembershipStampCard'
 import {
-  FeedSection, PromoCarousel,
+  FeedSection, PromoCarousel, FeedCarousel,
   OnlineStoreCard, LocalEventCard, BeyondBinsCard,
 } from '@/components/member/FeedCards'
 import {
@@ -103,21 +103,21 @@ export default function MemberHomePage() {
         </FeedSection>
 
         <FeedSection title="Shop From Home" subtitle="Buy from BinPerks stores online">
-          <div className="flex flex-col gap-2.5">
+          <FeedCarousel>
             {MOCK_ONLINE_STORES.map(s => <OnlineStoreCard key={s.id} store={s} />)}
-          </div>
+          </FeedCarousel>
         </FeedSection>
 
         <FeedSection title="Happening Near You">
-          <div className="flex flex-col gap-2.5">
+          <FeedCarousel>
             {MOCK_EVENTS.map(e => <LocalEventCard key={e.id} event={e} />)}
-          </div>
+          </FeedCarousel>
         </FeedSection>
 
         <FeedSection title="Beyond the Bins" subtitle="Tools and partners for resellers">
-          <div className="flex flex-col gap-2.5">
+          <FeedCarousel>
             {MOCK_BEYOND_BINS.map(p => <BeyondBinsCard key={p.id} partner={p} />)}
-          </div>
+          </FeedCarousel>
         </FeedSection>
 
       </main>
