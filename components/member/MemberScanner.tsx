@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   parseRetailRange, computeSavings, formatPrice, type TodayPrice,
 } from '@/lib/store-pricing'
+import MyFinds from '@/components/member/MyFinds'
 
 /**
  * AI Product Scanner — the Scan tab.
@@ -642,22 +643,9 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
               </>
             )}
 
-            {/* My Finds — placeholder until saved scans are surfaced. */}
+            {/* My Finds — real scan history from /api/member/my-finds. */}
             {!result && !busy && view === 'finds' && (
-              <>
-                <div className="w-full bg-white rounded-2xl px-5 py-12 shadow-sm flex flex-col items-center gap-3">
-                  <span className="text-4xl">🏷️</span>
-                  <p className="text-[14px] font-semibold text-[#8E8EA8] text-center leading-relaxed">
-                    Coming soon — your scanned items will appear here.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setView('scan')}
-                  className="w-full py-3.5 rounded-xl font-bold text-[14px] text-[#1A1A2E] bg-white border-2 border-[#EBEBF2] active:scale-[0.98] transition-transform"
-                >
-                  Back
-                </button>
-              </>
+              <MyFinds onBack={() => setView('scan')} />
             )}
 
             {/* `capture` opens the rear camera directly on mobile and falls
@@ -670,6 +658,9 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
               className="hidden"
               onChange={handleFile}
             />
+
+            {/* Clears the fixed bottom nav — see the other tab screens. */}
+            <div style={{ height: 'calc(80px + env(safe-area-inset-bottom))' }} aria-hidden="true" />
         </div>
       </div>
 

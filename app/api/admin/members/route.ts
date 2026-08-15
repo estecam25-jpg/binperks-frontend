@@ -15,23 +15,38 @@ export async function GET(req: NextRequest) {
   if (!adminEmail) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const search = new URL(req.url).searchParams.get('search')?.trim() ?? ''
-  if (!search) return NextResponse.json({ members: [] })
 
   const admin = createAdminSupabaseClient()
 
-  // Search by phone or email (partial match); join stores for display name
-  const { data, error } = await admin
+  // An empty search used to short-circuit to an empty array, so the Members
+  // tab looked broken until something was typed. It now lists the most recent
+  // members and narrows as you search.
+  let query = admin
     .from('members')
     .select(`
       id, first_name, last_name, phone, email,
       subscription_status, total_stamps, is_blacklisted, created_at,
       stores:home_store_id ( display_name, canonical_key )
     `)
-    .or(`phone.ilike.%${search}%,email.ilike.%${search}%`)
     .order('created_at', { ascending: false })
     .limit(20)
 
-  if (error) return NextResponse.json({ error: 'query_failed' }, { status: 500 })
+  if (search) {
+    // Escape PostgREST's or() delimiters — a comma or paren typed into the box
+    // would otherwise be parsed as filter syntax.
+    const safe = search.replace(/[,()]/g, ' ')
+    query = query.or(
+      `phone.ilike.%${safe}%,email.ilike.%${safe}%,` +
+      `first_name.ilike.%${safe}%,last_name.ilike.%${safe}%`
+    )
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('[admin/members] query failed:', error)
+    return NextResponse.json({ error: 'query_failed' }, { status: 500 })
+  }
 
   // stores:home_store_id is a to-ONE embed, so supabase-js hands back an object,
   // not an array. This previously indexed [0] on it, which is always undefined —

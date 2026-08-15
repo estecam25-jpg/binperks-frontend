@@ -49,7 +49,10 @@ export async function GET(req: NextRequest) {
 
   const [merchantsResult, stampEvents, allMembers, w9Records, allStores, allPerks, allStaff, allStamps, participantTypes] = await Promise.all([
     admin.from('merchants')
-      .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at, stripe_subscription_id, participant_type, commission_eligible, negative_balance, admin_suspended, admin_suspension_reason')
+      // stripe_customer_id, NOT stripe_subscription_id — that column does not
+      // exist on merchants and PostgREST rejected the whole select, which is why
+      // this route returned 500 and the Merchants tab rendered empty.
+      .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at, stripe_customer_id, participant_type, commission_eligible, negative_balance, admin_suspended, admin_suspension_reason')
       .order('created_at', { ascending: false }),
     admin.from('stamp_events').select('merchant_id, stamp_count').gte('awarded_at', sevenDaysAgo),
     admin.from('members').select('merchant_id, subscription_status'),
@@ -134,6 +137,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Checked BEFORE the mapping below, and logged. It used to be tested after,
+  // so the real PostgREST message was never printed and the tab just went blank.
+  if (merchantsResult.error) {
+    console.error('[admin/merchants] query failed:', merchantsResult.error)
+    return NextResponse.json({ error: 'query_failed' }, { status: 500 })
+  }
+
   const merchants = (merchantsResult.data ?? []).map(m => {
     const total = membersByMerchant[m.id] ?? 0
     const vip   = vipByMerchant[m.id]   ?? 0
@@ -145,7 +155,9 @@ export async function GET(req: NextRequest) {
       vipConversionPct:  total > 0 ? Math.round(vip / total * 100) : 0,
       w9:                w9ByMerchant[m.id] ?? null,
       onboardingComplete: calcOnboarding(m),
-      abandonedCheckout: m.billing_status === 'pending' && !m.stripe_subscription_id,
+      // Stripe creates the customer when checkout completes, so a pending
+      // merchant with no customer id never finished paying.
+      abandonedCheckout: m.billing_status === 'pending' && !m.stripe_customer_id,
       // V3 fields. commission_eligible is merchant-level (never per store) and
       // is driven by billing + admin suspension, not by billing_status alone —
       // see CLAUDE.md "STORE AND MERCHANT STATUS MODEL (V3)".
@@ -158,7 +170,6 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  if (merchantsResult.error) return NextResponse.json({ error: 'query_failed' }, { status: 500 })
   return NextResponse.json({ merchants })
 }
 

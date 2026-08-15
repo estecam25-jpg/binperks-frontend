@@ -16,15 +16,6 @@ export interface PromoCard {
   accent: string
 }
 
-export interface StorePromo {
-  id: string
-  storeName: string
-  brandColor: string
-  dealTitle: string
-  detail: string
-  cta: string
-}
-
 export interface Find {
   id: string
   itemName: string
@@ -39,13 +30,18 @@ export interface OnlineStore {
   featuredProduct: string
   platform: string
   cta: string
+  href?: string | null
 }
 
-export interface LocalEvent {
+/** A "Deals Near You" card — a flea market, estate sale or garage sale.
+ *  Renamed from LocalEvent when "Happening Near You" was retired. */
+export interface Deal {
   id: string
   name: string
   location: string
   date: string
+  /** Set only for admin-managed rows that carry a link. */
+  href?: string | null
 }
 
 export interface BeyondBinsPartner {
@@ -53,6 +49,7 @@ export interface BeyondBinsPartner {
   partner: string
   description: string
   cta: string
+  href?: string | null
 }
 
 /** BinPerks-owned promos. Phase 2: a promos table + admin scheduling. */
@@ -84,26 +81,6 @@ export const MOCK_PROMOS: PromoCard[] = [
 ]
 
 /** Phase 2: merchant-scheduled offers, filtered by member location. */
-export const MOCK_STORE_DEALS: StorePromo[] = [
-  {
-    id: 'deal-1',
-    storeName: 'EstaBins Tampa',
-    brandColor: '#1b3d2f',
-    dealTitle: '$3 Tuesday',
-    detail: 'Every item in the blue bins is $3 all day Tuesday.',
-    cta: 'View store',
-  },
-  {
-    id: 'deal-2',
-    storeName: 'WinBin Main St',
-    brandColor: '#b13969',
-    dealTitle: 'Restock Friday',
-    detail: 'Fresh pallets hit the floor at 9am. VIP members shop first.',
-    cta: 'View store',
-  },
-]
-
-/** Phase 2: reads scanner_events for this member, newest first. */
 export const MOCK_FINDS: Find[] = [
   {
     id: 'find-1',
@@ -140,7 +117,7 @@ export const MOCK_ONLINE_STORES: OnlineStore[] = [
 ]
 
 /** Phase 2: an events table with location filtering. */
-export const MOCK_EVENTS: LocalEvent[] = [
+export const MOCK_DEALS: Deal[] = [
   {
     id: 'event-1',
     name: 'Grand Reopening — New Bins',

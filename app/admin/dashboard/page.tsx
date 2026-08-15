@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin-emails'
+import ContentTab from './ContentTab'
+import { CONTENT_TYPES, contentTypeBySlug } from '@/lib/admin-content'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -107,7 +109,11 @@ interface ScannerStats {
   /** Absent on a response from before the Product Image Service shipped. */
   imageService?: ScannerImageService
 }
-type TabId = 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'scanner' | 'alerts'
+type TabId =
+  | 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'scanner' | 'alerts'
+  // Content tabs, one per entry in CONTENT_TYPES. Prefixed so a content slug
+  // can never collide with an operational tab name.
+  | `content:${string}`
 
 // ── Module-level helper components ────────────────────────────────────────
 
@@ -1284,6 +1290,8 @@ export default function AdminDashboardPage() {
     { id: 'settlement', label: 'Settlement' },
     { id: 'scanner',   label: 'Scanner' },
     { id: 'alerts',    label: 'Alerts' },
+    // Content management. Driven by the registry so adding a type adds a tab.
+    ...CONTENT_TYPES.map(t => ({ id: `content:${t.slug}` as TabId, label: t.label })),
   ]
 
   return (
@@ -1325,6 +1333,13 @@ export default function AdminDashboardPage() {
         {tab === 'settlement' && renderSettlement()}
         {tab === 'scanner'   && renderScanner()}
         {tab === 'alerts'    && renderAlerts()}
+
+        {/* ContentTab fetches its own rows keyed on the slug, so switching
+            between content tabs reloads without any wiring here. */}
+        {tab.startsWith('content:') && (() => {
+          const ct = contentTypeBySlug(tab.slice('content:'.length))
+          return ct ? <ContentTab key={ct.slug} type={ct} /> : null
+        })()}
       </main>
 
       {/* W-9 Reject modal */}

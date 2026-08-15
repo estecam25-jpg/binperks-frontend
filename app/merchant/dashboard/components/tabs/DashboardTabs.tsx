@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import PricingScheduleCard from '../PricingScheduleCard'
+import SuggestedPerks from '../SuggestedPerks'
 
 interface Redemption {
   id: string; couponValue: number; redeemedAt: string
@@ -292,6 +293,10 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
         {saving && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
         {saved ? '✓ Saved' : saving ? 'Saving...' : 'Save Perks'}
       </button>
+
+      {/* Below the Save button on purpose: ideas to borrow, not part of the
+          form being submitted. */}
+      <SuggestedPerks />
     </div>
   )
 }

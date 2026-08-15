@@ -18,11 +18,9 @@ import AddToHomeScreen from '@/components/member/AddToHomeScreen'
 import MembershipStampCard from '@/components/member/MembershipStampCard'
 import {
   FeedSection, PromoCarousel, FeedCarousel,
-  OnlineStoreCard, LocalEventCard, BeyondBinsCard,
+  OnlineStoreCard, DealCard, BeyondBinsCard,
 } from '@/components/member/FeedCards'
-import {
-  MOCK_PROMOS, MOCK_ONLINE_STORES, MOCK_EVENTS, MOCK_BEYOND_BINS,
-} from '@/lib/member-mock-data'
+import { useFeedContent } from '@/lib/use-feed-content'
 
 interface MemberData {
   firstName: string
@@ -35,6 +33,10 @@ export default function MemberHomePage() {
   const router = useRouter()
   const [member, setMember] = useState<MemberData | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Admin-managed content, with the built-in copy as a per-section fallback so
+  // the feed is never an empty shell. See lib/use-feed-content.
+  const feed = useFeedContent()
 
   useEffect(() => {
     fetch('/api/member/me')
@@ -86,9 +88,8 @@ export default function MemberHomePage() {
         )}
 
         {/* ── Feed ──
-            MOCK DATA — connect to real API in Phase 2. Each section below
-            renders from lib/member-mock-data; swapping in a fetch does not
-            change any markup. */}
+            Live content from the admin content tables, falling back to the
+            built-in copy per section while they are still being filled in. */}
 
         {/* The "Upgrade to VIP" card is filtered out for members who already
             subscribe — selling someone what they already pay for. Filtered by
@@ -96,7 +97,7 @@ export default function MemberHomePage() {
             it back on. */}
         <FeedSection title="BinPerks Promos">
           <PromoCarousel
-            promos={MOCK_PROMOS.filter(
+            promos={feed.promos.filter(
               p => !(p.id === 'promo-vip' && member?.subscriptionStatus === 'vip'),
             )}
           />
@@ -104,22 +105,29 @@ export default function MemberHomePage() {
 
         <FeedSection title="Shop From Home" subtitle="Buy from BinPerks stores online">
           <FeedCarousel>
-            {MOCK_ONLINE_STORES.map(s => <OnlineStoreCard key={s.id} store={s} />)}
+            {feed.shopFromHome.map(s => <OnlineStoreCard key={s.id} store={s} />)}
           </FeedCarousel>
         </FeedSection>
 
-        <FeedSection title="Happening Near You">
+        <FeedSection title="Deals Near You" subtitle="Flea markets, estate sales and garage sales">
           <FeedCarousel>
-            {MOCK_EVENTS.map(e => <LocalEventCard key={e.id} event={e} />)}
+            {feed.deals.map(d => <DealCard key={d.id} deal={d} />)}
           </FeedCarousel>
         </FeedSection>
 
         <FeedSection title="Beyond the Bins" subtitle="Tools and partners for resellers">
           <FeedCarousel>
-            {MOCK_BEYOND_BINS.map(p => <BeyondBinsCard key={p.id} partner={p} />)}
+            {feed.beyondBins.map(p => <BeyondBinsCard key={p.id} partner={p} />)}
           </FeedCarousel>
         </FeedSection>
 
+
+        {/* Clears the fixed bottom nav. A dedicated spacer rather than padding
+            on an ancestor: the scanner and account screens each set their own
+            height, and padding on a wrapper they overflow does not reach them.
+            80px covers the 58px bar plus the raised SCAN pill's overhang, and
+            the inset is added for the home indicator on notched phones. */}
+        <div style={{ height: 'calc(80px + env(safe-area-inset-bottom))' }} aria-hidden="true" />
       </main>
     </>
   )

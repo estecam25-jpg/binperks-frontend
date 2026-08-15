@@ -14,7 +14,7 @@
 
 import Link from 'next/link'
 import type {
-  PromoCard, StorePromo, Find, OnlineStore, LocalEvent, BeyondBinsPartner,
+  PromoCard, OnlineStore, Deal, BeyondBinsPartner,
 } from '@/lib/member-mock-data'
 
 const BINPERKS_BLUE = '#4A4B98'
@@ -70,6 +70,25 @@ export function FeedCarousel({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * Card shell that becomes a link when the row carries a URL.
+ *
+ * Module scope, not a component built inside the render: defining a component
+ * during render gives it a new identity every time, so React unmounts and
+ * remounts the whole card on each pass.
+ */
+function CardShell({
+  href, className, children,
+}: {
+  href?: string | null
+  className: string
+  children: React.ReactNode
+}) {
+  return href
+    ? <a href={href} target="_blank" rel="noopener noreferrer" className={className}>{children}</a>
+    : <article className={className}>{children}</article>
+}
+
 /** Shared card width — cards in a track must be a fixed width, or flex sizes
  *  them to content and the row stops looking like a carousel. */
 const CARD_W = 'w-[248px] flex-shrink-0'
@@ -104,56 +123,14 @@ export function PromoCarousel({ promos }: { promos: PromoCard[] }) {
   )
 }
 
-// ── Deals Near You ───────────────────────────────────────────────────────────
-
-export function StorePromoCard({ deal }: { deal: StorePromo }) {
-  return (
-    <article className="w-full bg-white rounded-2xl px-4 py-4 shadow-sm flex items-center gap-3.5">
-      <div
-        className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center font-['Coiny'] text-lg text-white"
-        style={{ backgroundColor: deal.brandColor }}
-        aria-hidden="true"
-      >
-        {deal.storeName.charAt(0)}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] truncate">
-          {deal.storeName}
-        </p>
-        <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{deal.dealTitle}</p>
-        <p className="text-[12px] font-medium text-[#8E8EA8] mt-0.5 leading-snug">{deal.detail}</p>
-      </div>
-      <span className="text-[12px] font-bold flex-shrink-0" style={{ color: BINPERKS_BLUE }}>
-        {deal.cta} ›
-      </span>
-    </article>
-  )
-}
-
-// ── My Finds ─────────────────────────────────────────────────────────────────
-
-export function FindCard({ find }: { find: Find }) {
-  return (
-    <article className="w-full bg-white rounded-2xl px-4 py-4 shadow-sm flex items-start gap-3.5">
-      <ImagePlaceholder label="📦" />
-      <div className="flex-1 min-w-0">
-        <p className="text-[14px] font-bold text-[#1A1A2E] leading-snug">{find.itemName}</p>
-        <p className="text-[13px] font-bold mt-1" style={{ color: BINPERKS_BLUE }}>
-          {find.estimatedRetail}
-        </p>
-        <p className="text-[11px] font-medium text-[#8E8EA8] mt-0.5">
-          {find.storeName} · {find.scannedAt}
-        </p>
-      </div>
-    </article>
-  )
-}
-
 // ── Shop From Home ───────────────────────────────────────────────────────────
 
 export function OnlineStoreCard({ store }: { store: OnlineStore }) {
   return (
-    <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
+    <CardShell
+      href={store.href}
+      className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}
+    >
       <ImagePlaceholder label="🛍️" size="w-12 h-12" />
       <div className="flex-1 min-w-0">
         <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] truncate">
@@ -165,15 +142,15 @@ export function OnlineStoreCard({ store }: { store: OnlineStore }) {
       <span className="text-[12px] font-bold" style={{ color: BINPERKS_BLUE }}>
         {store.cta} ›
       </span>
-    </article>
+    </CardShell>
   )
 }
 
-// ── Happening Near You ───────────────────────────────────────────────────────
+// ── Deals Near You ───────────────────────────────────────────────────────────
 
-export function LocalEventCard({ event }: { event: LocalEvent }) {
-  return (
-    <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
+export function DealCard({ deal }: { deal: Deal }) {
+  const body = (
+    <>
       <div
         className="w-12 h-12 rounded-xl bg-[#FFB21725] flex items-center justify-center flex-shrink-0"
         aria-hidden="true"
@@ -181,11 +158,22 @@ export function LocalEventCard({ event }: { event: LocalEvent }) {
         <span className="text-[20px]">📅</span>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{event.name}</p>
-        <p className="text-[12px] font-medium text-[#8E8EA8] mt-0.5">{event.location}</p>
-        <p className="text-[12px] font-bold mt-0.5" style={{ color: BINPERKS_BLUE }}>{event.date}</p>
+        <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{deal.name}</p>
+        <p className="text-[12px] font-medium text-[#8E8EA8] mt-0.5">{deal.location}</p>
+        {deal.date && (
+          <p className="text-[12px] font-bold mt-0.5" style={{ color: BINPERKS_BLUE }}>{deal.date}</p>
+        )}
       </div>
-    </article>
+    </>
+  )
+  // Admin-managed rows may carry a link; the built-in fallback copy does not.
+  return (
+    <CardShell
+      href={deal.href}
+      className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}
+    >
+      {body}
+    </CardShell>
   )
 }
 
@@ -193,7 +181,10 @@ export function LocalEventCard({ event }: { event: LocalEvent }) {
 
 export function BeyondBinsCard({ partner }: { partner: BeyondBinsPartner }) {
   return (
-    <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
+    <CardShell
+      href={partner.href}
+      className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}
+    >
       <ImagePlaceholder label="🤝" size="w-12 h-12" />
       <div className="flex-1 min-w-0">
         <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{partner.partner}</p>
@@ -202,6 +193,6 @@ export function BeyondBinsCard({ partner }: { partner: BeyondBinsPartner }) {
       <span className="text-[12px] font-bold" style={{ color: BINPERKS_BLUE }}>
         {partner.cta} ›
       </span>
-    </article>
+    </CardShell>
   )
 }

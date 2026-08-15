@@ -141,7 +141,7 @@ export default function MemberRewardsPage() {
                         className="flex-shrink-0 text-[13px] font-extrabold px-2.5 py-1.5 rounded-xl whitespace-nowrap"
                         style={{ backgroundColor: `${BINPERKS_BLUE}14`, color: BINPERKS_BLUE }}
                       >
-                        {level.multiplier}x per visit
+                        {level.multiplier}x stamps per visit
                       </span>
                     </div>
                   )
@@ -185,6 +185,13 @@ export default function MemberRewardsPage() {
             </section>
           </>
         )}
+
+        {/* Clears the fixed bottom nav. A dedicated spacer rather than padding
+            on an ancestor: the scanner and account screens each set their own
+            height, and padding on a wrapper they overflow does not reach them.
+            80px covers the 58px bar plus the raised SCAN pill's overhang, and
+            the inset is added for the home indicator on notched phones. */}
+        <div style={{ height: 'calc(80px + env(safe-area-inset-bottom))' }} aria-hidden="true" />
       </main>
     </>
   )

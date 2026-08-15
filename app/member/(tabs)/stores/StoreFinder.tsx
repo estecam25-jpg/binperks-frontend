@@ -282,7 +282,7 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
                     written one. */}
                 {data?.storeMessage && (
                   <section className="pt-3 flex flex-col gap-1.5">
-                    <h3 className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
+                    <h3 className="text-[22px] font-bold tracking-[0.01em] uppercase text-black leading-tight">
                       Store Message
                     </h3>
                     <p className="text-[13px] font-medium text-[#1A1A2E] leading-relaxed">
