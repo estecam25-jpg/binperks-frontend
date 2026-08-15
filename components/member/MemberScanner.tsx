@@ -74,6 +74,7 @@ interface ScanStore {
   city: string
   state: string
   todayPrice: TodayPrice | null
+  isOriginStore: boolean
 }
 
 // Longest edge, in pixels, that we upload. Matches the resolution tier the
@@ -112,14 +113,18 @@ async function downscale(file: File): Promise<{ dataUrl: string; mediaType: stri
 export default function Scanner({ brandColor }: { brandColor: string }) {
   const [busy, setBusy]         = useState(false)
 
-  // Store selector. Picking a store is what unlocks estimated savings, since
-  // the saving is retail estimate minus THAT store's price today.
-  const [selectedStore, setSelectedStore]     = useState<ScanStore | null>(null)
-  const [storePickerOpen, setStorePickerOpen] = useState(false)
-  const [stores, setStores]                   = useState<ScanStore[]>([])
-  const [storesLoading, setStoresLoading]     = useState(true)
-  const [storesFailed, setStoresFailed]       = useState(false)
-  const [storeQuery, setStoreQuery]           = useState('')
+  /** Which of the two options the member is looking at. */
+  const [view, setView] = useState<'scan' | 'finds'>('scan')
+
+  // The store used to price a saving. Resolved SILENTLY and never shown: the
+  // scanner screen has no store selector by design.
+  //
+  // The signal is the member's Origin Store, because it is the only one
+  // available — there is no GPS and no check-in. That makes it a guess: a
+  // member shopping elsewhere in the network is priced against their home
+  // store. The savings block is therefore labelled as an estimate and the
+  // store name is never claimed on screen. A real in-store signal is Phase 4B.
+  const [silentStore, setSilentStore] = useState<ScanStore | null>(null)
 
   /** "Save to My Finds" is one-shot per scan — the choice endpoint records the
    *  first answer only, so offering it twice would just 409. */
@@ -140,19 +145,17 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
   const fileInput = useRef<HTMLInputElement>(null)
 
-  // Fetched once on mount rather than when the sheet opens: the list is small,
-  // and a member standing in a shop with bad wifi should not watch a spinner
-  // after tapping. Filtering is done in the browser for the same reason — the
-  // route supports ?q= but a round trip per keystroke is worse here.
+  // Resolved quietly in the background. A failure is not surfaced — the member
+  // never asked for a store, so there is nothing to apologise for; they simply
+  // see the retail estimate without a savings figure.
   useEffect(() => {
     fetch('/api/member/stores')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d?.stores) setStores(d.stores as ScanStore[])
-        else setStoresFailed(true)
-        setStoresLoading(false)
+        const list = (d?.stores ?? []) as ScanStore[]
+        setSilentStore(list.find(st => st.isOriginStore) ?? null)
       })
-      .catch(() => { setStoresFailed(true); setStoresLoading(false) })
+      .catch(() => { /* no savings figure; the scan itself is unaffected */ })
   }, [])
 
   /** Guards against a slow lookup for a previous scan landing on a newer one,
@@ -324,7 +327,7 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
   const lowConfidence = result !== null && result.confidence < LOW_CONFIDENCE
 
-  const binPrice = selectedStore?.todayPrice?.price ?? null
+  const binPrice = silentStore?.todayPrice?.price ?? null
 
   // Savings are pure client-side arithmetic over two numbers already on the
   // screen: the model's free-text retail estimate and the store's published
@@ -334,13 +337,6 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
   const savings = retailRange && binPrice !== null
     ? computeSavings(retailRange, binPrice)
     : null
-
-  const visibleStores = storeQuery.trim()
-    ? stores.filter(st => {
-        const q = storeQuery.trim().toLowerCase()
-        return `${st.displayName} ${st.city} ${st.state}`.toLowerCase().includes(q)
-      })
-    : stores
 
   // The representative image appears only once we have a URL that hasn't
   // failed to load. Both conditions matter: nothing found, and found-but-
@@ -362,35 +358,6 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
             Always inspect the item before purchasing.
           </p>
         </div>
-
-        {/* Where the member says they are. Optional — skipping it costs them
-            the savings estimate and nothing else. */}
-        <button
-          onClick={() => { setStoreQuery(''); setStorePickerOpen(true) }}
-          className="mx-4 mt-3 px-4 py-3 rounded-2xl bg-white shadow-sm flex items-center gap-3 text-left"
-        >
-          <span className="text-[16px]">📍</span>
-          <span className="flex-1 min-w-0">
-            <span className="block text-[10px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
-              Shopping at
-            </span>
-            <span className="block text-[14px] font-bold text-[#1A1A2E] truncate">
-              {selectedStore?.displayName ?? 'Select Store'}
-            </span>
-            {selectedStore && (
-              <span className="block text-[11px] font-semibold text-[#8E8EA8] truncate">
-                {selectedStore.todayPrice
-                  ? <>Today: <span style={{ color: brandColor }}>{formatPrice(selectedStore.todayPrice.price)}</span>
-                      {selectedStore.todayPrice.label ? ` · ${selectedStore.todayPrice.label}` : ''}</>
-                  : 'No price posted for today'}
-              </span>
-            )}
-          </span>
-          <span className="text-[12px] font-bold flex-shrink-0" style={{ color: brandColor }}>
-            {selectedStore ? 'Change' : ''}
-          </span>
-          <span className="text-[#D1D1DC] text-lg">›</span>
-        </button>
 
           <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4 max-w-md mx-auto w-full">
 
@@ -543,86 +510,68 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                 </div>
 
                 {/* ── Estimated savings ──
-                    Three figures side by side: what the bin costs here today,
-                    what the item typically sells for, and the difference.
-                    Every branch below is a real state, not a fallback:
-                      - no store picked      → say what to do about it
-                      - store has no price   → the merchant hasn't published one
-                      - no retail estimate   → the model had none for this item
-                      - bin price >= retail  → said in words, never as "-$3" */}
-                <div className="mt-2 rounded-xl bg-[#F5F5F8] px-3.5 py-3">
-                  <p className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
-                    Estimated savings
-                  </p>
+                    Rendered only when a saving can actually be computed: we
+                    have a bin price for the silently-resolved store AND the
+                    model returned a retail figure.
 
-                  {!selectedStore ? (
-                    <button
-                      onClick={() => { setStoreQuery(''); setStorePickerOpen(true) }}
-                      className="text-[13px] font-bold mt-1 text-left"
-                      style={{ color: brandColor }}
-                    >
-                      Select a store to see savings ›
-                    </button>
-                  ) : binPrice === null ? (
-                    <p className="text-[13px] font-semibold text-[#B0B0C8] mt-1">
-                      {/* One expression, not text-next-to-expression: JSX drops
-                          the space between them and it renders "Main Sthasn't". */}
-                      {`${selectedStore.displayName} hasn't posted a price for today.`}
+                    There is deliberately no "pick a store" prompt and no store
+                    name — the scanner screen shows no store at all. When the
+                    price is unknown the member simply sees the retail estimate
+                    above and nothing more, which is honest rather than a
+                    placeholder explaining a choice they were never offered. */}
+                {binPrice !== null && retailRange && (
+                  <div className="mt-2 rounded-xl bg-[#F5F5F8] px-3.5 py-3">
+                    <p className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
+                      Estimated savings
                     </p>
-                  ) : !retailRange ? (
-                    <p className="text-[13px] font-semibold text-[#B0B0C8] mt-1">
-                      No retail estimate for this item, so we can&apos;t work out a saving.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-3 gap-2 mt-2">
-                        <div>
-                          <p className="text-[9px] font-bold tracking-[0.05em] uppercase text-[#8E8EA8] leading-tight">
-                            Today&apos;s bin price
-                          </p>
-                          <p className="text-[15px] font-bold text-[#1A1A2E] mt-0.5">
-                            {formatPrice(binPrice)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-bold tracking-[0.05em] uppercase text-[#8E8EA8] leading-tight">
-                            Est. retail value
-                          </p>
-                          <p className="text-[15px] font-bold text-[#1A1A2E] mt-0.5">
-                            {retailRange.low === retailRange.high
-                              ? formatPrice(retailRange.low)
-                              : `${formatPrice(retailRange.low)}–${formatPrice(retailRange.high)}`}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-bold tracking-[0.05em] uppercase text-[#8E8EA8] leading-tight">
-                            Est. savings
-                          </p>
-                          <p
-                            className="text-[15px] font-bold mt-0.5"
-                            style={{ color: savings!.exceedsRetail ? '#8E8EA8' : '#2A7D34' }}
-                          >
-                            {savings!.exceedsRetail
-                              ? '—'
-                              : savings!.low === savings!.high
-                                ? formatPrice(savings!.low)
-                                : `${formatPrice(savings!.low)}–${formatPrice(savings!.high)}`}
-                          </p>
-                        </div>
-                      </div>
 
-                      {savings!.exceedsRetail && (
-                        <p className="text-[12px] font-semibold text-[#8A6A00] bg-[#FFB21725] rounded-lg px-3 py-2 mt-2 leading-relaxed">
-                          Bin price may exceed estimated retail value for this item.
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      <div>
+                        <p className="text-[9px] font-bold tracking-[0.05em] uppercase text-[#8E8EA8] leading-tight">
+                          Today&apos;s bin price
                         </p>
-                      )}
+                        <p className="text-[15px] font-bold text-[#1A1A2E] mt-0.5">
+                          {formatPrice(binPrice)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-bold tracking-[0.05em] uppercase text-[#8E8EA8] leading-tight">
+                          Est. retail value
+                        </p>
+                        <p className="text-[15px] font-bold text-[#1A1A2E] mt-0.5">
+                          {retailRange.low === retailRange.high
+                            ? formatPrice(retailRange.low)
+                            : `${formatPrice(retailRange.low)}–${formatPrice(retailRange.high)}`}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-bold tracking-[0.05em] uppercase text-[#8E8EA8] leading-tight">
+                          Est. savings
+                        </p>
+                        <p
+                          className="text-[15px] font-bold mt-0.5"
+                          style={{ color: savings!.exceedsRetail ? '#8E8EA8' : '#2A7D34' }}
+                        >
+                          {savings!.exceedsRetail
+                            ? '—'
+                            : savings!.low === savings!.high
+                              ? formatPrice(savings!.low)
+                              : `${formatPrice(savings!.low)}–${formatPrice(savings!.high)}`}
+                        </p>
+                      </div>
+                    </div>
 
-                      <p className="text-[10px] text-[#8E8EA8] font-medium mt-2 leading-relaxed">
-                        Estimate only — actual value varies by condition, model, and market.
+                    {savings!.exceedsRetail && (
+                      <p className="text-[12px] font-semibold text-[#8A6A00] bg-[#FFB21725] rounded-lg px-3 py-2 mt-2 leading-relaxed">
+                        Bin price may exceed estimated retail value for this item.
                       </p>
-                    </>
-                  )}
-                </div>
+                    )}
+
+                    <p className="text-[10px] text-[#8E8EA8] font-medium mt-2 leading-relaxed">
+                      Estimate only — actual value varies by condition, model, and market.
+                    </p>
+                  </div>
+                )}
 
                 {/* Records the same 'shopping_cart' interest signal the old
                     button did — see the Choice type. Unlike the primary
@@ -665,8 +614,11 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
               </div>
             )}
 
-            {/* Capture — the entry action whenever there's no pending result */}
-            {!result && !busy && (
+            {/* ── The two options ──
+                Scan opens the camera; My Finds is a placeholder. Nothing else
+                belongs on this screen — there is no store selector, by design.
+                Hidden while a scan is in flight or a result is on screen. */}
+            {!result && !busy && view === 'scan' && (
               <>
                 <button
                   onClick={() => fileInput.current?.click()}
@@ -674,12 +626,39 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                   style={{ backgroundColor: brandColor }}
                 >
                   <span className="text-3xl">📷</span>
-                  {error ? 'Try again' : 'Take a photo'}
+                  {error ? 'Try again' : 'Scan'}
                 </button>
+
+                <button
+                  onClick={() => setView('finds')}
+                  className="w-full py-6 rounded-2xl font-bold text-[17px] text-[#1A1A2E] bg-white border-2 border-[#EBEBF2] flex flex-col items-center gap-2 active:scale-[0.97] transition-transform"
+                >
+                  <span className="text-3xl">🏷️</span>
+                  My Finds
+                </button>
+
                 <p className="text-[11px] text-[#8E8EA8] font-medium text-center leading-relaxed px-2">
                   Hold the item steady and fill the frame. We identify items to help you decide —
                   scans aren&apos;t purchases and don&apos;t earn stamps.
                 </p>
+              </>
+            )}
+
+            {/* My Finds — placeholder until saved scans are surfaced. */}
+            {!result && !busy && view === 'finds' && (
+              <>
+                <div className="w-full bg-white rounded-2xl px-5 py-12 shadow-sm flex flex-col items-center gap-3">
+                  <span className="text-4xl">🏷️</span>
+                  <p className="text-[14px] font-semibold text-[#8E8EA8] text-center leading-relaxed">
+                    Coming soon — your scanned items will appear here.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setView('scan')}
+                  className="w-full py-3.5 rounded-xl font-bold text-[14px] text-[#1A1A2E] bg-white border-2 border-[#EBEBF2] active:scale-[0.98] transition-transform"
+                >
+                  Back
+                </button>
               </>
             )}
 
@@ -696,103 +675,6 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
         </div>
       </div>
 
-      {/* Store picker.
-          Manual selection only — there is no GPS here. Location permission is
-          a real ask, and getting it wrong would put a member at the wrong
-          store's prices; the member knows which shop they walked into.
-          The list is the network-visible stores from /api/member/stores. */}
-      {storePickerOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <button
-            aria-label="Close store picker"
-            onClick={() => setStorePickerOpen(false)}
-            className="absolute inset-0 bg-black/40"
-          />
-          <div
-            role="dialog"
-            aria-label="Select a store"
-            className="relative bg-white rounded-t-3xl px-5 pt-5 pb-8 max-w-md w-full mx-auto shadow-2xl max-h-[80dvh] flex flex-col"
-          >
-            <div className="w-10 h-1 rounded-full bg-[#EBEBF2] mx-auto mb-4 flex-shrink-0" />
-            <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] mb-1 flex-shrink-0">
-              Where are you shopping?
-            </h2>
-            <p className="text-[12px] text-[#8E8EA8] font-medium mb-3 flex-shrink-0">
-              We&apos;ll use today&apos;s price at that store to estimate your savings.
-            </p>
-
-            <input
-              type="search"
-              value={storeQuery}
-              onChange={e => setStoreQuery(e.target.value)}
-              placeholder="Search by name or city"
-              aria-label="Search stores"
-              className="flex-shrink-0 w-full rounded-xl border border-[#EBEBF2] bg-[#F5F5F8] px-4 py-2.5 text-[14px] text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-[#4A4B98]/30 placeholder:text-[#B0B0C8]"
-            />
-
-            <div className="flex flex-col gap-2 mt-3 overflow-y-auto">
-              {storesLoading ? (
-                [...Array(3)].map((_, i) => (
-                  <div key={i} className="h-14 rounded-xl bg-[#F5F5F8] animate-pulse" />
-                ))
-              ) : storesFailed ? (
-                <p className="text-[13px] font-semibold text-[#8E8EA8] py-4 text-center">
-                  Couldn&apos;t load stores. You can still scan — you just won&apos;t see savings.
-                </p>
-              ) : visibleStores.length === 0 ? (
-                <p className="text-[13px] font-semibold text-[#8E8EA8] py-4 text-center">
-                  No stores match &ldquo;{storeQuery.trim()}&rdquo;.
-                </p>
-              ) : (
-                visibleStores.map(st => {
-                  const location = [st.city, st.state].filter(Boolean).join(', ')
-                  const isSelected = selectedStore?.id === st.id
-                  return (
-                    <button
-                      key={st.id}
-                      onClick={() => { setSelectedStore(st); setStorePickerOpen(false) }}
-                      className="w-full text-left px-4 py-3 rounded-xl bg-[#F5F5F8] active:bg-[#EBEBF2] transition-colors flex items-center gap-3"
-                      style={isSelected ? { boxShadow: `inset 0 0 0 2px ${brandColor}` } : undefined}
-                    >
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[14px] font-bold text-[#1A1A2E] truncate">
-                          {st.displayName}
-                        </span>
-                        {location && (
-                          <span className="block text-[12px] font-medium text-[#8E8EA8] truncate">
-                            {location}
-                          </span>
-                        )}
-                      </span>
-                      {/* "—" not "$0": no price posted is not a free bin. */}
-                      <span className="flex-shrink-0 text-right">
-                        <span className="block text-[9px] font-bold tracking-[0.05em] uppercase text-[#8E8EA8]">
-                          Today
-                        </span>
-                        <span
-                          className="block text-[14px] font-bold"
-                          style={{ color: st.todayPrice ? brandColor : '#B0B0C8' }}
-                        >
-                          {st.todayPrice ? formatPrice(st.todayPrice.price) : '—'}
-                        </span>
-                      </span>
-                    </button>
-                  )
-                })
-              )}
-            </div>
-
-            {/* Skipping is a real choice, not a dismissal — the scanner works
-                fine without a store, minus the savings estimate. */}
-            <button
-              onClick={() => { setSelectedStore(null); setStorePickerOpen(false) }}
-              className="flex-shrink-0 w-full mt-4 py-3 rounded-xl text-[13px] font-bold text-[#8E8EA8] border-2 border-[#EBEBF2]"
-            >
-              Skip for now
-            </button>
-          </div>
-        </div>
-      )}
     </>
   )
 }

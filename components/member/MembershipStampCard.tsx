@@ -14,6 +14,7 @@
 
 import Link from 'next/link'
 import StampProgress from '@/components/stamp/StampProgress'
+import { useStampFill } from '@/lib/use-stamp-fill'
 import {
   TIERS, resolveTier, cyclePosition, stampsToNextCoupon,
   TIER_EMOJI, TIER_LABELS, type TierName,
@@ -50,6 +51,10 @@ export default function MembershipStampCard({
   // the cashier's stamp tool uses.
   const filled = couponDue ? 20 : cyclePos
 
+  // Same cascade the join landing page plays, from one shared hook. It fills to
+  // the member's real count, not to 20 — see lib/use-stamp-fill.
+  const animatedFilled = useStampFill(filled)
+
   const isStarter = subscriptionStatus === 'free'
   const emoji = TIER_EMOJI[tier.name]
   const label = TIER_LABELS[tier.name]
@@ -72,7 +77,7 @@ export default function MembershipStampCard({
 
       {/* Progress toward the next coupon — always a 20-stamp cycle */}
       <StampProgress
-        filled={filled}
+        filled={animatedFilled}
         label={isStarter ? 'Stamps' : 'Toward your next reward'}
         caption={couponDue
           ? <><strong className="text-[#1A1A2E]">Reward ready!</strong> Redeem it on your next visit</>
@@ -83,7 +88,8 @@ export default function MembershipStampCard({
       {isStarter ? (
         <>
           <p className="text-[12px] font-semibold text-[#8A6A00] bg-[#FFB21720] rounded-xl px-3.5 py-2.5 leading-relaxed">
-            Starter ends at 20 stamps. Upgrade to VIP to keep earning.
+            You&apos;re almost there! Your Starter membership ends at 20 stamps.
+            Upgrade to VIP and keep the rewards coming — forever.
           </p>
           {showUpgradeCta && (
             <Link

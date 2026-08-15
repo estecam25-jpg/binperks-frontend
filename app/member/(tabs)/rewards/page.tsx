@@ -13,19 +13,11 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import AppHeader from '@/components/member/AppHeader'
 import MembershipStampCard from '@/components/member/MembershipStampCard'
 import { TIERS, STARTER_TIER, resolveTier, TIER_EMOJI, TIER_LABELS, type TierName } from '@/lib/tiers'
 
 const BINPERKS_BLUE = '#4A4B98'
-
-interface Reward {
-  id: string
-  couponValue: number
-  status: 'earned' | 'redeemed' | 'expired'
-  earnedAt: string
-}
 
 interface MemberData {
   firstName: string
@@ -36,20 +28,25 @@ interface MemberData {
   referralCode: string | null
 }
 
-/** The locked table, read from lib/tiers so values are never restated here. */
-const LEVELS: { name: TierName; value: number; note?: string }[] = [
-  { name: 'Free', value: STARTER_TIER.couponValue, note: 'free' },
-  ...TIERS.map((t, i) => ({
-    name: t.name,
-    value: t.couponValue,
-    note: i === 0 ? '$29.99/mo' : undefined,
-  })),
+/** The locked table, read from lib/tiers so values are never restated here —
+ *  including the multipliers, which are already the source of truth for what
+ *  the stamp route awards per visit.
+ *
+ *  No prices: the VIP cost belongs on the upgrade page, not in a rewards
+ *  reference table. */
+const LEVELS: { name: TierName; value: number; multiplier: number }[] = [
+  { name: 'Free', value: STARTER_TIER.couponValue, multiplier: STARTER_TIER.multiplier },
+  ...TIERS.map(t => ({ name: t.name, value: t.couponValue, multiplier: t.multiplier })),
 ]
+
+/** "FREE STARTER MEMBERSHIP" / "Bronze VIP MEMBERSHIP". */
+function membershipLabel(name: TierName): string {
+  return name === 'Free' ? 'FREE STARTER MEMBERSHIP' : `${TIER_LABELS[name]} VIP MEMBERSHIP`
+}
 
 export default function MemberRewardsPage() {
   const router = useRouter()
   const [member, setMember] = useState<MemberData | null>(null)
-  const [rewards, setRewards] = useState<Reward[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
@@ -60,7 +57,7 @@ export default function MemberRewardsPage() {
         return res.ok ? res.json() : null
       })
       .then(d => {
-        if (d?.member) { setMember(d.member); setRewards(d.rewards ?? []) }
+        if (d?.member) setMember(d.member)
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -80,8 +77,6 @@ export default function MemberRewardsPage() {
   const currentTier = member
     ? resolveTier(member.totalStamps, member.subscriptionStatus).name
     : null
-
-  const activeRewards = rewards.filter(r => r.status === 'earned')
 
   return (
     <>
@@ -110,40 +105,6 @@ export default function MemberRewardsPage() {
               showUpgradeCta={member.subscriptionStatus === 'free'}
             />
 
-            {/* ── Available rewards ── real data */}
-            <section className="w-full flex flex-col gap-2.5">
-              <h2 className="text-[15px] font-extrabold text-[#1A1A2E] px-1">Available Rewards</h2>
-
-              {activeRewards.length > 0 ? (
-                activeRewards.map(r => (
-                  <div
-                    key={r.id}
-                    className="w-full rounded-2xl px-5 py-5 flex items-center gap-4 shadow-sm"
-                    style={{ backgroundColor: '#2A7D34' }}
-                  >
-                    <span className="text-3xl flex-shrink-0">🎟️</span>
-                    <div className="flex-1">
-                      <p className="text-[15px] font-extrabold text-white leading-tight">
-                        ${r.couponValue} reward ready
-                      </p>
-                      <p className="text-[12px] font-medium text-white/80 mt-0.5">
-                        Show this at any participating BinPerks location.
-                      </p>
-                    </div>
-                    <span className="font-['Coiny'] text-3xl text-white flex-shrink-0">
-                      ${r.couponValue}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                // Small and friendly on purpose — a large empty wallet would
-                // make an ordinary state look like a failure.
-                <p className="text-[13px] font-medium text-[#8E8EA8] px-1">
-                  Keep stamping — your next reward is on its way.
-                </p>
-              )}
-            </section>
-
             {/* ── Reward structure ── reference, NOT a ladder */}
             <section className="w-full flex flex-col gap-2.5">
               <h2 className="text-[15px] font-extrabold text-[#1A1A2E] px-1">BinPerks Club</h2>
@@ -158,22 +119,30 @@ export default function MemberRewardsPage() {
                     >
                       <span className="text-[18px] flex-shrink-0">{TIER_EMOJI[level.name]}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-bold text-[#1A1A2E]">
-                          {level.name === 'Free' ? 'Starter' : `${TIER_LABELS[level.name]} VIP`}
+                        <p className="text-[13px] font-bold text-[#1A1A2E] leading-tight">
+                          {membershipLabel(level.name)}
                           {isCurrent && (
                             <span
-                              className="ml-2 text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded-full"
+                              className="ml-2 text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded-full align-middle"
                               style={{ backgroundColor: BINPERKS_BLUE, color: 'white' }}
                             >
                               You
                             </span>
                           )}
                         </p>
-                        <p className="text-[12px] font-medium text-[#8E8EA8]">
+                        <p className="text-[12px] font-medium text-[#8E8EA8] mt-0.5">
                           Every 20 stamps → ${level.value}
-                          {level.note ? ` (${level.note})` : ''}
                         </p>
                       </div>
+
+                      {/* The multiplier is the reason to upgrade, so it is set
+                          as a solid badge rather than muted secondary text. */}
+                      <span
+                        className="flex-shrink-0 text-[13px] font-extrabold px-2.5 py-1.5 rounded-xl whitespace-nowrap"
+                        style={{ backgroundColor: `${BINPERKS_BLUE}14`, color: BINPERKS_BLUE }}
+                      >
+                        {level.multiplier}x per visit
+                      </span>
                     </div>
                   )
                 })}
@@ -188,7 +157,8 @@ export default function MemberRewardsPage() {
               <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
                 <p className="text-[15px] font-extrabold text-[#1A1A2E]">👥 Invite a Friend</p>
                 <p className="text-[13px] font-medium text-[#8E8EA8] leading-relaxed">
-                  Earn +5 stamps when a referred friend joins and earns their first stamp.
+                  Earn +5 stamps when a referred friend joins BinPerks and earns their
+                  first stamp.
                 </p>
 
                 {member.referralUrl ? (
@@ -213,16 +183,6 @@ export default function MemberRewardsPage() {
                 )}
               </div>
             </section>
-
-            {member.subscriptionStatus === 'free' && (
-              <Link
-                href="/member/upgrade"
-                className="w-full py-4 rounded-2xl font-bold text-[15px] text-center border-2 transition-colors"
-                style={{ borderColor: BINPERKS_BLUE, color: BINPERKS_BLUE }}
-              >
-                Upgrade to VIP for bigger rewards
-              </Link>
-            )}
           </>
         )}
       </main>

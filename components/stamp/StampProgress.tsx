@@ -43,6 +43,7 @@ export default function StampProgress({
             key={i}
             className={`
               aspect-square rounded-full border-2 flex items-center justify-center
+              transition-all duration-150
               ${i < safe
                 ? 'bg-[#FFB217] border-[#FFB217]'
                 : 'bg-[#F5F5F8] border-[#EBEBF2]'

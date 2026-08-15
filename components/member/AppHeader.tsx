@@ -27,9 +27,21 @@ export default function AppHeader({
         className="px-5 py-3 flex items-center justify-between sticky top-0 z-30"
         style={{ backgroundColor: BINPERKS_BLUE }}
       >
-        <span className="font-['Coiny'] text-2xl text-white leading-none tracking-wide">
-          BinPerks
-        </span>
+        {/* The asset is expected to be TIGHTLY CROPPED to the wordmark. The
+            original export was a 1280x720 canvas with the logo filling only 41%
+            of the height, which renders a ~13px-tall wordmark at this size; the
+            file in public/ has had its transparent margins trimmed. If it is
+            ever replaced, trim the new export too or the logo will look tiny.
+
+            Width is left to the intrinsic aspect ratio — never set both, or the
+            wordmark stretches. eslint-disable because next/image needs a width
+            and this is a fixed-height mark in a sticky header. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/BinPerks_Landscape_Logo.png"
+          alt="BinPerks"
+          className="h-8 w-auto"
+        />
 
         <button
           onClick={() => setAlertsOpen(true)}

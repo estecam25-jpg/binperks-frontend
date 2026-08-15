@@ -224,12 +224,12 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
                 {/* ── Starter Member Perks ── */}
                 {data && data.freePerks.length > 0 && (
                   <section className="pt-3 flex flex-col gap-2.5">
-                    <h3 className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
-                      Starter Member Perks
+                    <h3 className="text-[22px] font-bold tracking-[0.01em] uppercase text-black leading-tight">
+                      Starter <span style={{ color: BINPERKS_BLUE }}>Free</span> Member Perks
                     </h3>
                     {data.freePerks.map(p => (
                       <div key={p.id}>
-                        <p className="text-[14px] font-bold text-[#1A1A2E]">{p.title}</p>
+                        <p className="text-[14px] font-bold text-[#4A4A5C]">{p.title}</p>
                         {p.description && (
                           <p className="text-[12px] text-[#8E8EA8] font-medium mt-1 leading-relaxed">
                             {p.description}
@@ -245,12 +245,12 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
                     to upgrade, so hiding them would defeat the point. */}
                 {data && data.vipPerks.length > 0 && (
                   <section className="pt-3 flex flex-col gap-2.5">
-                    <h3 className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
-                      VIP Member Perks
+                    <h3 className="text-[22px] font-bold tracking-[0.01em] uppercase text-black leading-tight">
+                      VIP <span style={{ color: BINPERKS_BLUE }}>Paid</span> Member Perks
                     </h3>
                     {data.vipPerks.map(p => (
                       <div key={p.id}>
-                        <p className={`text-[14px] font-bold ${isFree ? 'text-[#D1D1DC]' : 'text-[#1A1A2E]'}`}>
+                        <p className={`text-[14px] font-bold ${isFree ? 'text-[#D1D1DC]' : 'text-[#4A4A5C]'}`}>
                           {p.title}
                         </p>
                         {p.description && (

@@ -17,12 +17,11 @@ import GreetingCard from '@/components/member/GreetingCard'
 import AddToHomeScreen from '@/components/member/AddToHomeScreen'
 import MembershipStampCard from '@/components/member/MembershipStampCard'
 import {
-  FeedSection, PromoCarousel, StorePromoCard, FindCard,
+  FeedSection, PromoCarousel,
   OnlineStoreCard, LocalEventCard, BeyondBinsCard,
 } from '@/components/member/FeedCards'
 import {
-  MOCK_PROMOS, MOCK_STORE_DEALS, MOCK_FINDS,
-  MOCK_ONLINE_STORES, MOCK_EVENTS, MOCK_BEYOND_BINS,
+  MOCK_PROMOS, MOCK_ONLINE_STORES, MOCK_EVENTS, MOCK_BEYOND_BINS,
 } from '@/lib/member-mock-data'
 
 interface MemberData {
@@ -91,20 +90,16 @@ export default function MemberHomePage() {
             renders from lib/member-mock-data; swapping in a fetch does not
             change any markup. */}
 
+        {/* The "Upgrade to VIP" card is filtered out for members who already
+            subscribe — selling someone what they already pay for. Filtered by
+            id rather than by title so re-wording the copy cannot quietly switch
+            it back on. */}
         <FeedSection title="BinPerks Promos">
-          <PromoCarousel promos={MOCK_PROMOS} />
-        </FeedSection>
-
-        <FeedSection title="Deals Near You" subtitle="Offers at stores in the network">
-          <div className="flex flex-col gap-2.5">
-            {MOCK_STORE_DEALS.map(d => <StorePromoCard key={d.id} deal={d} />)}
-          </div>
-        </FeedSection>
-
-        <FeedSection title="My Finds" subtitle="Items you've scanned">
-          <div className="flex flex-col gap-2.5">
-            {MOCK_FINDS.map(f => <FindCard key={f.id} find={f} />)}
-          </div>
+          <PromoCarousel
+            promos={MOCK_PROMOS.filter(
+              p => !(p.id === 'promo-vip' && member?.subscriptionStatus === 'vip'),
+            )}
+          />
         </FeedSection>
 
         <FeedSection title="Shop From Home" subtitle="Buy from BinPerks stores online">

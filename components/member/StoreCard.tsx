@@ -26,7 +26,8 @@ export interface StoreCardStore {
   brandColor: string
   /** null when the merchant has published no price for today. Not $0. */
   todayPrice: TodayPrice | null
-  restocksToday: boolean
+  /** Still returned by the API and still used to order the list — it is just
+   *  no longer labelled on the card. */
   isOriginStore: boolean
 }
 
@@ -61,19 +62,9 @@ export default function StoreCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <p className="text-[15px] font-extrabold text-[#1A1A2E] leading-tight">
-              {store.displayName}
-            </p>
-            {store.isOriginStore && (
-              <span
-                className="text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: `${BINPERKS_BLUE}15`, color: BINPERKS_BLUE }}
-              >
-                Your store
-              </span>
-            )}
-          </div>
+          <p className="text-[15px] font-extrabold text-[#1A1A2E] leading-tight">
+            {store.displayName}
+          </p>
           <p className="text-[10px] font-medium text-[#B0B0C8] tracking-wide truncate">
             {store.canonicalKey}
           </p>
@@ -104,24 +95,15 @@ export default function StoreCard({
         </div>
       </div>
 
-      {(store.todayPrice?.label || store.restocksToday) && (
+      {/* A running special still shows; the restock badge was removed. */}
+      {store.todayPrice?.label && (
         <div className="flex flex-wrap gap-1.5 px-4 pt-2">
-          {store.todayPrice?.label && (
-            <span
-              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: '#DA121215', color: '#DA1212' }}
-            >
-              {store.todayPrice.label}
-            </span>
-          )}
-          {store.restocksToday && (
-            <span
-              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: '#FFB21725', color: '#8A5A00' }}
-            >
-              Restocks today
-            </span>
-          )}
+          <span
+            className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+            style={{ backgroundColor: '#DA121215', color: '#DA1212' }}
+          >
+            {store.todayPrice.label}
+          </span>
         </div>
       )}
 
@@ -140,7 +122,7 @@ export default function StoreCard({
           className="flex-1 py-2.5 rounded-xl text-[13px] font-bold text-white active:opacity-80 transition-opacity"
           style={{ backgroundColor: BINPERKS_BLUE }}
         >
-          {expanded ? 'Hide Store' : 'View Store'}
+          {expanded ? 'Hide Perks' : 'View Perks'}
         </button>
       </div>
 

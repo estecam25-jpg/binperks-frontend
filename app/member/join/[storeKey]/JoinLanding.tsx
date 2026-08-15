@@ -18,10 +18,11 @@
 
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect } from 'react'
 
 import { useRouter } from 'next/navigation'
 import { signupStore, signupRef, type SignupRef } from '@/lib/signup-session'
+import { useStampFill } from '@/lib/use-stamp-fill'
 
 /** The only brand color on this page. */
 const BINPERKS_BLUE = '#4A4B98'
@@ -60,8 +61,10 @@ export default function JoinLanding({
   referrer,
 }: Props) {
   const router = useRouter()
-  const [stampsFilled, setStampsFilled] = useState(0)
-  const animRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The full 20 — this card is a demo of what a completed card looks like, not
+  // anyone's real progress. Same hook the member dashboard uses, so the two
+  // animations cannot drift apart.
+  const stampsFilled = useStampFill(20)
 
   // Cache store + referral in sessionStorage on mount so child pages can read them
   useEffect(() => {
@@ -93,20 +96,6 @@ export default function JoinLanding({
   // No store Google Font is loaded here any more. Headings on a BinPerks
   // surface are Coiny, which merchants are not permitted to use — loading the
   // store's font would put merchant type on a BinPerks page.
-
-  // Stamp animation
-  useEffect(() => {
-    let count = 0
-    function fillNext() {
-      count++
-      setStampsFilled(count)
-      if (count < 20) {
-        animRef.current = setTimeout(fillNext, count < 10 ? 60 : 40)
-      }
-    }
-    animRef.current = setTimeout(fillNext, 400)
-    return () => { if (animRef.current) clearTimeout(animRef.current) }
-  }, [])
 
   // Fixed against BinPerks blue rather than derived from a store color.
   const textOpacity  = 'rgba(255,255,255,0.75)'
