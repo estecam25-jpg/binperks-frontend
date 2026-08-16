@@ -24,8 +24,11 @@ export interface StoreCardStore {
   city: string
   state: string
   brandColor: string
-  /** null when the merchant has published no price for today. Not $0. */
-  todayPrice: TodayPrice | null
+  /** Always present. Read `closed` and `price` — see lib/store-pricing. */
+  todayPrice: TodayPrice
+  /** The merchant's own Google Maps link, when they have set one. */
+  googleMapsUrl?: string | null
+  address?: string | null
   /** Still returned by the API and still used to order the list — it is just
    *  no longer labelled on the card. */
   isOriginStore: boolean
@@ -42,11 +45,14 @@ export default function StoreCard({
 }) {
   const location = [store.city, store.state].filter(Boolean).join(', ')
 
-  // No street address is stored, so Directions searches by name and city.
-  // Google resolves that to the right pin for a named business.
-  const directionsQuery = encodeURIComponent(
-    [store.displayName, store.city, store.state].filter(Boolean).join(' '),
-  )
+  // The merchant's own Google Maps link is authoritative — they pasted the pin
+  // for their exact unit. Falling back to a search by address, then by name and
+  // city, which Google resolves well for a named business.
+  const directionsHref = store.googleMapsUrl?.trim()
+    ? store.googleMapsUrl.trim()
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        [store.address, store.displayName, store.city, store.state].filter(Boolean).join(' '),
+      )}`
 
   return (
     <div className="w-full bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -80,36 +86,54 @@ export default function StoreCard({
           <p className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">Distance</p>
           <p className="text-[12px] font-bold text-[#B0B0C8] mt-0.5">Coming soon</p>
         </div>
+        {/* Three states, and they read differently on purpose:
+              CLOSED       the merchant said so
+              "—"          no price published yet — never "$0", which is a
+                           legitimate free-bin day
+              a price      open */}
         <div
           className="rounded-xl px-3 py-2"
-          style={{ backgroundColor: store.todayPrice ? `${BINPERKS_BLUE}12` : '#F5F5F8' }}
+          style={{
+            backgroundColor: store.todayPrice.closed
+              ? '#EBEBF2'
+              : store.todayPrice.price !== null ? `${BINPERKS_BLUE}12` : '#F5F5F8',
+          }}
         >
-          <p className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">Today&apos;s bin price</p>
-          {/* "—" for null, never "$0" — an unset price is not a free one. */}
+          <p className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
+            Today&apos;s bin price
+          </p>
           <p
             className="text-[12px] font-bold mt-0.5"
-            style={{ color: store.todayPrice ? BINPERKS_BLUE : '#B0B0C8' }}
+            style={{
+              color: store.todayPrice.closed
+                ? '#8E8EA8'
+                : store.todayPrice.price !== null ? BINPERKS_BLUE : '#B0B0C8',
+            }}
           >
-            {store.todayPrice ? formatPrice(store.todayPrice.price) : '—'}
+            {store.todayPrice.closed
+              ? 'Closed today'
+              : store.todayPrice.price !== null ? formatPrice(store.todayPrice.price) : '—'}
           </p>
         </div>
       </div>
 
-      {/* A running special still shows; the restock badge was removed. */}
-      {store.todayPrice?.label && (
-        <div className="flex flex-wrap gap-1.5 px-4 pt-2">
+      {/* A special event today gets its name AND price, prominently — it is
+          the reason to come in, so it outranks the price tile above. */}
+      {store.todayPrice.isEvent && store.todayPrice.label && (
+        <div className="px-4 pt-2">
           <span
-            className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+            className="inline-block text-[12px] font-extrabold px-2.5 py-1 rounded-full"
             style={{ backgroundColor: '#DA121215', color: '#DA1212' }}
           >
-            {store.todayPrice.label}
+            🎉 {store.todayPrice.label}
+            {store.todayPrice.price !== null && ` — ${formatPrice(store.todayPrice.price)}`}
           </span>
         </div>
       )}
 
       <div className="flex gap-2 px-4 py-3">
         <a
-          href={`https://www.google.com/maps/search/?api=1&query=${directionsQuery}`}
+          href={directionsHref}
           target="_blank"
           rel="noopener noreferrer"
           className="flex-1 py-2.5 rounded-xl text-[13px] font-bold text-center border-2 border-[#EBEBF2] text-[#1A1A2E] active:border-[#1A1A2E] transition-colors"

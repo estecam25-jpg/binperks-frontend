@@ -21,15 +21,39 @@ export const WEEK_ORDER: DayName[] = [
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
 ]
 
-export interface SpecialOverride {
+/**
+ * One day in the weekly schedule.
+ *
+ * A day can be in three states, and they are NOT interchangeable:
+ *   { price: 7 }        open at $7
+ *   null                CLOSED — the merchant said so
+ *   key absent          no price published yet
+ *
+ * Closed used to be expressed as a $0 price, which was ambiguous: $0 is also a
+ * legitimate free-bin day. They are separate states now.
+ */
+export interface DaySchedule {
   price: number
-  label: string
-  /** Inclusive YYYY-MM-DD. The override applies through the end of this day. */
-  expires: string | null
+  restock: boolean
 }
 
-export type PricingSchedule = Partial<Record<DayName, number | null>> & {
-  special_override?: SpecialOverride | null
+/**
+ * LEGACY shape, still read: prices were bare numbers and restock days lived in
+ * a separate stores.restock_days array. Rows were migrated to the nested form,
+ * but the reader accepts both so a deploy and a migration never have to land
+ * together.
+ */
+export type PricingSchedule =
+  Partial<Record<DayName, DaySchedule | number | null>>
+
+/** A dated one-off — "Fill-A-Bag Day". Replaces the old open-ended override,
+ *  which applied to EVERY day until someone removed it. */
+export interface SpecialEvent {
+  name: string
+  /** YYYY-MM-DD, compared against the date at the STORE. */
+  date: string
+  price: number
+  active: boolean
 }
 
 /** Stores created before this feature have no timezone set. Tampa is the
@@ -64,51 +88,124 @@ export function storeToday(timezone: string | null | undefined): {
 }
 
 export interface TodayPrice {
-  price: number
-  /** Set only for a special override, e.g. "$5 Day". */
+  /** The price today. null when closed, or when nothing is published. */
+  price: number | null
+  /** The merchant marked today CLOSED. Distinct from "no price set" — one
+   *  means the doors are shut, the other means they have not told us yet. */
+  closed: boolean
+  /** Special event name, when one is running today. */
   label: string | null
-  isOverride: boolean
+  isEvent: boolean
+  /** Fresh inventory goes out today. */
+  restock: boolean
+}
+
+/** Nothing published, and not explicitly closed. */
+const NO_PRICE: TodayPrice = {
+  price: null, closed: false, label: null, isEvent: false, restock: false,
+}
+
+/** Reads either schedule shape. Legacy rows store a bare number. */
+function readDay(raw: unknown): { price: number | null; restock: boolean } | 'closed' | 'absent' {
+  if (raw === null) return 'closed'
+  if (raw === undefined) return 'absent'
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) ? { price: raw, restock: false } : 'absent'
+  }
+  if (typeof raw === 'object') {
+    const d = raw as Partial<DaySchedule>
+    const restock = d.restock === true
+    if (typeof d.price !== 'number' || !Number.isFinite(d.price)) {
+      // An object with no usable price but restock set still carries that fact.
+      return restock ? { price: null, restock } : 'absent'
+    }
+    return { price: d.price, restock }
+  }
+  return 'absent'
 }
 
 /**
- * The bin price a member would pay at this store today, or null when the
- * merchant has not published one.
+ * What a member would pay at this store today.
  *
- * null is meaningful and distinct from 0: "no price set" must never render as
- * "free". Callers show "—" for null.
+ * Order: an active special event for today's date wins, then the weekly
+ * schedule. Always returns an object — the three states are read off `closed`
+ * and `price` rather than from a null return, so no caller can forget one.
  */
 export function todayPrice(
   schedule: PricingSchedule | null | undefined,
   timezone: string | null | undefined,
-): TodayPrice | null {
-  if (!schedule || typeof schedule !== 'object') return null
-
+  specialEvents?: unknown,
+): TodayPrice {
   const { isoDate, day } = storeToday(timezone)
 
-  // An unexpired override beats the weekday price. A null `expires` means it
-  // runs until the merchant removes it.
-  const o = schedule.special_override
-  if (o && typeof o.price === 'number' && Number.isFinite(o.price)) {
-    const live = !o.expires || o.expires >= isoDate
-    if (live) {
-      return { price: o.price, label: o.label?.trim() || null, isOverride: true }
+  // Restock is read from the schedule even when an event overrides the price:
+  // a special event does not stop fresh inventory going out.
+  const dayEntry = schedule && typeof schedule === 'object'
+    ? readDay((schedule as Record<string, unknown>)[day])
+    : 'absent'
+  const restock = dayEntry !== 'closed' && dayEntry !== 'absent' ? dayEntry.restock : false
+
+  // ── Special event for today ──
+  if (Array.isArray(specialEvents)) {
+    for (const raw of specialEvents) {
+      if (!raw || typeof raw !== 'object') continue
+      const e = raw as Partial<SpecialEvent>
+      if (e.active === false) continue
+      if (e.date !== isoDate) continue
+      if (typeof e.price !== 'number' || !Number.isFinite(e.price)) continue
+      return {
+        price: e.price,
+        closed: false,
+        label: (e.name ?? '').trim() || 'Special event',
+        isEvent: true,
+        restock,
+      }
     }
   }
 
-  const raw = schedule[day]
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null
+  // ── Weekly schedule ──
+  if (dayEntry === 'closed') {
+    return { price: null, closed: true, label: null, isEvent: false, restock: false }
+  }
+  if (dayEntry === 'absent') return NO_PRICE
 
-  return { price: raw, label: null, isOverride: false }
+  return {
+    price: dayEntry.price,
+    closed: false,
+    label: null,
+    isEvent: false,
+    restock: dayEntry.restock,
+  }
 }
 
-/** Whether the store restocks today, for a "restocked today" badge. */
+/**
+ * Whether fresh inventory goes out today.
+ *
+ * Reads the day's own `restock` flag first. The legacy stores.restock_days
+ * array is still accepted as a fallback for any row not yet migrated.
+ */
 export function restocksToday(
-  restockDays: unknown,
+  schedule: PricingSchedule | null | undefined,
   timezone: string | null | undefined,
+  legacyRestockDays?: unknown,
 ): boolean {
-  if (!Array.isArray(restockDays)) return false
   const { day } = storeToday(timezone)
-  return restockDays.some(d => typeof d === 'string' && d.toLowerCase() === day)
+
+  const entry = schedule && typeof schedule === 'object'
+    ? readDay((schedule as Record<string, unknown>)[day])
+    : 'absent'
+
+  // A closed day never restocks, and it short-circuits BEFORE the legacy array
+  // is consulted — a store that later marked the day closed would otherwise
+  // still show a "restocks today" badge from a stale restock_days entry.
+  if (entry === 'closed') return false
+
+  if (entry !== 'absent' && entry.restock) return true
+
+  if (Array.isArray(legacyRestockDays)) {
+    return legacyRestockDays.some(d => typeof d === 'string' && d.toLowerCase() === day)
+  }
+  return false
 }
 
 // ── Retail estimate parsing ──────────────────────────────────────────────────

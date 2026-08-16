@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import PricingScheduleCard from '../PricingScheduleCard'
+import StoreAddressCard from '../StoreAddressCard'
 import SuggestedPerks from '../SuggestedPerks'
 import { validatePin } from '@/lib/pin-strength'
 
@@ -1153,6 +1154,9 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
           </div>
         )}
       </div>
+
+      {/* Address — feeds the Directions button on member store cards. */}
+      <StoreAddressCard storeId={activeStoreId ?? null} />
 
       {/* Pricing schedule — own card, own fetch/save against the same route. */}
       <PricingScheduleCard storeId={activeStoreId ?? null} />

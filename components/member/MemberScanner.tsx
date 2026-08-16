@@ -80,7 +80,7 @@ interface ScanStore {
   displayName: string
   city: string
   state: string
-  todayPrice: TodayPrice | null
+  todayPrice: TodayPrice
   isOriginStore: boolean
 }
 
@@ -338,7 +338,11 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
   const lowConfidence = result !== null && result.confidence < LOW_CONFIDENCE
 
-  const binPrice = silentStore?.todayPrice?.price ?? null
+  // A closed store is NOT the same as a store with no price: showing a savings
+  // estimate against a shut shop would be telling a member to go somewhere they
+  // cannot get in.
+  const storeClosed = silentStore?.todayPrice?.closed === true
+  const binPrice = storeClosed ? null : (silentStore?.todayPrice?.price ?? null)
 
   // Savings are pure client-side arithmetic over two numbers already on the
   // screen: the model's free-text retail estimate and the store's published
@@ -530,7 +534,16 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                     price is unknown the member simply sees the retail estimate
                     above and nothing more, which is honest rather than a
                     placeholder explaining a choice they were never offered. */}
-                {binPrice !== null && retailRange && (
+                {storeClosed ? (
+                  <div className="mt-2 rounded-xl bg-[#F5F5F8] px-3.5 py-3">
+                    <p className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
+                      Estimated savings
+                    </p>
+                    <p className="text-[13px] font-semibold text-[#B0B0C8] mt-1">
+                      Store closed today
+                    </p>
+                  </div>
+                ) : binPrice !== null && retailRange && (
                   <div className="mt-2 rounded-xl bg-[#F5F5F8] px-3.5 py-3">
                     <p className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
                       Estimated savings

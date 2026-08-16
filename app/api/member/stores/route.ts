@@ -51,6 +51,11 @@ interface StoreRow {
   brand_color: string | null
   pricing_schedule: PricingSchedule | null
   restock_days: unknown
+  special_events: unknown
+  address: string | null
+  address_line2: string | null
+  zip: string | null
+  google_maps_url: string | null
   /** Drives which day "today" is — see lib/store-pricing. */
   timezone: string | null
 }
@@ -101,7 +106,7 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from('stores')
-    .select('id, canonical_key, display_name, brand_name, city, state, brand_color, pricing_schedule, restock_days, timezone')
+    .select('id, canonical_key, display_name, brand_name, city, state, brand_color, pricing_schedule, restock_days, special_events, timezone, address, address_line2, zip, google_maps_url')
     .eq('is_active', true)
     .eq('network_visible', true)
 
@@ -164,8 +169,13 @@ export async function GET(req: NextRequest) {
       // Resolved per store, in that store's timezone. null means the merchant
       // has published no price for today — which is NOT the same as $0, so
       // the UI shows "—" rather than "free".
-      todayPrice:    todayPrice(s.pricing_schedule, s.timezone),
-      restocksToday: restocksToday(s.restock_days, s.timezone),
+      todayPrice:    todayPrice(s.pricing_schedule, s.timezone, s.special_events),
+      restocksToday: restocksToday(s.pricing_schedule, s.timezone, s.restock_days),
+      // Used by the Directions button. The merchant's own Google Maps link wins;
+      // the address is the fallback the card builds a search from.
+      googleMapsUrl: s.google_maps_url ?? null,
+      address:       [s.address, s.address_line2].filter(Boolean).join(', ') || null,
+      zip:           s.zip ?? null,
       isOriginStore: s.id === originId,
     })),
   })

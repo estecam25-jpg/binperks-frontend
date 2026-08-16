@@ -45,9 +45,11 @@ interface Store {
   city: string
   state: string
   brandColor: string
-  /** Resolved by the API in the store's timezone. null = no price published. */
-  todayPrice: TodayPrice | null
+  /** Always present — read `closed` and `price`. See lib/store-pricing. */
+  todayPrice: TodayPrice
   restocksToday: boolean
+  googleMapsUrl: string | null
+  address: string | null
   isOriginStore: boolean
 }
 

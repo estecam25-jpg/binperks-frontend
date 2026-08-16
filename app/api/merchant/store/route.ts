@@ -18,7 +18,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
-import { todayPrice, DAY_NAMES, type PricingSchedule } from '@/lib/store-pricing'
+import { todayPrice, DAY_NAMES, type PricingSchedule, type SpecialEvent } from '@/lib/store-pricing'
+
+/** Event dates are plain YYYY-MM-DD, compared as strings against the store's
+ *  own local date — no Date parsing, no timezone games. */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /** See lib/merchant-auth — resilient to a stale merchants.auth_user_id. */
 async function getAuthenticatedMerchant() {
@@ -39,7 +43,7 @@ export async function GET(req: NextRequest) {
 
   const { data: store } = await admin
     .from('stores')
-    .select('id, brand_color, font_family, logo_url, store_message, google_review_url, bin_count, pricing_schedule, restock_days, timezone')
+    .select('id, brand_color, font_family, logo_url, store_message, google_review_url, bin_count, pricing_schedule, restock_days, special_events, timezone, address, address_line2, city, state, zip, google_maps_url')
     .eq('id', storeId)
     .eq('merchant_id', owner.merchantId)
     .single()
@@ -58,9 +62,16 @@ export async function GET(req: NextRequest) {
     binCount:   store.bin_count          ?? null,
     pricingSchedule: schedule,
     restockDays:     restock,
+    specialEvents:   Array.isArray(store.special_events) ? store.special_events as SpecialEvent[] : [],
+    address:         store.address ?? null,
+    addressLine2:    store.address_line2 ?? null,
+    city:            store.city ?? null,
+    state:           store.state ?? 'FL',
+    zip:             store.zip ?? null,
+    googleMapsUrl:   store.google_maps_url ?? null,
     // Resolved server-side so the merchant sees exactly what a member sees,
     // decided in the store's own timezone.
-    todayPrice: todayPrice(schedule, store.timezone),
+    todayPrice: todayPrice(schedule, store.timezone, store.special_events),
   })
 }
 
@@ -82,9 +93,16 @@ export async function PATCH(req: NextRequest) {
     joinPageVisited?:   boolean
     pricingSchedule?:   PricingSchedule
     restockDays?:       string[]
+    specialEvents?:     SpecialEvent[]
+    address?:           string | null
+    addressLine2?:      string | null
+    city?:              string | null
+    state?:             string | null
+    zip?:               string | null
+    googleMapsUrl?:     string | null
   }
 
-  const { storeId, brandColor, fontFamily, logoUrl, storeMessage, reviewUrl, binCount, marketingDownloaded, joinPageVisited, pricingSchedule, restockDays } = body
+  const { storeId, brandColor, fontFamily, logoUrl, storeMessage, reviewUrl, binCount, marketingDownloaded, joinPageVisited, pricingSchedule, restockDays, specialEvents, address, addressLine2, city, state, zip, googleMapsUrl } = body
   if (!storeId) return NextResponse.json({ error: 'storeId required' }, { status: 400 })
 
   // Validate hex color if provided
@@ -100,45 +118,74 @@ export async function PATCH(req: NextRequest) {
   // Validate the pricing schedule before it reaches the column. jsonb accepts
   // anything, so nothing else stops a bad shape from being written and then
   // failing to render for every member.
+  //
+  // Three states per day, written differently and NOT interchangeable:
+  //   null                CLOSED, deliberately — not the same as $0
+  //   omitted             no price published yet
+  //   { price, restock }  open
   let cleanSchedule: PricingSchedule | undefined
   if (pricingSchedule !== undefined) {
     const out: PricingSchedule = {}
     for (const day of DAY_NAMES) {
-      const v = pricingSchedule[day]
-      if (v === null || v === undefined || v === ('' as unknown)) continue   // "no price set"
-      const n = Number(v)
+      const v = (pricingSchedule as Record<string, unknown>)[day]
+
+      // Explicit null = closed. Preserved rather than skipped; that
+      // distinction is the whole point of the change.
+      if (v === null) { out[day] = null; continue }
+      if (v === undefined || v === '') continue
+
+      const entry = typeof v === 'object'
+        ? v as { price?: unknown; restock?: unknown }
+        : { price: v, restock: false }
+      const restock = entry.restock === true
+
+      if (entry.price === null || entry.price === undefined || entry.price === '') {
+        continue                       // no price published for that day
+      }
+
+      const n = Number(entry.price)
       if (!Number.isFinite(n) || n < 0 || n > 10000) {
         return NextResponse.json({ error: `Invalid price for ${day}` }, { status: 400 })
       }
-      out[day] = n
-    }
-
-    const o = pricingSchedule.special_override
-    if (o && o.price !== null && o.price !== undefined && String(o.price) !== '') {
-      const n = Number(o.price)
-      if (!Number.isFinite(n) || n < 0 || n > 10000) {
-        return NextResponse.json({ error: 'Invalid special override price' }, { status: 400 })
-      }
-      const expires = o.expires?.trim() || null
-      if (expires && !/^\d{4}-\d{2}-\d{2}$/.test(expires)) {
-        return NextResponse.json({ error: 'Override expiry must be YYYY-MM-DD' }, { status: 400 })
-      }
-      out.special_override = {
-        price: n,
-        label: (o.label ?? '').trim().slice(0, 40),
-        expires,
-      }
+      out[day] = { price: n, restock }
     }
     cleanSchedule = out
   }
 
+  // Dated one-off events, replacing the old open-ended special_override that
+  // overrode every day until someone removed it.
+  let cleanEvents: SpecialEvent[] | undefined
+  if (specialEvents !== undefined) {
+    if (!Array.isArray(specialEvents)) {
+      return NextResponse.json({ error: 'specialEvents must be an array' }, { status: 400 })
+    }
+    cleanEvents = []
+    for (const raw of specialEvents) {
+      const e = (raw ?? {}) as Partial<SpecialEvent>
+      const name = (e.name ?? '').trim()
+      const date = (e.date ?? '').trim()
+      if (!name && !date && e.price === undefined) continue        // blank row
+      if (!name) {
+        return NextResponse.json({ error: 'Every event needs a name' }, { status: 400 })
+      }
+      if (!DATE_RE.test(date)) {
+        return NextResponse.json({ error: `Event "${name}" needs a date` }, { status: 400 })
+      }
+      const n = Number(e.price)
+      if (!Number.isFinite(n) || n < 0 || n > 10000) {
+        return NextResponse.json({ error: `Invalid price for "${name}"` }, { status: 400 })
+      }
+      cleanEvents.push({ name: name.slice(0, 60), date, price: n, active: e.active !== false })
+    }
+  }
+
+  // stores.restock_days is legacy — restock lives inside pricing_schedule now.
+  // Still accepted so an older client cannot silently drop the flag.
   let cleanRestock: string[] | undefined
   if (restockDays !== undefined) {
     if (!Array.isArray(restockDays)) {
       return NextResponse.json({ error: 'restockDays must be an array' }, { status: 400 })
     }
-    // Filtered against the known day names so a typo cannot land in the column
-    // and silently never match.
     cleanRestock = [...new Set(
       restockDays
         .filter((d): d is string => typeof d === 'string')
@@ -160,7 +207,7 @@ export async function PATCH(req: NextRequest) {
   if (!existing) return NextResponse.json({ error: 'Store not found' }, { status: 404 })
 
   // Build update object — only include provided fields
-  const updates: Record<string, string | number | null | PricingSchedule | string[]> = {}
+  const updates: Record<string, string | number | null | PricingSchedule | string[] | SpecialEvent[]> = {}
   if (brandColor  !== undefined)  updates.brand_color         = brandColor
   if (fontFamily  !== undefined)  updates.font_family         = fontFamily ?? null
   if (logoUrl     !== undefined)  updates.logo_url            = logoUrl ?? null
@@ -171,6 +218,13 @@ export async function PATCH(req: NextRequest) {
   if (joinPageVisited)            updates.join_page_visited_at    = new Date().toISOString()
   if (cleanSchedule !== undefined) updates.pricing_schedule       = cleanSchedule
   if (cleanRestock  !== undefined) updates.restock_days           = cleanRestock
+  if (cleanEvents   !== undefined) updates.special_events         = cleanEvents
+  if (address       !== undefined) updates.address                = address?.trim() || null
+  if (addressLine2  !== undefined) updates.address_line2          = addressLine2?.trim() || null
+  if (city          !== undefined) updates.city                   = city?.trim() || null
+  if (state         !== undefined) updates.state                  = state?.trim().toUpperCase().slice(0, 2) || null
+  if (zip           !== undefined) updates.zip                    = zip?.trim() || null
+  if (googleMapsUrl !== undefined) updates.google_maps_url        = googleMapsUrl?.trim() || null
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
@@ -180,7 +234,7 @@ export async function PATCH(req: NextRequest) {
     .from('stores')
     .update(updates)
     .eq('id', storeId)
-    .select('id, brand_color, font_family, logo_url, store_message, google_review_url, bin_count, pricing_schedule, restock_days, timezone')
+    .select('id, brand_color, font_family, logo_url, store_message, google_review_url, bin_count, pricing_schedule, restock_days, special_events, timezone, address, address_line2, city, state, zip, google_maps_url')
     .single()
 
   if (error) {
@@ -199,6 +253,13 @@ export async function PATCH(req: NextRequest) {
     binCount:   updated.bin_count          ?? null,
     pricingSchedule: savedSchedule,
     restockDays:     Array.isArray(updated.restock_days) ? updated.restock_days as string[] : [],
-    todayPrice:      todayPrice(savedSchedule, updated.timezone),
+    specialEvents:   Array.isArray(updated.special_events) ? updated.special_events as SpecialEvent[] : [],
+    address:         updated.address ?? null,
+    addressLine2:    updated.address_line2 ?? null,
+    city:            updated.city ?? null,
+    state:           updated.state ?? 'FL',
+    zip:             updated.zip ?? null,
+    googleMapsUrl:   updated.google_maps_url ?? null,
+    todayPrice:      todayPrice(savedSchedule, updated.timezone, updated.special_events),
   })
 }
