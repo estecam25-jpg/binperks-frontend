@@ -16,7 +16,7 @@ export async function GET() {
     admin.from('stores').select('id, brand_name, canonical_key, is_active, merchant_id, bin_count, is_open_for_shopping, network_visible, enrollment_enabled').order('canonical_key'),
     admin.from('merchants').select('id, company_name, name, commission_eligible'),
     admin.from('members').select('home_store_id, subscription_status'),
-    admin.from('stamp_events').select('store_id, stamp_count').gte('awarded_at', sevenDaysAgo),
+    admin.from('activity_events').select('store_id, effective_stamps').gte('occurred_at', sevenDaysAgo),
     admin.from('visits').select('store_id, member_id').gte('date', thirtyDaysAgoDate),
   ])
 
@@ -43,7 +43,7 @@ export async function GET() {
   const stampsByStore: Record<string, number> = {}
   for (const s of (recentStamps.data ?? [])) {
     if (!s.store_id) continue
-    stampsByStore[s.store_id] = (stampsByStore[s.store_id] || 0) + (s.stamp_count ?? 0)
+    stampsByStore[s.store_id] = (stampsByStore[s.store_id] || 0) + (s.effective_stamps ?? 0)
   }
 
   // Unique visitors last 30 days per store

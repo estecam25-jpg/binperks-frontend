@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * "Beyond the Bins" — the four admin-curated content sections.
+ * "Beyond the Bins" — the admin-curated partner sections.
  *
  * ONE component for both places it appears, differing only in what it lets
  * through:
@@ -10,6 +10,10 @@
  *
  * Two copies would have drifted the first time a section was added, and the
  * section order is the same promise to the reader in both places.
+ *
+ * BinPerks Promos is NOT here. It is BinPerks talking about itself, not a
+ * partner, and it belongs on Home alone — see PromosSection below, which Home
+ * renders as its own standalone block above this one.
  *
  * NO MOCK FALLBACK. An empty section on Home simply does not render, which is
  * a better answer than inventing partners and deals that no admin approved —
@@ -44,13 +48,12 @@ interface Partner {
 }
 
 interface Content {
-  promos: PromoCard[]
   shop: OnlineStore[]
   deals: Deal[]
   partners: Partner[]
 }
 
-const EMPTY: Content = { promos: [], shop: [], deals: [], partners: [] }
+const EMPTY: Content = { shop: [], deals: [], partners: [] }
 
 async function load(slug: string, pinnedOnly: boolean): Promise<Row[]> {
   try {
@@ -115,19 +118,12 @@ export default function BeyondSections({
     let cancelled = false
 
     Promise.all([
-      load('promos', pinnedOnly),
       load('shop-from-home', pinnedOnly),
       load('deals-near-you', pinnedOnly),
       load('beyond-the-bins', pinnedOnly),
-    ]).then(([promos, shop, deals, partners]) => {
+    ]).then(([shop, deals, partners]) => {
       if (cancelled) return
       setContent({
-        promos: promos.map(r => ({
-          id: str(r.id), title: str(r.title), body: str(r.subtitle),
-          cta: str(r.cta_label) || 'Learn more',
-          href: str(r.cta_url) || null,
-          accent: str(r.bg_color) || BINPERKS_BLUE,
-        })),
         shop: shop.map(r => ({
           id: str(r.id), storeName: str(r.store_name),
           featuredProduct: str(r.product_title), platform: str(r.platform),
@@ -151,8 +147,8 @@ export default function BeyondSections({
     return () => { cancelled = true }
   }, [pinnedOnly])
 
-  const { promos, shop, deals, partners } = content
-  const anything = promos.length || shop.length || deals.length || partners.length
+  const { shop, deals, partners } = content
+  const anything = shop.length || deals.length || partners.length
 
   // Nothing at all, and Home is not meant to show empty sections — render the
   // whole block away rather than leaving a bare heading behind.
@@ -176,8 +172,6 @@ export default function BeyondSections({
           <div className="h-28 rounded-2xl bg-white animate-pulse" />
         ) : (
           <>
-            {section('BinPerks Promos', promos.length, <PromoCarousel promos={promos} />)}
-
             {section('Shop From Home', shop.length, (
               <FeedCarousel>
                 {shop.map(s => <OnlineStoreCard key={s.id} store={s} />)}
@@ -198,6 +192,47 @@ export default function BeyondSections({
           </>
         )}
       </div>
+    </FeedSection>
+  )
+}
+
+/**
+ * BinPerks Promos — HOME ONLY, and standalone.
+ *
+ * Not part of Beyond the Bins: that header groups PARTNER content, and a promo
+ * is BinPerks talking about itself. Grouping them implied a sponsorship
+ * relationship that does not exist.
+ *
+ * Pinned only, and renders nothing at all when there are none — a bare heading
+ * over an empty carousel is worse than no section.
+ */
+export function PromosSection() {
+  const [promos, setPromos] = useState<PromoCard[]>([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    load('promos', true).then(rows => {
+      if (cancelled) return
+      setPromos(rows.map(r => ({
+        id: str(r.id),
+        title: str(r.title),
+        body: str(r.subtitle),
+        cta: str(r.cta_label) || 'Learn more',
+        href: str(r.cta_url) || null,
+        accent: str(r.bg_color) || BINPERKS_BLUE,
+      })))
+      setLoaded(true)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  if (!loaded) return <div className="w-full h-28 rounded-2xl bg-white animate-pulse" />
+  if (promos.length === 0) return null
+
+  return (
+    <FeedSection title="BinPerks Promos">
+      <PromoCarousel promos={promos} />
     </FeedSection>
   )
 }

@@ -145,60 +145,72 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: visitError.message }, { status: 500 })
     }
 
-    // 5. Insert stamp event
+    // 5. Record the activity.
+    //
+    // stamp_events is now read-only — activity_events is the source of truth.
+    //
+    // Dual-write ran from 2026-08-08 and reconciled exactly across the whole
+    // window (matching row counts and stamp totals per member, no orphans on
+    // either side), so the legacy write has been removed. The stamp_events
+    // TABLE is deliberately kept as the historical record; nothing writes to it
+    // any more.
+    //
+    // AWAITED, and its failure fails the request. While this was a mirror it
+    // was fire-and-forget on purpose — a failed copy must not cost the cashier
+    // their stamp. Now it is the only record of the stamp, so silently
+    // swallowing an error would award a member nothing while telling the
+    // cashier it worked.
+    //
+    // Column semantics: a store visit awards 1 base stamp, scaled by the
+    // member's tier multiplier, so effective_stamps is what the old
+    // stamp_events.stamp_count held and is the column to sum. The Phase 1
+    // backfill could not recover that split, so those rows carry
+    // multiplier_applied = 1.00 with the total in stamps_awarded; live rows are
+    // distinguishable by migrated_from IS NULL.
     const awardedAt = new Date().toISOString()
 
-    await supabase
-      .from('stamp_events')
-      .insert({
-        member_id:   memberId,
-        store_id:    storeId,
-        merchant_id: merchantId,
-        cashier_id:  cashierId,
-        event_type:  'visit',
-        stamp_count: stampsToAward,
-        awarded_at:  awardedAt,
-      })
-
-    // 5a. Dual-write to activity_events (V3 Phase 2).
-    //     Fire-and-forget on purpose: the cashier's stamp must never fail or be
-    //     delayed because the V3 mirror write failed. stamp_events stays the
-    //     source of truth until the Phase 3 cutover.
-    //
-    //     Column semantics: a store visit awards 1 base stamp, scaled by the
-    //     member's tier multiplier. effective_stamps therefore equals
-    //     stamp_events.stamp_count and is the correct column to reconcile on.
-    //     Note the Phase 1 backfill could not recover that split from
-    //     stamp_events (which only stored the final count), so those 23 rows
-    //     carry multiplier_applied = 1.00 with the total in stamps_awarded.
-    //     Live rows are distinguishable by migrated_from IS NULL.
     if (!member.origin_store_id || !member.origin_merchant_id) {
-      // Every member should have origin attribution after the Phase 1 backfill
-      // and the V3 enrollment write. Missing values mean a gap worth chasing.
-      console.warn(
-        `[stamp] activity_events dual-write skipped — member ${memberId} has no origin attribution`,
+      // activity_events.origin_* are NOT NULL, so there is no row to write.
+      // This used to be a warning and a skip, which was survivable while
+      // stamp_events still captured the stamp — now it would lose it entirely.
+      // The visit row inserted above is rolled back so the member is not left
+      // blocked by the once-per-day guard for a stamp they never received.
+      console.error(
+        `[stamp] member ${memberId} has no origin attribution — cannot record activity`,
       )
-    } else {
-      const multiplier = stampsToAward   // base is always 1 visit stamp
+      await supabase.from('visits')
+        .delete()
+        .eq('member_id', memberId)
+        .eq('store_id', storeId)
+        .eq('date', today)
+      return NextResponse.json({ error: 'member_missing_origin' }, { status: 500 })
+    }
 
-      admin.from('activity_events').insert({
-        member_id:          memberId,
-        store_id:           storeId,
-        merchant_id:        merchantId,
-        origin_store_id:    member.origin_store_id,
-        origin_merchant_id: member.origin_merchant_id,
-        participant_type:   'bin_store',
-        activity_type:      'store_visit',
-        stamps_awarded:     1,
-        multiplier_applied: multiplier,
-        effective_stamps:   stampsToAward,
-        occurred_at:        awardedAt,
-        cashier_id:         cashierId,
-        migrated_from:      null,   // null = live event, not backfill
-        source_record_id:   null,
-      }).then(({ error }) => {
-        if (error) console.error('[stamp] activity_events dual-write failed:', error)
-      })
+    const { error: activityError } = await admin.from('activity_events').insert({
+      member_id:          memberId,
+      store_id:           storeId,
+      merchant_id:        merchantId,
+      origin_store_id:    member.origin_store_id,
+      origin_merchant_id: member.origin_merchant_id,
+      participant_type:   'bin_store',
+      activity_type:      'store_visit',
+      stamps_awarded:     1,
+      multiplier_applied: stampsToAward,   // base is always 1 visit stamp
+      effective_stamps:   stampsToAward,
+      occurred_at:        awardedAt,
+      cashier_id:         cashierId,
+      migrated_from:      null,   // null = live event, not backfill
+      source_record_id:   null,
+    })
+
+    if (activityError) {
+      console.error('[stamp] activity_events insert failed:', activityError)
+      await supabase.from('visits')
+        .delete()
+        .eq('member_id', memberId)
+        .eq('store_id', storeId)
+        .eq('date', today)
+      return NextResponse.json({ error: 'stamp_not_recorded' }, { status: 500 })
     }
 
     // 6. Update total_stamps and detect tier milestones

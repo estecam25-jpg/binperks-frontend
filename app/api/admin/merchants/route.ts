@@ -54,13 +54,13 @@ export async function GET(req: NextRequest) {
       // this route returned 500 and the Merchants tab rendered empty.
       .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at, stripe_customer_id, participant_type, commission_eligible, negative_balance, admin_suspended, admin_suspension_reason')
       .order('created_at', { ascending: false }),
-    admin.from('stamp_events').select('merchant_id, stamp_count').gte('awarded_at', sevenDaysAgo),
+    admin.from('activity_events').select('merchant_id, effective_stamps').gte('occurred_at', sevenDaysAgo),
     admin.from('members').select('merchant_id, subscription_status'),
     admin.from('merchant_w9').select('merchant_id, status, submitted_at, reviewed_at'),
     admin.from('stores').select('merchant_id, logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at'),
     admin.from('perks').select('merchant_id, is_active, member_type').eq('is_active', true),
     admin.from('staff_users').select('merchant_id').eq('is_active', true),
-    admin.from('stamp_events').select('merchant_id'),
+    admin.from('activity_events').select('merchant_id'),
     admin.from('participant_types').select('id, display_name'),
   ])
 
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
   const stampsByMerchant: Record<string, number> = {}
   for (const s of (stampEvents.data ?? [])) {
     if (!s.merchant_id) continue
-    stampsByMerchant[s.merchant_id] = (stampsByMerchant[s.merchant_id] || 0) + (s.stamp_count ?? 0)
+    stampsByMerchant[s.merchant_id] = (stampsByMerchant[s.merchant_id] || 0) + (s.effective_stamps ?? 0)
   }
 
   // W-9 status per merchant

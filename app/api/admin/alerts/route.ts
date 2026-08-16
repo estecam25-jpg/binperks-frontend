@@ -19,7 +19,7 @@ export async function GET() {
       .select('id, company_name, name, billing_status')
       .eq('billing_status', 'active'),
     admin.from('members').select('merchant_id, subscription_status'),
-    admin.from('stamp_events').select('merchant_id, stamp_count').gte('awarded_at', sevenDaysAgo),
+    admin.from('activity_events').select('merchant_id, effective_stamps').gte('occurred_at', sevenDaysAgo),
     admin.from('members').select('*', { count: 'exact', head: true })
       .eq('subscription_status', 'vip').gte('created_at', todayStart.toISOString()),
     admin.from('members').select('*', { count: 'exact', head: true })
@@ -30,7 +30,7 @@ export async function GET() {
   const stampsByMerchant: Record<string, number> = {}
   for (const s of (stampCounts.data ?? [])) {
     if (!s.merchant_id) continue
-    stampsByMerchant[s.merchant_id] = (stampsByMerchant[s.merchant_id] || 0) + (s.stamp_count ?? 0)
+    stampsByMerchant[s.merchant_id] = (stampsByMerchant[s.merchant_id] || 0) + (s.effective_stamps ?? 0)
   }
 
   // Member counts per merchant

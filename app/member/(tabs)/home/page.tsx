@@ -16,7 +16,7 @@ import AppHeader from '@/components/member/AppHeader'
 import GreetingCard from '@/components/member/GreetingCard'
 import AddToHomeScreen from '@/components/member/AddToHomeScreen'
 import MembershipStampCard from '@/components/member/MembershipStampCard'
-import BeyondSections from '@/components/member/BeyondSections'
+import BeyondSections, { PromosSection } from '@/components/member/BeyondSections'
 
 interface MemberData {
   firstName: string
@@ -79,6 +79,11 @@ export default function MemberHomePage() {
             </p>
           </div>
         )}
+
+        {/* BinPerks Promos — standalone, NOT under the Beyond the Bins header.
+            Beyond the Bins groups partner content; a promo is BinPerks
+            speaking for itself. Home only; the MORE tab has no promos. */}
+        <PromosSection />
 
         {/* ── Beyond the Bins ──
             PINNED items only. A section with nothing pinned is hidden

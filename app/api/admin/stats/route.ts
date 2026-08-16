@@ -36,7 +36,7 @@ export async function GET() {
   ] = await Promise.all([
     admin.from('members').select('*', { count: 'exact', head: true }).eq('subscription_status', 'free'),
     admin.from('members').select('*', { count: 'exact', head: true }).eq('subscription_status', 'vip'),
-    admin.from('stamp_events').select('stamp_count').throwOnError(),
+    admin.from('activity_events').select('effective_stamps').throwOnError(),
     admin.from('rewards').select('*', { count: 'exact', head: true }).eq('status', 'earned'),
     admin.from('rewards').select('*', { count: 'exact', head: true }).eq('status', 'redeemed'),
     // created_at is selected so this month's new merchants can be derived from
@@ -69,7 +69,7 @@ export async function GET() {
     0,
   )
 
-  const totalStamps = (stampSum ?? []).reduce((sum: number, r: { stamp_count: number }) => sum + (r.stamp_count ?? 0), 0)
+  const totalStamps = (stampSum ?? []).reduce((sum: number, r: { effective_stamps: number }) => sum + (r.effective_stamps ?? 0), 0)
 
   // V3 billing: the first cycle is $299.99 Implementation & Launch, then the
   // $99.00 platform subscription from cycle 2 onward. Additional locations are

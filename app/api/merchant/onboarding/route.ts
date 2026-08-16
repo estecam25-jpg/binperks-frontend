@@ -20,7 +20,7 @@ export async function GET() {
     admin.from('stores').select('logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at, agreement_signed_at').eq('merchant_id', merchant.id),
     admin.from('perks').select('member_type').eq('merchant_id', merchant.id).eq('is_active', true),
     admin.from('staff_users').select('id').eq('merchant_id', merchant.id).eq('is_active', true),
-    admin.from('stamp_events').select('id').eq('merchant_id', merchant.id).limit(1),
+    admin.from('activity_events').select('id').eq('merchant_id', merchant.id).limit(1),
   ])
 
   const storeList      = stores.data ?? []

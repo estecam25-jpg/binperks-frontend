@@ -45,7 +45,7 @@ const RIGHT_TABS: Tab[] = [
   // destination than as settings. Labelled MORE rather than "Beyond the Bins":
   // the tab bar has ~60px per label and the longer name wrapped or truncated.
   // The page itself still leads with the Beyond the Bins heading.
-  { href: '/member/more',    label: 'More',    icon: '⋯' },
+  { href: '/member/more',    label: 'More',    icon: '⭐' },
 ]
 
 export default function BottomNavigation() {
