@@ -20,6 +20,27 @@ export type AlertType =
   | 'binperks_announcement'
   | 'store_message'
 
+/**
+ * The icon for each alert type.
+ *
+ * Lives beside the type union so the two cannot drift: adding a member of
+ * AlertType without an icon is a type error, not a silent fallback to a
+ * generic bell. Shared by the member drawer and the admin send preview, so an
+ * admin composing an announcement sees the glyph a member will actually get.
+ */
+export const ALERT_GLYPH: Record<AlertType, string> = {
+  reward_earned:         '🎉',
+  coupon_ready:          '🎉',
+  stamp_awarded:         '🏆',
+  binperks_announcement: '📢',
+  store_message:         '🏪',
+}
+
+/** Falls back for a row whose type predates a new member of the union. */
+export function alertGlyph(type: string): string {
+  return ALERT_GLYPH[type as AlertType] ?? '🔔'
+}
+
 interface NewAlert {
   memberId: string
   type: AlertType

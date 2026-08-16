@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin-emails'
 import ContentTab from './ContentTab'
+import AnnouncementsTab from './AnnouncementsTab'
 import { CONTENT_TYPES, contentTypeBySlug } from '@/lib/admin-content'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ interface ScannerStats {
 }
 type TabId =
   | 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'scanner' | 'alerts'
+  | 'announcements'
   // Content tabs, one per entry in CONTENT_TYPES. Prefixed so a content slug
   // can never collide with an operational tab name.
   | `content:${string}`
@@ -1349,6 +1351,7 @@ export default function AdminDashboard() {
     { id: 'settlement', label: 'Settlement' },
     { id: 'scanner',   label: 'Scanner' },
     { id: 'alerts',    label: 'Alerts' },
+    { id: 'announcements', label: 'Announcements' },
     // Content management. Driven by the registry so adding a type adds a tab.
     ...CONTENT_TYPES.map(t => ({ id: `content:${t.slug}` as TabId, label: t.label })),
   ]
@@ -1392,6 +1395,9 @@ export default function AdminDashboard() {
         {tab === 'settlement' && renderSettlement()}
         {tab === 'scanner'   && renderScanner()}
         {tab === 'alerts'    && renderAlerts()}
+
+        {/* Fetches its own data; nothing to lazy-load from here. */}
+        {tab === 'announcements' && <AnnouncementsTab />}
 
         {/* ContentTab fetches its own rows keyed on the slug, so switching
             between content tabs reloads without any wiring here. */}

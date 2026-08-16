@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { alertGlyph } from '@/lib/member-alerts'
 
 const BINPERKS_BLUE = '#4A4B98'
 
@@ -23,15 +24,6 @@ interface Alert {
   body: string
   read: boolean
   createdAt: string
-}
-
-/** An emoji per alert type, so the list is scannable without reading it. */
-const TYPE_GLYPH: Record<string, string> = {
-  coupon_ready:          '🎟️',
-  reward_earned:         '🎉',
-  stamp_awarded:         '🏆',
-  binperks_announcement: '📣',
-  store_message:         '🏪',
 }
 
 /** "2h ago", "3d ago" — an exact timestamp is noise on a notification. */
@@ -166,7 +158,7 @@ export default function AlertsDrawer({
                 style={{ backgroundColor: a.read ? '#FAFAFC' : `${BINPERKS_BLUE}0D` }}
               >
                 <span className="text-[20px] leading-none mt-0.5 flex-shrink-0">
-                  {TYPE_GLYPH[a.type] ?? '🔔'}
+                  {alertGlyph(a.type)}
                 </span>
                 <span className="flex-1 min-w-0">
                   <span className="flex items-center gap-1.5">
