@@ -3,29 +3,47 @@
 /**
  * BinPerks logo + alerts bell, shown at the top of member tab screens.
  *
- * The bell and its unread dot are placeholders — there is no alerts backend.
- * unreadCount therefore defaults to 0 and NOTHING passes a real value yet, so
- * the dot stays off. It used to be handed a literal 1, which meant every member
- * saw a permanent unread badge for alerts that do not exist. When the alerts
- * backend lands, pass a real count and the dot starts meaning something.
+ * The bell's dot is driven by the REAL unread count from /api/member/alerts,
+ * fetched once on mount. It used to be handed a literal 1, which gave every
+ * member a permanent badge for alerts that did not exist.
+ *
+ * The count is held here rather than inside the drawer so the dot survives the
+ * drawer closing, and the drawer reports changes back up as they are made.
  *
  * The gear sits to the LEFT of the bell and is how Account is reached now that
  * it is no longer a bottom-nav tab.
  */
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import AlertsDrawer from './AlertsDrawer'
 
 const BINPERKS_BLUE = '#4A4B98'
 
-export default function AppHeader({
-  unreadCount = 0,
-}: {
-  /** MOCK DATA — connect to real API in Phase 2. Any value > 0 shows the dot. */
-  unreadCount?: number
-}) {
+export default function AppHeader() {
   const [alertsOpen, setAlertsOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/member/alerts')
+      .then(r => {
+        if (!r.ok) return null
+        // The header carries the count too, so the dot can update without
+        // reading the whole list.
+        const header = r.headers.get('X-Unread-Count')
+        if (header !== null) return { unreadCount: Number(header) }
+        return r.json()
+      })
+      .then(d => {
+        if (!cancelled && typeof d?.unreadCount === 'number') setUnreadCount(d.unreadCount)
+      })
+      .catch(() => { /* no dot; the bell still opens */ })
+    return () => { cancelled = true }
+  }, [])
+
+  // Stable, so the drawer's effect does not re-run on every header render.
+  const handleUnreadChange = useCallback((n: number) => setUnreadCount(n), [])
 
   return (
     <>
@@ -74,7 +92,12 @@ export default function AppHeader({
         </div>
       </header>
 
-      {alertsOpen && <AlertsDrawer onClose={() => setAlertsOpen(false)} />}
+      {alertsOpen && (
+        <AlertsDrawer
+          onClose={() => setAlertsOpen(false)}
+          onUnreadChange={handleUnreadChange}
+        />
+      )}
     </>
   )
 }

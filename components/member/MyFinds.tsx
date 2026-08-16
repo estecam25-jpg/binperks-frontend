@@ -6,11 +6,12 @@
  * Every scan is a find. There is no manual save step: the "Save to My Finds"
  * button was removed because the history is automatic.
  *
- * NO PRODUCT IMAGE. scanner_events stores no image — representative_image_url
- * was dropped, and the Product Image Service's Brave URLs are transient and
- * may not be persisted. Re-resolving one per row would be a third-party call
- * per item per page view. Each row shows a category tile instead, which is
- * honest about what we actually kept.
+ * PHOTOS are the member's OWN, served through short-lived signed URLs minted
+ * per request. Scans from before photo storage existed have none and fall back
+ * to a category tile, so history stays readable rather than half-broken.
+ *
+ * A signed URL can expire while this list is open, so a failed image load falls
+ * back to the tile too rather than leaving a torn thumbnail.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -32,6 +33,8 @@ interface Find {
   estimatedRetail: string | null
   scannedAt: string
   storeName: string | null
+  /** Fresh signed URL, or null for scans taken before photo storage. */
+  photoUrl: string | null
 }
 
 /** "Aug 15" for this year, "Aug 15, 2025" otherwise. */
@@ -71,6 +74,10 @@ export default function MyFinds({ onBack }: { onBack: () => void }) {
   const loading = loadedFor !== range
 
   const [loadingMore, setLoadingMore] = useState(false)
+
+  /** Photos whose signed URL failed to load — expired, or removed. Falls back
+   *  to the category tile rather than showing a broken image. */
+  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -138,13 +145,27 @@ export default function MyFinds({ onBack }: { onBack: () => void }) {
         <div className="flex flex-col gap-2">
           {finds.map(f => (
             <article key={f.id} className="w-full bg-white rounded-2xl px-4 py-3.5 shadow-sm flex items-start gap-3.5">
-              {/* Category tile, not a product photo — see the file header. */}
-              <div
-                className="w-14 h-14 rounded-xl bg-[#F5F5F8] border border-[#EBEBF2] flex items-center justify-center flex-shrink-0"
-                aria-hidden="true"
-              >
-                <span className="text-[22px]">{categoryGlyph(f.category)}</span>
-              </div>
+              {/* The member's own photo when there is one, else the tile. */}
+              {f.photoUrl && !failedPhotos.has(f.id) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={f.photoUrl}
+                  alt={f.product ?? 'Scanned item'}
+                  onError={() => setFailedPhotos(prev => new Set(prev).add(f.id))}
+                  // Not loading="lazy": an offscreen lazy image never requests,
+                  // so onError never fires and an expired URL would leave a gap
+                  // where the tile should have been.
+                  decoding="async"
+                  className="w-14 h-14 rounded-xl object-cover bg-[#F5F5F8] border border-[#EBEBF2] flex-shrink-0"
+                />
+              ) : (
+                <div
+                  className="w-14 h-14 rounded-xl bg-[#F5F5F8] border border-[#EBEBF2] flex items-center justify-center flex-shrink-0"
+                  aria-hidden="true"
+                >
+                  <span className="text-[22px]">{categoryGlyph(f.category)}</span>
+                </div>
+              )}
 
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-bold text-[#1A1A2E] leading-snug">

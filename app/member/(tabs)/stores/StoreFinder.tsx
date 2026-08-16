@@ -79,6 +79,52 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState(false)
 
+  /** Favourited store ids. Updated OPTIMISTICALLY — the heart has to feel
+   *  instant, and the server call is reconciled afterwards. */
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/member/favorites')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!cancelled && d?.storeIds) setFavorites(new Set(d.storeIds as string[]))
+      })
+      .catch(() => { /* no favourites shown; the list still works */ })
+    return () => { cancelled = true }
+  }, [])
+
+  async function toggleFavorite(storeId: string) {
+    const wasFavorite = favorites.has(storeId)
+
+    // Optimistic: flip now, reconcile after.
+    setFavorites(prev => {
+      const next = new Set(prev)
+      if (wasFavorite) next.delete(storeId); else next.add(storeId)
+      return next
+    })
+
+    try {
+      const res = wasFavorite
+        ? await fetch(`/api/member/favorites/${storeId}`, { method: 'DELETE' })
+        : await fetch('/api/member/favorites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ store_id: storeId }),
+          })
+      if (!res.ok) throw new Error(String(res.status))
+    } catch {
+      // Put it back. Leaving a filled heart on a favourite that was never
+      // saved is worse than the flicker — the member would look for it under
+      // Favorites and not find it.
+      setFavorites(prev => {
+        const next = new Set(prev)
+        if (wasFavorite) next.add(storeId); else next.delete(storeId)
+        return next
+      })
+    }
+  }
+
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [perks, setPerks]           = useState<Record<string, PerkData>>({})
   const [perksLoading, setPerksLoading] = useState<string | null>(null)
@@ -111,6 +157,10 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
     return () => clearTimeout(t)
   }, [query, stateFilter, loadStores])
 
+  const visibleStores = filter === 'Favorites'
+    ? stores.filter(s => favorites.has(s.id))
+    : stores
+
   async function toggleStore(store: Store) {
     if (expandedId === store.id) { setExpandedId(null); return }
 
@@ -142,13 +192,12 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
   return (
     <div className="w-full flex flex-col gap-2.5">
 
-      {/* Filters. "All Stores" is the only one backed by data today — the
-          other two need member location and a favourites table.
-          MOCK DATA — connect to real API in Phase 2. */}
+      {/* Favorites is backed by member_store_favorites now. Near Me still
+          needs member location, so it stays disabled rather than pretending. */}
       <div className="flex gap-2" role="tablist" aria-label="Store filters">
         {(['Near Me', 'Favorites', 'All Stores'] as const).map(f => {
           const active = f === filter
-          const enabled = f === 'All Stores'
+          const enabled = f === 'All Stores' || f === 'Favorites'
           return (
             <button
               key={f}
@@ -217,7 +266,7 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
         </div>
       )}
 
-      {!loading && !error && stores.length === 0 && (
+      {!loading && !error && filter !== 'Favorites' && stores.length === 0 && (
         <div className="bg-white rounded-2xl px-5 py-6 text-center shadow-sm">
           <p className="text-[14px] text-[#8E8EA8] font-medium">
             {query.trim()
@@ -227,7 +276,17 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
         </div>
       )}
 
-      {!loading && !error && stores.map(store => {
+      {/* Favourites are filtered client-side from the list already loaded, so
+          switching tabs does not re-query. */}
+      {!loading && !error && filter === 'Favorites' && visibleStores.length === 0 && (
+        <div className="bg-white rounded-2xl px-5 py-8 text-center shadow-sm">
+          <p className="text-[14px] text-[#8E8EA8] font-medium">
+            Tap ♡ on any store to save it here.
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && visibleStores.map(store => {
         const isExpanded = expandedId === store.id
         const data = perks[store.id]
 
@@ -237,6 +296,8 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
             store={store}
             expanded={isExpanded}
             onToggle={() => toggleStore(store)}
+            favorited={favorites.has(store.id)}
+            onToggleFavorite={() => toggleFavorite(store.id)}
           >
             <>
 

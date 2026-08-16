@@ -35,13 +35,16 @@ export interface StoreCardStore {
 }
 
 export default function StoreCard({
-  store, expanded, onToggle, children,
+  store, expanded, onToggle, children, favorited, onToggleFavorite,
 }: {
   store: StoreCardStore
   expanded: boolean
   onToggle: () => void
   /** Store detail (perks, message), rendered when expanded. */
   children?: React.ReactNode
+  /** Omitted where favouriting is not offered. */
+  favorited?: boolean
+  onToggleFavorite?: () => void
 }) {
   const location = [store.city, store.state].filter(Boolean).join(', ')
 
@@ -78,6 +81,21 @@ export default function StoreCard({
             <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5">{location}</p>
           )}
         </div>
+
+        {/* Favourite. Its own button, not part of the card's expand target —
+            tapping the heart must never also open the perks panel. */}
+        {onToggleFavorite && (
+          <button
+            onClick={onToggleFavorite}
+            aria-pressed={!!favorited}
+            aria-label={favorited
+              ? `Remove ${store.displayName} from favourites`
+              : `Save ${store.displayName} to favourites`}
+            className="flex-shrink-0 -mt-1 -mr-1 w-9 h-9 flex items-center justify-center rounded-full active:bg-[#F5F5F8] transition-colors"
+          >
+            <span className="text-[19px] leading-none">{favorited ? '❤️' : '♡'}</span>
+          </button>
+        )}
       </div>
 
       {/* Distance is still MOCK — no coordinates in the schema. Price is real. */}

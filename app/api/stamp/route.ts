@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { postToGhl } from '@/lib/ghl-webhook'
+import { createAlert, couponReadyAlert, tierUpAlert } from '@/lib/member-alerts'
 
 export async function POST(req: NextRequest) {
   try {
@@ -262,6 +263,22 @@ export async function POST(req: NextRequest) {
         .from('members')
         .update({ coupon_due: true })
         .eq('id', memberId)
+    }
+
+    // 8a. Notify the member.
+    //
+    //     AWAITED but never fatal: createAlert swallows its own errors. The
+    //     stamp and the reward are already written — failing to tell someone
+    //     about a reward they have must not undo the reward.
+    //
+    //     Awaited rather than fire-and-forget because Vercel can freeze the
+    //     instance the moment this handler returns, which is what silently
+    //     drops un-awaited work (see the GHL note below).
+    if (couponIssued) {
+      await createAlert(admin, couponReadyAlert(memberId, couponValue, storeId))
+    }
+    if (justLeveledUp) {
+      await createAlert(admin, tierUpAlert(memberId, justLeveledUp, storeId))
     }
 
     // 9. Redeem existing coupon if coupon_due was true

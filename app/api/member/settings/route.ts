@@ -23,6 +23,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 
@@ -95,6 +96,49 @@ export async function PATCH(req: NextRequest) {
   if (error) {
     console.error('[/api/member/settings] Update error:', error)
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 })
+  }
+
+  // Scan photos are DELETED on deactivation.
+  //
+  // "Member data never deleted, only deactivated" governs the loyalty record —
+  // stamps, rewards, attribution — which BinPerks needs for settlement and
+  // history. Photographs a member took are different: they are personal
+  // content, not a business record, and keeping them after someone closes
+  // their account is not something they agreed to. The scanner_events rows
+  // stay; only the images go, and photo_storage_path is cleared so nothing
+  // later tries to sign a URL for a file that no longer exists.
+  if (body.deactivate === true) {
+    try {
+      // Admin client, not the session client: scan-photos is a PRIVATE bucket
+      // with no storage policies, so only the service role can remove from it.
+      const admin = createAdminSupabaseClient()
+
+      const { data: scans } = await admin
+        .from('scanner_events')
+        .select('id, photo_storage_path')
+        .eq('member_id', member.id)
+        .not('photo_storage_path', 'is', null)
+
+      const paths = (scans ?? [])
+        .map(r => r.photo_storage_path)
+        .filter((p): p is string => !!p)
+
+      if (paths.length > 0) {
+        const { error: rmError } = await admin.storage.from('scan-photos').remove(paths)
+        if (rmError) console.error('[/api/member/settings] photo delete failed:', rmError)
+        else {
+          await admin
+            .from('scanner_events')
+            .update({ photo_storage_path: null })
+            .eq('member_id', member.id)
+        }
+      }
+    } catch (err) {
+      // Never fails the deactivation: the member asked to close their account
+      // and that has already happened. A leftover photo is followed up, not a
+      // reason to keep them signed up.
+      console.error('[/api/member/settings] photo cleanup threw:', err)
+    }
   }
 
   return NextResponse.json({ ok: true, vipCancelsAt })

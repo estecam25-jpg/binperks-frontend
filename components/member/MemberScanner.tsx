@@ -91,6 +91,16 @@ const MAX_EDGE = 1568
 const JPEG_QUALITY = 0.8
 
 /**
+ * The photo KEPT for My Finds — smaller than the one sent for identification.
+ *
+ * 1568px at quality 0.8 is sized for the vision model and lands around 1-2MB;
+ * a thumbnail in a history list does not need that. 1024px at 0.8 comes out
+ * around 200-300KB, which is what the storage bucket is capped for.
+ */
+const STORED_MAX_EDGE = 1024
+const STORED_QUALITY = 0.8
+
+/**
  * Downscale the captured photo in the browser before upload.
  *
  * A modern phone photo is 3–8 MB, which is slow on store wifi and over the
@@ -98,6 +108,19 @@ const JPEG_QUALITY = 0.8
  * orientation keeps portrait shots upright — without it, iOS photos arrive
  * rotated and identification suffers.
  */
+/** Re-encodes an already-decoded bitmap at a given size. Kept separate from
+ *  downscale so the scan upload and the stored photo can differ. */
+function encodeAt(bitmap: ImageBitmap, maxEdge: number, quality: number): string {
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bitmap.width * scale)
+  canvas.height = Math.round(bitmap.height * scale)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas_unavailable')
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', quality)
+}
+
 async function downscale(file: File): Promise<{ dataUrl: string; mediaType: string }> {
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
 
@@ -206,6 +229,18 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
 
     try {
       const { dataUrl, mediaType } = await downscale(file)
+
+      // A second, smaller encode for storage. Built from the same file so the
+      // member is not asked to hold still twice, and produced BEFORE the scan
+      // request so the bitmap work happens while they are already waiting.
+      let storedPhoto: string | null = null
+      try {
+        const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
+        storedPhoto = encodeAt(bmp, STORED_MAX_EDGE, STORED_QUALITY)
+        bmp.close()
+      } catch {
+        // No stored photo for this scan; the scan itself is unaffected.
+      }
       // Held for the result screen, not just as an upload preview.
       setCapturedPhoto(dataUrl)
 
@@ -229,6 +264,12 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
       } else {
         const scan = await res.json() as ScanResult
         setResult(scan)
+
+        // Upload AFTER the result is on screen and deliberately NOT awaited:
+        // the member is already reading their identification, and a photo they
+        // can see in front of them is not worth making them wait for. Every
+        // failure path is silent — see /api/member/scan/photo.
+        if (storedPhoto) void uploadPhoto(scan.scanEventId, storedPhoto)
         // Not awaited: the result is already on screen and the image is
         // decoration. Making the member wait on a third-party lookup to see
         // their own identification would be the wrong trade.
@@ -240,6 +281,25 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
       setBusy(false)
       // Allow re-picking the same file.
       if (fileInput.current) fileInput.current.value = ''
+    }
+  }
+
+  /**
+   * Store the member's own photo for My Finds.
+   *
+   * Fire-and-forget by design: the scan result is already rendered, and this
+   * is a convenience for later browsing. It logs and gives up.
+   */
+  async function uploadPhoto(scanEventId: string, image: string) {
+    try {
+      const res = await fetch('/api/member/scan/photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scanEventId, image }),
+      })
+      if (!res.ok) console.error('[Scanner] photo upload HTTP', res.status)
+    } catch (err) {
+      console.error('[Scanner] photo upload failed:', err)
     }
   }
 

@@ -10,11 +10,14 @@
  *   limit?  — page size, default 20, max 50
  *   offset? — rows to skip
  *
- * NO PRODUCT IMAGE is returned. scanner_events has no image column:
- * representative_image_url was dropped, and the Product Image Service's Brave
- * URLs are transient and explicitly may not be persisted. Re-resolving one per
- * row would mean a third-party call per item per page view. The UI renders a
- * category tile instead.
+ * PHOTOS are the member's own, from the private scan-photos bucket. A fresh
+ * SIGNED URL is minted per request and expires in an hour — the URL is never
+ * stored, because a stored one outlives its own expiry and would be treated as
+ * shareable. Scans taken before photo storage existed have no path and fall
+ * back to a category tile.
+ *
+ * Still no PRODUCT image: representative_image_url was dropped, and the Brave
+ * URLs behind it are transient and may not be persisted.
  *
  * Auth: member session (server client for identity), admin client for reads.
  *
@@ -30,6 +33,10 @@ import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
+
+/** Long enough to browse a page of history, short enough that a URL copied out
+ *  of the network tab stops working the same day. */
+const PHOTO_URL_TTL_SECONDS = 60 * 60
 
 export type FindsRange = 'week' | 'month' | 'all'
 
@@ -71,7 +78,7 @@ export async function GET(req: NextRequest) {
   // keyed by member.
   let query = admin
     .from('scanner_events')
-    .select('id, identified_product, identified_category, estimated_retail_price, scanned_at, store_id')
+    .select('id, identified_product, identified_category, estimated_retail_price, scanned_at, store_id, photo_storage_path')
     .eq('member_id', member.id)
     .order('scanned_at', { ascending: false })
     // One extra row is fetched to answer hasMore without a second count query.
@@ -103,6 +110,20 @@ export async function GET(req: NextRequest) {
     for (const s of stores ?? []) nameById[s.id] = s.display_name
   }
 
+  // One signed URL per photo, minted now and valid for an hour. Failures are
+  // silent: a missing photo costs the member a thumbnail, not their history.
+  const photoUrlById: Record<string, string> = {}
+  const withPhotos = page.filter(r => r.photo_storage_path)
+  if (withPhotos.length > 0) {
+    const { data: signed } = await admin.storage
+      .from('scan-photos')
+      .createSignedUrls(withPhotos.map(r => r.photo_storage_path as string), PHOTO_URL_TTL_SECONDS)
+    for (let i = 0; i < (signed?.length ?? 0); i++) {
+      const url = signed?.[i]?.signedUrl
+      if (url) photoUrlById[withPhotos[i].id] = url
+    }
+  }
+
   return NextResponse.json({
     finds: page.map(r => ({
       id:              r.id,
@@ -111,6 +132,7 @@ export async function GET(req: NextRequest) {
       estimatedRetail: r.estimated_retail_price,
       scannedAt:       r.scanned_at,
       storeName:       r.store_id ? (nameById[r.store_id] ?? null) : null,
+      photoUrl:        photoUrlById[r.id] ?? null,
     })),
     hasMore,
   })
