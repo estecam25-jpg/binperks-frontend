@@ -20,11 +20,19 @@ import {
   dismissPwaBanner,
   INSTALL_HINT,
   type Platform,
+  type PwaSurface,
 } from '@/lib/pwa'
 
 const BINPERKS_BLUE = '#4A4B98'
 
-export default function AddToHomeScreen() {
+export default function AddToHomeScreen({
+  surface = 'member',
+  label = '📱 Add BinPerks to your home screen for faster access',
+}: {
+  /** Dismissal is tracked per surface — see lib/pwa. */
+  surface?: PwaSurface
+  label?: string
+} = {}) {
   // Starts hidden and is only ever turned on from inside an effect. Every
   // input to the decision — user agent, display-mode, localStorage — is
   // browser-only, so deciding during render would mismatch the server HTML
@@ -37,18 +45,18 @@ export default function AddToHomeScreen() {
 
   useEffect(() => {
     if (isStandalone()) return          // already installed
-    if (isPwaBannerDismissed()) return  // member said no once already
+    if (isPwaBannerDismissed(surface)) return  // already said no on THIS surface
 
     const p = detectPlatform()
     if (p === 'other') return           // no honest instructions to give
 
     setPlatform(p)
-  }, [])
+  }, [surface])
 
   if (!platform) return null
 
   function handleDismiss() {
-    dismissPwaBanner()
+    dismissPwaBanner(surface)
     setPlatform(null)
   }
 
@@ -59,7 +67,7 @@ export default function AddToHomeScreen() {
     >
       <div className="flex-1 min-w-0">
         <p className="text-[13px] font-bold text-white leading-snug">
-          📱 Add BinPerks to your home screen for faster access
+          {label}
         </p>
         <p className="text-[11px] font-medium text-white/70 mt-1 leading-snug">
           {INSTALL_HINT[platform]}

@@ -21,11 +21,13 @@ const nextConfig: NextConfig = {
         destination: '/member/join/:storeKey/thankyou',
         permanent: false,
       },
-      {
-        source: '/join/:storeKey',
-        destination: '/member/join/:storeKey',
-        permanent: false,
-      },
+      // NOTE: there is deliberately NO bare '/join/:storeKey' rule here.
+      // /join/XXXXXX is now the short member referral link, and a redirect at
+      // this level fired before the route could ever run — every short code
+      // bounced to /member/join/XXXXXX and 404'd. app/join/[code] handles both:
+      // a 6-character referral code resolves the referrer, and anything else is
+      // treated as a store key and forwarded to /member/join/[storeKey], so old
+      // QR links keep working. The sub-path rules below still apply.
 
       // The stamp tool moved from /stamp to /stamptool. Cashiers have the old
       // URL bookmarked on store tablets and it is printed on materials, so both

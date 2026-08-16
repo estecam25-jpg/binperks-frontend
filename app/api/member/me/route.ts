@@ -14,6 +14,7 @@
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { referralUrl } from '@/lib/referral-code'
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -29,7 +30,7 @@ export async function GET() {
       id, first_name, last_name, phone, email,
       status, subscription_status, vip_billing_cycle,
       total_stamps, coupon_due, sms_opt_in,
-      is_blacklisted, referral_code, referral_url,
+      is_blacklisted, referral_code, referral_short_code, referral_url,
       home_store_id, merchant_id, created_at
     `)
     .eq('auth_user_id', user.id)
@@ -86,8 +87,13 @@ export async function GET() {
       couponDue:          member.coupon_due,
       smsOptIn:           member.sms_opt_in,
       isBlacklisted:      member.is_blacklisted,
-      referralCode:       member.referral_code,
-      referralUrl:        member.referral_url,
+      referralCode:       member.referral_short_code ?? member.referral_code,
+      // Derived from the short code rather than served from referral_url, so a
+      // row still holding an old long link shows the short form anyway. Falls
+      // back to the stored value only for a member with no short code yet.
+      referralUrl:        member.referral_short_code
+                            ? referralUrl(member.referral_short_code)
+                            : member.referral_url,
       merchantId:         member.merchant_id,
       createdAt:          member.created_at,
     },

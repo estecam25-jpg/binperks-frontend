@@ -13,6 +13,21 @@
 /** localStorage key. Once set, the dashboard banner never returns. */
 export const PWA_DISMISSED_KEY = 'binperks_pwa_dismissed'
 
+/**
+ * Which surface the banner is on.
+ *
+ * Each gets its own dismissal key, so a cashier dismissing it on the stamp
+ * tool does not also silence it for a member on their dashboard — these are
+ * different people on different devices wanting different apps installed.
+ * 'member' keeps the original key so anyone who already dismissed it stays
+ * dismissed.
+ */
+export type PwaSurface = 'member' | 'stamptool' | 'merchant' | 'admin'
+
+function keyFor(surface: PwaSurface): string {
+  return surface === 'member' ? PWA_DISMISSED_KEY : `${PWA_DISMISSED_KEY}_${surface}`
+}
+
 export type Platform = 'ios' | 'android' | 'other'
 
 /**
@@ -62,9 +77,9 @@ export function isStandalone(): boolean {
 /** Whether the member has already dismissed the banner. Treats a blocked or
  *  unavailable localStorage (private mode, embedded webview) as "not
  *  dismissed" — showing the banner beats throwing on the dashboard. */
-export function isPwaBannerDismissed(): boolean {
+export function isPwaBannerDismissed(surface: PwaSurface = 'member'): boolean {
   try {
-    return window.localStorage.getItem(PWA_DISMISSED_KEY) === 'true'
+    return window.localStorage.getItem(keyFor(surface)) === 'true'
   } catch {
     return false
   }
@@ -72,9 +87,9 @@ export function isPwaBannerDismissed(): boolean {
 
 /** Records the dismissal. Silently does nothing if storage is unavailable, in
  *  which case the banner reappears next visit — an annoyance, not a bug. */
-export function dismissPwaBanner(): void {
+export function dismissPwaBanner(surface: PwaSurface = 'member'): void {
   try {
-    window.localStorage.setItem(PWA_DISMISSED_KEY, 'true')
+    window.localStorage.setItem(keyFor(surface), 'true')
   } catch {
     /* storage unavailable — nothing to persist to */
   }

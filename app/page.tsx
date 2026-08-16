@@ -11,23 +11,13 @@
 
 import Link from 'next/link'
 import HomeAuth from './HomeAuth'
+import EntryBrand from '@/components/EntryBrand'
 
 export default function HomePage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      <div
-        className="flex flex-col items-center px-5 pt-14 pb-20 gap-2"
-        style={{ backgroundColor: '#4A4B98' }}
-      >
-        {/* Same asset and sizing as AppHeader. Width is left to the intrinsic
-            aspect ratio — never set both, or the wordmark stretches. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/BinPerks_Landscape_Logo.png" alt="BinPerks" className="h-8 w-auto" />
-        <p className="text-white/70 text-[14px] font-semibold">
-          Your rewards, everywhere you shop
-        </p>
-      </div>
+      <EntryBrand subtitle="Your rewards, everywhere you shop" size="lg" />
 
       <main className="flex-1 flex flex-col items-center px-4 -mt-12 pb-10 w-full">
         <div className="w-full max-w-sm">

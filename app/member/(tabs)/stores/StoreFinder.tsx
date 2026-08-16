@@ -24,6 +24,17 @@ const BINPERKS_BLUE = '#4A4B98'
 
 /** Debounce on the search box. Long enough to skip most keystrokes, short
  *  enough that results feel attached to typing. */
+/**
+ * Participating states, shown by full name.
+ *
+ * Hardcoded because BinPerks operates in one state today and a dropdown built
+ * from live store rows would silently change shape as stores come and go. Add
+ * an entry here when a new state opens.
+ */
+const PARTICIPATING_STATES: { code: string; name: string }[] = [
+  { code: 'FL', name: 'Florida' },
+]
+
 const SEARCH_DEBOUNCE_MS = 250
 
 interface Store {
@@ -57,6 +68,9 @@ interface PerkData {
 
 export default function StoreFinder({ isFree }: { isFree: boolean }) {
   const [query, setQuery]       = useState('')
+  /** Two-letter code, or 'ALL'. Only states BinPerks actually operates in are
+   *  offered — a full 50-state list would be mostly dead options. */
+  const [stateFilter, setStateFilter] = useState('ALL')
   /** Only 'All Stores' is selectable until Phase 2 adds location + favourites. */
   const [filter, setFilter]     = useState<'Near Me' | 'Favorites' | 'All Stores'>('All Stores')
   const [stores, setStores]     = useState<Store[]>([])
@@ -71,12 +85,12 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
   // Guards against a slow early request overwriting a newer one.
   const requestSeq = useRef(0)
 
-  const loadStores = useCallback(async (q: string) => {
+  const loadStores = useCallback(async (q: string, state: string) => {
     const seq = ++requestSeq.current
     setLoading(true)
     setError(false)
     try {
-      const res = await fetch(`/api/member/stores?q=${encodeURIComponent(q)}`)
+      const res = await fetch(`/api/member/stores?q=${encodeURIComponent(q)}&state=${encodeURIComponent(state)}`)
       if (seq !== requestSeq.current) return
       if (!res.ok) { setError(true); setStores([]); return }
       const data = await res.json()
@@ -88,10 +102,12 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
     }
   }, [])
 
+  // Both filters feed the same request, so changing either re-queries and the
+  // two combine server-side rather than fighting each other.
   useEffect(() => {
-    const t = setTimeout(() => loadStores(query.trim()), SEARCH_DEBOUNCE_MS)
+    const t = setTimeout(() => loadStores(query.trim(), stateFilter), SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(t)
-  }, [query, loadStores])
+  }, [query, stateFilter, loadStores])
 
   async function toggleStore(store: Store) {
     if (expandedId === store.id) { setExpandedId(null); return }
@@ -154,13 +170,31 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
         })}
       </div>
 
+      {/* State — above the name search. */}
+      <div className="w-full flex flex-col gap-1.5">
+        <label htmlFor="store-state" className="text-[12px] font-bold text-[#1A1A2E] px-1">
+          State
+        </label>
+        <select
+          id="store-state"
+          value={stateFilter}
+          onChange={e => setStateFilter(e.target.value)}
+          className="w-full px-4 py-3.5 rounded-2xl border-2 border-transparent bg-white font-['Montserrat'] text-[14px] font-semibold text-[#1A1A2E] outline-none transition-colors focus:border-[#4A4B98]"
+        >
+          <option value="ALL">All States</option>
+          {PARTICIPATING_STATES.map(st => (
+            <option key={st.code} value={st.code}>{st.name}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Search */}
       <input
         type="search"
         value={query}
         onChange={e => setQuery(e.target.value)}
-        placeholder="Search by store name or state"
-        aria-label="Search BinPerks stores by name or state"
+        placeholder="Search by store name"
+        aria-label="Search BinPerks stores by name"
         className="w-full px-4 py-3.5 rounded-2xl border-2 border-transparent bg-white font-['Montserrat'] text-[14px] font-semibold text-[#1A1A2E] outline-none transition-colors placeholder:text-[#D1D1DC] placeholder:font-medium focus:border-[#4A4B98]"
       />
 
@@ -174,7 +208,7 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
         <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
           <p className="text-[13px] font-semibold text-[#DA1212]">
             We couldn&apos;t load stores right now.{' '}
-            <button onClick={() => loadStores(query.trim())} className="underline">
+            <button onClick={() => loadStores(query.trim(), stateFilter)} className="underline">
               Try again
             </button>
           </p>

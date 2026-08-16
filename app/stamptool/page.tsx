@@ -9,6 +9,7 @@
 
 import Link from 'next/link'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import EntryBrand from '@/components/EntryBrand'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,9 +36,7 @@ export default async function StampHomePage() {
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
       {/* Header */}
-      <div className="px-5 py-4 flex items-center justify-center" style={{ backgroundColor: '#4A4B98' }}>
-        <span className="font-['Coiny'] text-2xl text-white tracking-wide">BinPerks</span>
-      </div>
+      <EntryBrand />
 
       <main className="flex-1 flex flex-col items-center px-4 py-8 gap-6 max-w-md mx-auto w-full">
 

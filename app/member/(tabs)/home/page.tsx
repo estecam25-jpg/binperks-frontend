@@ -53,8 +53,9 @@ export default function MemberHomePage() {
 
   return (
     <>
-      {/* MOCK DATA — connect to real API in Phase 2 (unread alert count). */}
-      <AppHeader unreadCount={1} />
+      {/* No unreadCount: there is no alerts backend, and passing a literal 1
+          here is what gave every member a permanent unread dot. */}
+      <AppHeader />
 
       <main className="flex-1 flex flex-col items-center px-4 py-5 gap-5 max-w-md mx-auto w-full">
 

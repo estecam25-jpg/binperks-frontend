@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import AddToHomeScreen from '@/components/member/AddToHomeScreen'
 
 /** Seconds the Resend button stays disabled. The server allows 5 sends per
  *  email per 15 minutes; this keeps a merchant from burning that on taps. */
@@ -130,7 +131,16 @@ function MerchantLoginContent() {
     if (res.ok) {
       const data = await res.json().catch(() => ({}))
       // Full-page navigation so cookies set by the server are picked up
-      window.location.href = data.redirectUrl ?? '/merchant/dashboard'
+      // ?return= is set by the dashboard gate when a session expires, so a
+      // merchant lands back on the exact tab and location they were on.
+      //
+      // Only same-origin RELATIVE paths are honoured. Taking the value at face
+      // value would make this an open redirect: a link with
+      // ?return=https://evil.example could bounce a freshly-signed-in merchant
+      // straight off the site.
+      const raw = searchParams.get('return')
+      const safeReturn = raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : null
+      window.location.href = safeReturn ?? data.redirectUrl ?? '/merchant/dashboard'
       return
     }
 
@@ -154,16 +164,21 @@ function MerchantLoginContent() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* Hero */}
-      <div className="bg-[#1A1A2E] px-6 pt-14 pb-20 flex flex-col items-center gap-3 text-center">
-        <span className="text-4xl">🏷️</span>
-        <h1 className="font-['Coiny'] text-5xl text-white tracking-wide leading-none">BinPerks</h1>
+      {/* Entry mark: red circle on BinPerks blue, matching every other door
+          into the product. */}
+      <div className="bg-[#4A4B98] px-6 pt-14 pb-20 flex flex-col items-center gap-3 text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon.png" alt="BinPerks" className="h-24 w-24 object-contain" />
         <p className="text-[13px] font-bold tracking-widest uppercase text-[#FFB217]">
           Merchant sign in
         </p>
       </div>
 
       <div className="flex-1 flex flex-col items-center px-4 -mt-8 pb-12">
+        <div className="w-full max-w-sm mb-3">
+          <AddToHomeScreen surface="merchant" label="📱 Add your BinPerks dashboard to your home screen" />
+        </div>
+
         <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl px-6 pt-6 pb-7 flex flex-col gap-5">
 
           {status !== 'sent' && status !== 'verifying' && status !== 'code_error' ? (

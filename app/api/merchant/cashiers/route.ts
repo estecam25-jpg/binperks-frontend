@@ -17,6 +17,7 @@ import bcrypt from 'bcryptjs'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
 import { toOne } from '@/lib/supabase-relations'
+import { validatePin } from '@/lib/pin-strength'
 
 // Auth (identify the logged-in merchant) uses the server client so we read
 // the session cookie. All actual table reads/writes use the admin client.
@@ -81,9 +82,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'storeId, name, and pin are required' }, { status: 400 })
   }
 
-  // PIN must be 4 digits
-  if (!/^\d{4}$/.test(pin)) {
-    return NextResponse.json({ error: 'PIN must be exactly 4 digits' }, { status: 400 })
+  // Format AND strength. The blocklist is shared with the form in
+  // lib/pin-strength so the two layers cannot disagree; this one is the
+  // enforcement, since a direct POST bypasses the form entirely.
+  const pinError = validatePin(pin)
+  if (pinError) {
+    return NextResponse.json({ error: pinError }, { status: 400 })
   }
 
   // Verify store belongs to merchant

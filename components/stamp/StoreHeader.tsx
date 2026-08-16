@@ -39,12 +39,19 @@ export default function StoreHeader({ storeName, brandColor, logoUrl }: StoreHea
           {storeName}
         </span>
       </div>
-      <span
-        className="text-[10px] font-semibold tracking-widest uppercase"
-        style={{ color: textColor === '#FFFFFF' ? 'rgba(255,255,255,0.5)' : 'rgba(26,26,46,0.45)' }}
-      >
-        Powered by BinPerks
-      </span>
+      {/* The BinPerks landscape mark, replacing the "Powered by BinPerks" text.
+          The store keeps its own name and colour above — V3 keeps BinPerks
+          visible while merchant experiences stay customised.
+
+          Legible on any brand colour: the wordmark is white-filled with a blue
+          outline, so it reads as white letters on a dark header and as the
+          outline on a light one. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/BinPerks_Landscape_Logo.png"
+        alt="Powered by BinPerks"
+        className="h-4 w-auto opacity-90"
+      />
     </header>
   )
 }

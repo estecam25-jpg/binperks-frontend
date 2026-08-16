@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
+import AddToHomeScreen from '@/components/member/AddToHomeScreen'
 
 /** Seconds the Resend button stays disabled. The server allows 5 sends per
  *  email per 15 minutes; this keeps an admin from burning that on taps. */
@@ -160,14 +161,17 @@ export default function AdminLoginForm() {
   const onCodeStep = status === 'sent' || status === 'verifying' || status === 'code_error'
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center bg-[#1A1A2E] px-4">
+    <div className="min-h-dvh flex flex-col items-center justify-center bg-[#4A4B98] px-4">
       <div className="w-full max-w-sm flex flex-col gap-6">
-        <div className="text-center">
-          <div className="font-['Coiny'] text-5xl text-white tracking-wide">BinPerks</div>
-          <div className="text-[11px] font-bold tracking-[0.2em] uppercase text-[#FFB217] mt-1">
+        <div className="flex flex-col items-center text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon.png" alt="BinPerks" className="h-24 w-24 object-contain" />
+          <div className="text-[11px] font-bold tracking-[0.2em] uppercase text-[#FFB217] mt-2">
             Admin Dashboard
           </div>
         </div>
+
+        <AddToHomeScreen surface="admin" label="📱 Add BinPerks Admin to your home screen" />
 
         <div className="bg-white rounded-3xl px-6 pt-6 pb-7 flex flex-col gap-5 shadow-2xl">
           {!onCodeStep ? (

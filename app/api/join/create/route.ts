@@ -15,7 +15,7 @@
  *   7. Issue an 8-digit sign-in code by SMS so the member lands on the dashboard
  *
  * Request body:
- *   { storeId, merchantId, firstName, lastName, phone (digits), email,
+ *   { storeId?, merchantId?, zipCode, firstName, lastName, phone (digits), email,
  *     smsOptIn, referrerMemberId? }
  *
  * Responses:
@@ -32,12 +32,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { issueMemberOtp } from '@/lib/member-otp'
 import { postToGhl } from '@/lib/ghl-webhook'
+import { BINPERKS_HOUSE_STORE_ID, BINPERKS_HOUSE_MERCHANT_ID } from '@/lib/binperks-origin'
+import { generateReferralCode as generateShortCode, referralUrl as shortReferralUrl } from '@/lib/referral-code'
 
 const APP_URL = 'https://app.binperks.com'
 
 interface CreateMemberRequest {
-  storeId: string
-  merchantId: string
+  /** Omitted when the member joined through BinPerks with no store context. */
+  storeId?: string
+  zipCode: string
+  /** Omitted alongside storeId for a BinPerks-direct join. */
+  merchantId?: string
   firstName: string
   lastName: string
   phone: string       // digits only
@@ -56,11 +61,23 @@ function generateReferralCode(): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as Partial<CreateMemberRequest>
-    const { storeId, merchantId, firstName, lastName, phone, email, smsOptIn, referrerMemberId } = body
+    const { firstName, lastName, phone, email, smsOptIn, referrerMemberId, zipCode } = body
 
-    if (!storeId || !merchantId || !firstName || !lastName || !phone || !email) {
+    if (!firstName || !lastName || !phone || !email) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
+
+    if (!/^\d{5}$/.test(String(zipCode ?? ''))) {
+      return NextResponse.json({ error: 'Invalid zip code' }, { status: 400 })
+    }
+
+    // No store in the URL means the member came to BinPerks directly rather
+    // than through a participating store. They are attributed to the BinPerks
+    // house origin, which is commission_eligible = false, so no merchant
+    // commission accrues — see lib/binperks-origin.
+    const binperksOrigin = !body.storeId
+    const storeId    = body.storeId    ?? BINPERKS_HOUSE_STORE_ID
+    const merchantId = body.merchantId ?? BINPERKS_HOUSE_MERCHANT_ID
 
     // Basic phone validation (10 digits)
     if (!/^\d{10}$/.test(phone)) {
@@ -138,12 +155,15 @@ export async function POST(req: NextRequest) {
 
     const authUserId = authUser.user.id
 
-    // 4. Generate a unique referral code (retry on the rare unique-constraint hit)
+    // 4. Generate referral codes (retry on the rare unique-constraint hit).
+    //    referralCode is the LEGACY 8-char value, still written so links already
+    //    in the wild keep resolving; shortCode drives the new /join/XXXXXX URL.
     let referralCode = generateReferralCode()
+    let shortCode = generateShortCode()
 
     let memberId: string | null = null
     for (let attempt = 0; attempt < 3 && !memberId; attempt++) {
-      const referralUrl = `${APP_URL}/member/join/${store.canonical_key}?ref=${referralCode}`
+      const referralUrl = shortReferralUrl(shortCode, APP_URL)
       const { data: inserted, error: insertError } = await supabase
         .from('members')
         .insert({
@@ -162,7 +182,9 @@ export async function POST(req: NextRequest) {
           is_blacklisted:        false,
           referred_by_member_id: referrerMemberId ?? null,
           referral_code:         referralCode,
+          referral_short_code:   shortCode,
           referral_url:          referralUrl,
+          zip_code:              String(zipCode),
           created_at:            new Date().toISOString(),
 
           // ── V3 Origin Store attribution ──────────────────────────────────
@@ -173,10 +195,13 @@ export async function POST(req: NextRequest) {
           origin_store_id:          storeId,
           origin_merchant_id:       store.merchant_id,
           origin_enrolled_at:       new Date().toISOString(),
-          origin_enrollment_source: 'qr_code',            // all signup-page enrollments
+          binperks_origin:          binperksOrigin,
+          origin_enrollment_source: binperksOrigin ? 'binperks_direct' : 'qr_code',
           origin_migration_source:  'v3_enrollment',      // live enrollment, not a backfill
           origin_confidence:        'enrollment_record',  // highest — direct enrollment
-          origin_migration_notes:   'Enrolled via member signup page at launch',
+          origin_migration_notes:   binperksOrigin
+            ? 'Joined through BinPerks directly — no store context in the URL'
+            : 'Enrolled via member signup page at launch',
           origin_admin_reviewed:    true,                 // live enrollments need no review
         })
         .select('id')
@@ -189,8 +214,10 @@ export async function POST(req: NextRequest) {
             await admin.auth.admin.deleteUser(authUserId)
             return NextResponse.json({ error: 'phone_exists' }, { status: 409 })
           }
-          // referral_code collision — regenerate and retry
+          // A code collided — regenerate BOTH and retry; the message does not
+          // reliably say which of the two unique indexes was hit.
           referralCode = generateReferralCode()
+          shortCode = generateShortCode()
           continue
         }
         console.error('[/api/join/create] Member insert error:', insertError)

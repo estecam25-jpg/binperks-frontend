@@ -4,6 +4,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import PricingScheduleCard from '../PricingScheduleCard'
 import SuggestedPerks from '../SuggestedPerks'
+import { validatePin } from '@/lib/pin-strength'
 
 interface Redemption {
   id: string; couponValue: number; redeemedAt: string
@@ -453,6 +454,41 @@ function SocialTemplate({ brandColor, brandName, joinUrl }: {
   )
 }
 
+/**
+ * US Letter at 96 DPI. Every PRINTED material is laid out on this exact page,
+ * so it comes out of a home or office printer at true size with no scaling and
+ * no cropping.
+ *
+ * The social graphic is deliberately NOT on a Letter sheet — it is a 1080x1080
+ * Instagram asset that is never printed.
+ */
+const LETTER_W = 816
+const LETTER_H = 1056
+
+/**
+ * Centres a smaller design on a white Letter page.
+ *
+ * The table tent and window cling are small by nature; blowing them up to fill
+ * 8.5x11 would just distort the artwork. Centring them on a real Letter sheet
+ * is what makes them print correctly, and the dashed guide shows where to cut.
+ */
+function LetterSheet({ children, cutLabel }: { children: React.ReactNode; cutLabel: string }) {
+  return (
+    <div style={{
+      width: LETTER_W, height: LETTER_H, background: 'white',
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', gap: 18, fontFamily: 'Montserrat, sans-serif',
+    }}>
+      <div style={{ border: '2px dashed #D1D1DC', padding: 10, display: 'flex' }}>
+        {children}
+      </div>
+      <p style={{ fontSize: 12, fontWeight: 600, color: '#8E8EA8', margin: 0 }}>
+        {cutLabel}
+      </p>
+    </div>
+  )
+}
+
 /* ── download helper ─────────────────────────────────────────────── */
 
 async function downloadMaterial(ref: RefObject<HTMLDivElement | null>, filename: string) {
@@ -463,6 +499,12 @@ async function downloadMaterial(ref: RefObject<HTMLDivElement | null>, filename:
     allowTaint: false,
     scale: 1,
     logging: false,
+    // Pinned to the element's own box rather than left to html2canvas to infer
+    // from the surrounding layout — inference is what produced the white bar.
+    width: ref.current.offsetWidth,
+    height: ref.current.offsetHeight,
+    windowWidth: ref.current.offsetWidth,
+    windowHeight: ref.current.offsetHeight,
   })
   const link = document.createElement('a')
   link.download = filename
@@ -484,6 +526,10 @@ async function downloadMaterialAsPdf(
     allowTaint: false,
     scale: 1,
     logging: false,
+    width: ref.current.offsetWidth,
+    height: ref.current.offsetHeight,
+    windowWidth: ref.current.offsetWidth,
+    windowHeight: ref.current.offsetHeight,
   })
   const orientation = widthIn >= heightIn ? 'landscape' : 'portrait'
   const doc = new jsPDF({ orientation, unit: 'in', format: [widthIn, heightIn] })
@@ -731,12 +777,30 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         </p>
       </div>
 
-      {/* Off-screen templates for capture */}
+      {/* Off-screen templates for capture.
+          THE WHITE BAR LIVED HERE. This container shrink-wraps to its widest
+          child — the 1080px social graphic — and each wrapper below is a plain
+          block div, so it stretched to 1080px too. html2canvas captured the
+          wrapper, not the artwork, giving the 816px poster a 264px white strip
+          down the right-hand side. Each wrapper is now pinned to its own
+          artwork's exact size. */}
       <div style={{ position: 'fixed', left: -9999, top: -9999, pointerEvents: 'none', zIndex: -1 }}>
-        <div ref={posterRef}><PosterTemplate {...materialProps} /></div>
-        <div ref={tentRef}><TableTentTemplate {...materialProps} /></div>
-        <div ref={clingRef}><WindowClingTemplate {...materialProps} /></div>
-        <div ref={socialRef}><SocialTemplate {...materialProps} /></div>
+        <div ref={posterRef} style={{ width: LETTER_W, height: LETTER_H }}>
+          <PosterTemplate {...materialProps} />
+        </div>
+        <div ref={tentRef} style={{ width: LETTER_W, height: LETTER_H }}>
+          <LetterSheet cutLabel="Cut along the dashed line, then fold in half">
+            <TableTentTemplate {...materialProps} />
+          </LetterSheet>
+        </div>
+        <div ref={clingRef} style={{ width: LETTER_W, height: LETTER_H }}>
+          <LetterSheet cutLabel="Cut along the dashed line">
+            <WindowClingTemplate {...materialProps} />
+          </LetterSheet>
+        </div>
+        <div ref={socialRef} style={{ width: 1080, height: 1080 }}>
+          <SocialTemplate {...materialProps} />
+        </div>
       </div>
 
       {/* Material 1 — QR Code Poster */}
@@ -757,31 +821,35 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
       {/* Material 2 — Table Tent */}
       <MaterialCard
         title="Table Tent Card"
-        description="4×6 — fold and stand on your checkout counter"
-        previewScale={0.55}
-        previewWidth={384}
-        previewHeight={576}
+        description="8.5×11 sheet — print, cut and fold to stand on your counter"
+        previewScale={0.31}
+        previewWidth={LETTER_W}
+        previewHeight={LETTER_H}
         onDownload={() => handleDownload('tent', tentRef, `binperks-tabletent-${safeName}.png`)}
         downloading={downloading === 'tent-png'}
-        onDownloadPdf={() => handleDownloadPdf('tent-pdf', tentRef, `binperks-tabletent-${safeName}.pdf`, 4, 6)}
+        onDownloadPdf={() => handleDownloadPdf('tent-pdf', tentRef, `binperks-tabletent-${safeName}.pdf`, 8.5, 11)}
         downloadingPdf={downloading === 'tent-pdf'}
       >
-        <TableTentTemplate {...materialProps} />
+        <LetterSheet cutLabel="Cut along the dashed line, then fold in half">
+          <TableTentTemplate {...materialProps} />
+        </LetterSheet>
       </MaterialCard>
 
       {/* Material 3 — Window Cling */}
       <MaterialCard
         title="Window Cling"
-        description="Square — print on window cling paper and stick to your door"
-        previewScale={0.7}
-        previewWidth={400}
-        previewHeight={400}
+        description="8.5×11 sheet — print on cling paper, cut out and stick to your door"
+        previewScale={0.31}
+        previewWidth={LETTER_W}
+        previewHeight={LETTER_H}
         onDownload={() => handleDownload('cling', clingRef, `binperks-windowcling-${safeName}.png`)}
         downloading={downloading === 'cling-png'}
-        onDownloadPdf={() => handleDownloadPdf('cling-pdf', clingRef, `binperks-windowcling-${safeName}.pdf`, 5, 5)}
+        onDownloadPdf={() => handleDownloadPdf('cling-pdf', clingRef, `binperks-windowcling-${safeName}.pdf`, 8.5, 11)}
         downloadingPdf={downloading === 'cling-pdf'}
       >
-        <WindowClingTemplate {...materialProps} />
+        <LetterSheet cutLabel="Cut along the dashed line">
+          <WindowClingTemplate {...materialProps} />
+        </LetterSheet>
       </MaterialCard>
 
       {/* Material 4 — Social Media Graphic */}
@@ -910,8 +978,15 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
 
   async function handleAddCashier(e: React.FormEvent) {
     e.preventDefault()
-    if (!newName.trim() || !/^\d{4}$/.test(newPin)) {
+    if (!newName.trim()) {
       setAddError('Name and a 4-digit PIN are required')
+      return
+    }
+    // Immediate feedback before the round trip. The API re-checks with the same
+    // shared list — this is convenience, not the enforcement.
+    const pinError = validatePin(newPin)
+    if (pinError) {
+      setAddError(pinError)
       return
     }
     setAdding(true)

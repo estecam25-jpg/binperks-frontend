@@ -16,13 +16,11 @@ export default function MerchantLandingPage() {
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
       {/* ── Hero — full BinPerks branding, B2B context ── */}
-      <div className="bg-[#1A1A2E] px-6 pt-16 pb-24 flex flex-col items-center gap-6 text-center">
+      <div className="bg-[#4A4B98] px-6 pt-16 pb-24 flex flex-col items-center gap-6 text-center">
         <div className="flex flex-col items-center gap-2">
-          <span className="text-4xl">🏷️</span>
-          <h1 className="font-['Coiny'] text-5xl text-white tracking-wide leading-none">
-            BinPerks
-          </h1>
-          <p className="text-[13px] font-bold tracking-widest uppercase text-[#FFB217]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon.png" alt="BinPerks" className="h-24 w-24 object-contain" />
+          <p className="text-[13px] font-bold tracking-widest uppercase text-[#FFB217] mt-1">
             For Bin Store Owners
           </p>
         </div>

@@ -4,11 +4,17 @@
  * BinPerks logo + alerts bell, shown at the top of member tab screens.
  *
  * The bell and its unread dot are placeholders — there is no alerts backend.
- * The dot is driven by a prop rather than hardcoded so Phase 2 only has to
- * pass a real count in.
+ * unreadCount therefore defaults to 0 and NOTHING passes a real value yet, so
+ * the dot stays off. It used to be handed a literal 1, which meant every member
+ * saw a permanent unread badge for alerts that do not exist. When the alerts
+ * backend lands, pass a real count and the dot starts meaning something.
+ *
+ * The gear sits to the LEFT of the bell and is how Account is reached now that
+ * it is no longer a bottom-nav tab.
  */
 
 import { useState } from 'react'
+import Link from 'next/link'
 import AlertsDrawer from './AlertsDrawer'
 
 const BINPERKS_BLUE = '#4A4B98'
@@ -43,6 +49,15 @@ export default function AppHeader({
           className="h-8 w-auto"
         />
 
+        <div className="flex items-center gap-1">
+        <Link
+          href="/member/account"
+          aria-label="Account and settings"
+          className="w-9 h-9 flex items-center justify-center rounded-full active:bg-white/10 transition-colors"
+        >
+          <span className="text-[18px] leading-none">⚙️</span>
+        </Link>
+
         <button
           onClick={() => setAlertsOpen(true)}
           aria-label={unreadCount > 0 ? `Alerts, ${unreadCount} unread` : 'Alerts'}
@@ -56,6 +71,7 @@ export default function AppHeader({
             />
           )}
         </button>
+        </div>
       </header>
 
       {alertsOpen && <AlertsDrawer onClose={() => setAlertsOpen(false)} />}

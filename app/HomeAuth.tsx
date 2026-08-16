@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 
 /**
  * Combined member sign-in / join flow on app.binperks.com (V3 Change 1).
@@ -12,25 +12,28 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  *   phone → /api/member/login
  *     200 ok               → code screen          (returning member)
  *     200 multiple_accounts→ account picker → code screen
- *     404 not_found        → store picker → signup form → code screen
+ *     404 not_found        → signup form → code screen
  *
  *   code  → /api/member/verify-code → /member/dashboard
  *
- * The QR path (/member/join/[storeKey]/signup) is untouched and still skips
- * the store picker, since the store key is already in the URL there.
+ * There is NO store picker. A member never chooses their Origin Store: showing
+ * a merchant list during signup both invited a wrong choice and put a
+ * merchant's name on a BinPerks page. Origin comes from ?store= or ?ref= in the
+ * URL, and otherwise defaults to the BinPerks house origin, which earns no
+ * merchant commission (lib/binperks-origin).
+ *
+ * The QR path (/member/join/[storeKey]/signup) is untouched.
  *
  * Merchants are not offered here — /merchant/login only.
  */
 
-const BINPERKS_BLUE = '#4A4B98'
 
 /** Resend cooldown, seconds. The server allows 5 sends per phone per 15 min;
  *  this keeps a member from spending that budget by reflex. */
 const RESEND_COOLDOWN = 30
 
-const SEARCH_DEBOUNCE_MS = 250
 
-type Step = 'phone' | 'accounts' | 'store' | 'signup' | 'code'
+type Step = 'phone' | 'accounts' | 'signup' | 'code'
 type Status = 'idle' | 'busy'
 
 interface Account {
@@ -38,16 +41,6 @@ interface Account {
   storeName: string
   brandName: string
   brandColor: string
-}
-
-interface Store {
-  id: string
-  merchantId: string
-  canonicalKey: string
-  displayName: string
-  brandName: string
-  city: string
-  state: string
 }
 
 function formatPhone(raw: string): string {
@@ -59,6 +52,7 @@ function formatPhone(raw: string): string {
 }
 
 const digitsOnly = (v: string) => v.replace(/\D/g, '')
+const zipValid = (v: string) => /^\d{5}$/.test(v.trim())
 const emailValid = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
 
 export default function HomeAuth() {
@@ -72,10 +66,24 @@ export default function HomeAuth() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedMemberId, setSelectedMemberId] = useState<string | undefined>()
 
-  const [stores, setStores]         = useState<Store[]>([])
-  const [storeQuery, setStoreQuery] = useState('')
-  const [storesLoading, setStoresLoading] = useState(false)
-  const [store, setStore]           = useState<Store | null>(null)
+  const [zip, setZip]               = useState('')
+
+  /**
+   * Origin, read silently from the URL. Never rendered — the member sees clean
+   * BinPerks branding whichever link brought them here.
+   *   ?store=<uuid>     a store QR or direct store link
+   *   ?ref=<memberId>   a member referral (set by /join/[code])
+   * Absent → the server falls back to the BinPerks house origin.
+   */
+  const origin = useMemo(() => {
+    if (typeof window === 'undefined') return {} as { storeId?: string; merchantId?: string; referrerMemberId?: string }
+    const q = new URLSearchParams(window.location.search)
+    return {
+      storeId:          q.get('store')    ?? undefined,
+      merchantId:       q.get('merchant') ?? undefined,
+      referrerMemberId: q.get('referrer') ?? q.get('ref') ?? undefined,
+    }
+  }, [])
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName]   = useState('')
@@ -87,7 +95,6 @@ export default function HomeAuth() {
   const [cooldown, setCooldown] = useState(0)
 
   const codeRef = useRef<HTMLInputElement>(null)
-  const storeReq = useRef(0)
 
   const digits = digitsOnly(phone)
   const phoneValid = digits.length === 10
@@ -99,29 +106,6 @@ export default function HomeAuth() {
     const t = setTimeout(() => setCooldown(c => c - 1), 1000)
     return () => clearTimeout(t)
   }, [cooldown])
-
-  /* ------------------------------------------------------------ store list */
-
-  const loadStores = useCallback(async (q: string) => {
-    const seq = ++storeReq.current
-    setStoresLoading(true)
-    try {
-      const res = await fetch(`/api/stores/public?q=${encodeURIComponent(q)}`)
-      if (seq !== storeReq.current) return
-      const data = await res.json()
-      setStores(data.stores ?? [])
-    } catch {
-      if (seq === storeReq.current) setStores([])
-    } finally {
-      if (seq === storeReq.current) setStoresLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (step !== 'store') return
-    const t = setTimeout(() => loadStores(storeQuery.trim()), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [step, storeQuery, loadStores])
 
   /* --------------------------------------------------------------- actions */
 
@@ -144,7 +128,7 @@ export default function HomeAuth() {
     // Not a member yet — send them down the join branch.
     if (res.status === 404) {
       setStatus('idle')
-      setStep('store')
+      setStep('signup')
       return
     }
 
@@ -189,8 +173,7 @@ export default function HomeAuth() {
   async function handleSignupSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSignupTouched(true)
-    if (!store) return
-    if (!firstName.trim() || !lastName.trim() || !emailValid(email) || !smsOptIn) return
+    if (!firstName.trim() || !lastName.trim() || !emailValid(email) || !zipValid(zip) || !smsOptIn) return
 
     setStatus('busy')
     setError(null)
@@ -201,12 +184,15 @@ export default function HomeAuth() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          storeId:    store.id,
-          merchantId: store.merchantId,
+          // Omitted entirely when the URL carried no store, which is what
+          // tells the server to use the BinPerks house origin.
+          ...(origin.storeId ? { storeId: origin.storeId, merchantId: origin.merchantId } : {}),
+          ...(origin.referrerMemberId ? { referrerMemberId: origin.referrerMemberId } : {}),
           firstName:  firstName.trim(),
           lastName:   lastName.trim(),
           phone:      digits,
           email:      email.trim().toLowerCase(),
+          zipCode:    zip.trim(),
           smsOptIn,
         }),
       })
@@ -221,7 +207,7 @@ export default function HomeAuth() {
       setError(
         data.error === 'email_exists'
           ? 'That email is already registered with BinPerks. Try another, or sign in with the phone on that account.'
-          : 'That number is already registered at this store. Go back and sign in instead.'
+          : 'That number is already registered. Go back and sign in instead.'
       )
       return
     }
@@ -290,7 +276,7 @@ export default function HomeAuth() {
 
   function startOver() {
     setStep('phone'); setStatus('idle'); setError(null)
-    setCode(''); setStore(null); setStoreQuery('')
+    setCode(''); setZip('')
     setFirstName(''); setLastName(''); setEmail(''); setSmsOptIn(false)
     setSignupTouched(false); setSelectedMemberId(undefined)
   }
@@ -421,90 +407,23 @@ export default function HomeAuth() {
     )
   }
 
-  /* ---------------------------------------------------------- store picker */
-
-  if (step === 'store') {
-    return (
-      <div className={card}>
-        <div className="text-center">
-          <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-1">
-            Where are you shopping today?
-          </h2>
-          <p className="text-[13px] text-[#8E8EA8] font-medium">
-            Pick the store you&apos;re at and we&apos;ll set up your membership.
-          </p>
-        </div>
-
-        <input
-          type="search"
-          value={storeQuery}
-          onChange={e => setStoreQuery(e.target.value)}
-          placeholder="Search by store name or city"
-          aria-label="Search stores by name or city"
-          className={field}
-        />
-
-        {storesLoading && (
-          <div className="py-6 flex items-center justify-center">
-            <span className="w-6 h-6 border-[3px] border-[#EBEBF2] border-t-[#4A4B98] rounded-full animate-spin" />
-          </div>
-        )}
-
-        {!storesLoading && stores.length === 0 && (
-          <p className="text-[13px] text-[#8E8EA8] font-medium text-center py-4">
-            {storeQuery.trim()
-              ? `No stores match "${storeQuery.trim()}".`
-              : 'No stores are available right now.'}
-          </p>
-        )}
-
-        <div className="flex flex-col gap-2.5 max-h-[45vh] overflow-y-auto">
-          {!storesLoading && stores.map(s => (
-            <button
-              key={s.id}
-              onClick={() => { setStore(s); setStep('signup') }}
-              className="w-full flex items-center gap-3 bg-[#F5F5F8] rounded-2xl px-4 py-3.5 text-left active:scale-[0.98] transition-transform"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-medium text-[#B0B0C8] tracking-wide truncate">
-                  {s.canonicalKey}
-                </p>
-                <p className="text-[15px] font-bold text-[#1A1A2E] truncate leading-tight">
-                  {s.displayName}
-                </p>
-                {(s.city || s.state) && (
-                  <p className="text-[12px] text-[#8E8EA8] font-medium">
-                    {[s.city, s.state].filter(Boolean).join(', ')}
-                  </p>
-                )}
-              </div>
-              <span className="text-[18px] text-[#D1D1DC] flex-shrink-0">›</span>
-            </button>
-          ))}
-        </div>
-
-        <button onClick={startOver} className="text-[13px] font-semibold text-[#8E8EA8] underline self-center">
-          Back
-        </button>
-      </div>
-    )
-  }
-
   /* --------------------------------------------------------------- signup */
 
-  if (step === 'signup' && store) {
+  if (step === 'signup') {
     const nameError  = signupTouched && (!firstName.trim() || !lastName.trim())
     const mailError  = signupTouched && !emailValid(email)
+    const zipError   = signupTouched && !zipValid(zip)
     const optInError = signupTouched && !smsOptIn
     const canSubmit  =
-      firstName.trim() && lastName.trim() && emailValid(email) && smsOptIn && status !== 'busy'
+      firstName.trim() && lastName.trim() && emailValid(email) && zipValid(zip)
+      && smsOptIn && status !== 'busy'
 
     return (
       <div className={card}>
         <div>
           <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-1">Almost there</h2>
           <p className="text-[13px] text-[#8E8EA8] font-medium">
-            Joining BinPerks at <strong className="text-[#1A1A2E]">{store.displayName}</strong>.
+            Join BinPerks and start earning rewards at every participating store.
           </p>
         </div>
 
@@ -551,6 +470,25 @@ export default function HomeAuth() {
             </p>
           )}
 
+          {/* Zip code — numeric keypad on mobile; 5 digits, required. Stored
+              as-is; city/state are not derived from it yet. */}
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="postal-code"
+            maxLength={5}
+            placeholder="Zip Code"
+            aria-label="Zip Code"
+            value={zip}
+            onChange={e => setZip(e.target.value.replace(/\D/g, '').slice(0, 5))}
+            className={field}
+          />
+          {zipError && (
+            <p className="text-[11px] text-[#DA1212] font-semibold -mt-1 ml-1">
+              Enter a 5-digit zip code
+            </p>
+          )}
+
           {/* Phone is already known from step 1 — shown, not re-asked. */}
           <div className="bg-[#F5F5F8] rounded-2xl px-4 py-3 flex items-center gap-2">
             <span className="text-[12px] font-semibold text-[#8E8EA8]">Phone</span>
@@ -575,7 +513,7 @@ export default function HomeAuth() {
             </div>
             <p className="text-[12px] font-medium text-[#1A1A2E] leading-relaxed">
               I agree to receive SMS messages about my rewards, coupons, and account updates
-              from {store.displayName} via BinPerks. Message &amp; data rates may apply.
+              from BinPerks. Message &amp; data rates may apply.
               Reply STOP to opt out anytime.
             </p>
           </div>
@@ -601,10 +539,10 @@ export default function HomeAuth() {
         </form>
 
         <button
-          onClick={() => { setStep('store'); setError(null) }}
+          onClick={() => { setStep('phone'); setError(null) }}
           className="text-[13px] font-semibold text-[#8E8EA8] underline self-center"
         >
-          Pick a different store
+          Use a different number
         </button>
       </div>
     )

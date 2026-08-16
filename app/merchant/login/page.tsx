@@ -23,7 +23,11 @@ import MerchantLoginForm from './LoginForm'
 
 export const dynamic = 'force-dynamic'
 
-export default async function MerchantLoginPage() {
+export default async function MerchantLoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ return?: string }>
+}) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -31,7 +35,14 @@ export default async function MerchantLoginPage() {
     // Resolved through lib/merchant-auth so a stale merchants.auth_user_id
     // falls back to owner_email rather than stranding a real merchant here.
     const merchant = await findMerchantForRequest<{ id: string }>('id')
-    if (merchant) redirect('/merchant/dashboard')
+    if (merchant) {
+      // Honour ?return= here too — an already-signed-in merchant following an
+      // expired-session link should still land where they were headed.
+      // Same-origin relative paths only; anything else is an open redirect.
+      const { return: raw } = await searchParams
+      const safe = raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : null
+      redirect(safe ?? '/merchant/dashboard')
+    }
   }
 
   return <MerchantLoginForm />

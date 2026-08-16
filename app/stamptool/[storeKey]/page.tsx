@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import { cashierSession, storeSession, type CashierSession } from '@/lib/stamp-session'
+import AddToHomeScreen from '@/components/member/AddToHomeScreen'
 
 const PIN_LENGTH = 4
 
@@ -158,6 +159,13 @@ export default function StampSignInPage() {
       />
 
       <main className="flex-1 flex flex-col items-center justify-center px-5 py-8 gap-8">
+        {/* Cashiers and members are standing in the store here — the best
+            moment to suggest installing. Dismissal is tracked separately from
+            the member dashboard's banner. */}
+        <div className="w-full max-w-sm">
+          <AddToHomeScreen surface="stamptool" label="📱 Add BinPerks to your home screen" />
+        </div>
+
         <div className="bg-white rounded-2xl p-8 w-full max-w-sm shadow-sm flex flex-col items-center gap-7">
 
           <span className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">

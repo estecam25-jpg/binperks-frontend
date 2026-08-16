@@ -17,9 +17,9 @@
  * sorted by canonical_key ASC (CORE RULE 13).
  *
  * Query params:
- *   q — optional free-text filter, matched against store name, brand name and
- *       state. State is stored two-letter, so "FL" matches and "Florida" does
- *       not.
+ *   q     — optional free-text filter, matched against store and brand name.
+ *   state — optional two-letter code ('FL'); 'ALL' or absent means every state.
+ *           The two combine: state narrows the set, q searches within it.
  *
  * Responses:
  *   200 { lastStampedStoreId, stores: [{ id, canonicalKey, displayName, brandName, city, state,
@@ -96,12 +96,16 @@ export async function GET(req: NextRequest) {
   const lastStampedStoreId = lastActivity?.store_id ?? null
 
   const q = req.nextUrl.searchParams.get('q')?.trim() ?? ''
+  // Two-letter code, as stored on the row. Absent or 'ALL' means every state.
+  const stateParam = req.nextUrl.searchParams.get('state')?.trim().toUpperCase() ?? ''
 
   let query = admin
     .from('stores')
     .select('id, canonical_key, display_name, brand_name, city, state, brand_color, pricing_schedule, restock_days, timezone')
     .eq('is_active', true)
     .eq('network_visible', true)
+
+  if (stateParam && stateParam !== 'ALL') query = query.eq('state', stateParam)
 
   if (q) {
     // Escape PostgREST's or() delimiters before interpolating. A comma or a
@@ -113,10 +117,12 @@ export async function GET(req: NextRequest) {
     //
     // canonical_key went with it — the key embeds the city ("FL-Tampa-EstaBins"),
     // so matching on it would have quietly reintroduced city search.
+    // Name only. State is its own dropdown now, so folding it into the text
+    // search would make "FL" match every Florida store while someone is trying
+    // to type a store name.
     query = query.or(
       `display_name.ilike.%${safe}%,` +
-      `brand_name.ilike.%${safe}%,` +
-      `state.ilike.%${safe}%`
+      `brand_name.ilike.%${safe}%`
     )
   }
 

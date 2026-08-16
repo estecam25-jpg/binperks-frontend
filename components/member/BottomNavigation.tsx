@@ -41,7 +41,10 @@ const LEFT_TABS: Tab[] = [
 
 const RIGHT_TABS: Tab[] = [
   { href: '/member/rewards', label: 'Rewards', icon: '🎟️' },
-  { href: '/member/account', label: 'Account', icon: '👤' },
+  // Account moved to the gear in AppHeader — the fifth slot is worth more as a
+  // destination than as settings. A star reads at 19px where a rocket turns to
+  // mush, and it matches the "exclusive" framing of the tab.
+  { href: '/member/beyond',  label: 'Beyond',  icon: '⭐' },
 ]
 
 export default function BottomNavigation() {
