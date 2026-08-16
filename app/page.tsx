@@ -17,7 +17,7 @@ export default function HomePage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      <EntryBrand subtitle="Your rewards, everywhere you shop" size="lg" />
+      <EntryBrand subtitle="Your rewards, everywhere you shop" size="lg" overlap />
 
       <main className="flex-1 flex flex-col items-center px-4 -mt-12 pb-10 w-full">
         <div className="w-full max-w-sm">

@@ -22,7 +22,7 @@
  *   200 { memberId, referralCode, referralUrl, otpSent }
  *       otpSent false means the account exists but the code could not be sent —
  *       the caller should send the member to the login page to request one.
- *   409 { error: 'phone_exists' }   — phone already registered at this merchant
+ *   409 { error: 'phone_exists' }   — phone already registered anywhere on the network
  *   409 { error: 'email_exists' }   — email already has a Supabase auth identity
  *   400 { error: string }
  *   500 { error: string }
@@ -95,17 +95,20 @@ export async function POST(req: NextRequest) {
 
     // 1. Check phone uniqueness within this merchant (members list is per-merchant,
     //    never shared across merchants — see "Member & Location Model" rules)
+    // GLOBAL, not scoped to this merchant. One phone is one BinPerks account
+    // network-wide (CORE RULE 17), enforced by idx_members_phone_unique. The
+    // old per-merchant check let the same person sign up again at a different
+    // store and split their stamps across two records.
     const { data: existing } = await supabase
       .from('members')
       .select('id')
       .eq('phone', phone)
-      .eq('merchant_id', merchantId)
       .maybeSingle()
 
     if (existing) {
-      // Returning member — bail out before any write. Origin Store attribution is
-      // permanent (V3 rule 18): an existing member's origin_* fields are never
-      // re-derived or overwritten by a second trip through the signup form.
+      // Returning member — bail out before any write. Origin Store attribution
+      // is permanent (V3 rule 18): an existing member's origin_* fields are
+      // never re-derived or overwritten by a second trip through the form.
       return NextResponse.json({ error: 'phone_exists' }, { status: 409 })
     }
 
@@ -210,6 +213,8 @@ export async function POST(req: NextRequest) {
       if (insertError) {
         // Unique violation — could be phone (race condition) or referral_code collision
         if (insertError.code === '23505') {
+          // idx_members_phone_unique — someone claimed the number between the
+          // check above and this insert.
           if (insertError.message?.includes('phone')) {
             await admin.auth.admin.deleteUser(authUserId)
             return NextResponse.json({ error: 'phone_exists' }, { status: 409 })

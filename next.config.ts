@@ -63,6 +63,14 @@ const nextConfig: NextConfig = {
         destination: '/member/account',
         permanent: false,
       },
+
+      // The fifth tab was briefly /member/beyond before being renamed MORE.
+      // Short-lived, but the URL is cheap to keep resolving.
+      {
+        source: '/member/beyond',
+        destination: '/member/more',
+        permanent: false,
+      },
     ]
   },
 };

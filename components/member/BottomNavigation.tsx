@@ -42,9 +42,10 @@ const LEFT_TABS: Tab[] = [
 const RIGHT_TABS: Tab[] = [
   { href: '/member/rewards', label: 'Rewards', icon: '🎟️' },
   // Account moved to the gear in AppHeader — the fifth slot is worth more as a
-  // destination than as settings. A star reads at 19px where a rocket turns to
-  // mush, and it matches the "exclusive" framing of the tab.
-  { href: '/member/beyond',  label: 'Beyond',  icon: '⭐' },
+  // destination than as settings. Labelled MORE rather than "Beyond the Bins":
+  // the tab bar has ~60px per label and the longer name wrapped or truncated.
+  // The page itself still leads with the Beyond the Bins heading.
+  { href: '/member/more',    label: 'More',    icon: '⋯' },
 ]
 
 export default function BottomNavigation() {

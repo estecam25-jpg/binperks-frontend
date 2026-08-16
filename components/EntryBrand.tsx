@@ -16,16 +16,24 @@
 export default function EntryBrand({
   subtitle,
   size = 'md',
+  overlap = false,
 }: {
   subtitle?: string
   /** 'lg' for pages whose entire job is the door; 'md' where a form follows. */
   size?: 'md' | 'lg'
+  /**
+   * Set when the page below pulls a card UP over this block with a negative
+   * margin. The home page uses -mt-12 (48px); with the default padding the
+   * card lands on top of the subtitle and hides it. This reserves enough room
+   * underneath for the overlap plus a gap.
+   */
+  overlap?: boolean
 }) {
   const px = size === 'lg' ? 'h-28 w-28' : 'h-20 w-20'
 
   return (
     <div
-      className="w-full flex flex-col items-center px-5 pt-12 pb-10 gap-3"
+      className={`w-full flex flex-col items-center px-5 pt-12 gap-3 ${overlap ? 'pb-20' : 'pb-10'}`}
       style={{ backgroundColor: '#4A4B98' }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}

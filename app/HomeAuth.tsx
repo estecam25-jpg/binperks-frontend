@@ -33,7 +33,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 const RESEND_COOLDOWN = 30
 
 
-type Step = 'phone' | 'accounts' | 'signup' | 'code'
+type Step = 'phone' | 'accounts' | 'signup' | 'exists' | 'code'
 type Status = 'idle' | 'busy'
 
 interface Account {
@@ -204,11 +204,20 @@ export default function HomeAuth() {
 
     if (res.status === 409) {
       setStatus('idle')
-      setError(
-        data.error === 'email_exists'
-          ? 'That email is already registered with BinPerks. Try another, or sign in with the phone on that account.'
-          : 'That number is already registered. Go back and sign in instead.'
-      )
+
+      // An email clash is fixable in place — a different address works — so it
+      // stays an inline error on the form.
+      if (data.error === 'email_exists') {
+        setError('That email is already registered with BinPerks. Try another, or sign in with the phone on that account.')
+        return
+      }
+
+      // A phone clash is NOT fixable on this form: one phone is one BinPerks
+      // account network-wide, so the answer is to sign in, not to try again.
+      // Its own screen rather than an inline error, because the next action is
+      // somewhere else.
+      setError(null)
+      setStep('exists')
       return
     }
 
@@ -403,6 +412,37 @@ export default function HomeAuth() {
         <button onClick={startOver} className="text-[13px] font-semibold text-[#8E8EA8] underline self-center">
           Back
         </button>
+      </div>
+    )
+  }
+
+  /* ------------------------------------------------------- already a member */
+
+  if (step === 'exists') {
+    return (
+      <div className={card}>
+        <div className="text-center">
+          <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-1">
+            You already have a BinPerks account
+          </h2>
+          <p className="text-[13px] text-[#8E8EA8] font-medium">
+            Sign in instead — your stamps and rewards are waiting.
+          </p>
+        </div>
+
+        {/* Back to the phone step with the number kept, which IS the sign-in
+            flow on this page: submitting it sends a code. */}
+        <button
+          onClick={() => { setStep('phone'); setError(null); setStatus('idle') }}
+          className="w-full py-[18px] rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] bg-[#4A4B98] active:scale-[0.97] transition-all"
+        >
+          Sign in instead
+        </button>
+
+        <p className="text-[12px] text-[#8E8EA8] font-medium text-center leading-relaxed">
+          Trouble signing in? Email{' '}
+          <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>.
+        </p>
       </div>
     )
   }

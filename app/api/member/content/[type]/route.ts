@@ -10,6 +10,9 @@
  * ACTIVE rows only, pinned first then display_order — the admin management
  * view (/api/admin/content/[type]) is the one that returns everything.
  *
+ * ?pinned=true narrows further to pinned rows, which is what the Home feed
+ * uses; the MORE tab omits it and gets the full active list.
+ *
  * suggested-perks is deliberately NOT reachable here: it is merchant-facing
  * content and has no business on a member's feed. The allow-list below is what
  * enforces that, rather than relying on nobody guessing the slug.
@@ -29,7 +32,7 @@ const MEMBER_VISIBLE = new Set(['promos', 'shop-from-home', 'beyond-the-bins', '
 const MAX_ITEMS = 20
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ type: string }> },
 ) {
   const supabase = await createServerSupabaseClient()
@@ -44,11 +47,16 @@ export async function GET(
   const type = contentTypeBySlug(slug)
   if (!type) return NextResponse.json({ error: 'unknown_type' }, { status: 404 })
 
+  // ?pinned=true — the Home feed carries only pinned items, while the MORE tab
+  // lists everything. Filtered here rather than in the browser so Home is not
+  // downloading rows it will never show.
+  const pinnedOnly = req.nextUrl.searchParams.get('pinned') === 'true'
+
   const admin = createAdminSupabaseClient()
-  const { data, error } = await applyFeedOrder(
-    admin.from(type.table).select(columnsFor(type).join(', ')).eq('active', true),
-    type,
-  ).limit(MAX_ITEMS)
+  let base = admin.from(type.table).select(columnsFor(type).join(', ')).eq('active', true)
+  if (pinnedOnly && type.pinned) base = base.eq('pinned', true)
+
+  const { data, error } = await applyFeedOrder(base, type).limit(MAX_ITEMS)
 
   if (error) {
     // An empty list is what the caller falls back on, so a failure here is not

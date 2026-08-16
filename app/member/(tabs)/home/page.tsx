@@ -16,11 +16,7 @@ import AppHeader from '@/components/member/AppHeader'
 import GreetingCard from '@/components/member/GreetingCard'
 import AddToHomeScreen from '@/components/member/AddToHomeScreen'
 import MembershipStampCard from '@/components/member/MembershipStampCard'
-import {
-  FeedSection, PromoCarousel, FeedCarousel,
-  OnlineStoreCard, DealCard, BeyondBinsCard,
-} from '@/components/member/FeedCards'
-import { useFeedContent } from '@/lib/use-feed-content'
+import BeyondSections from '@/components/member/BeyondSections'
 
 interface MemberData {
   firstName: string
@@ -33,10 +29,6 @@ export default function MemberHomePage() {
   const router = useRouter()
   const [member, setMember] = useState<MemberData | null>(null)
   const [loading, setLoading] = useState(true)
-
-  // Admin-managed content, with the built-in copy as a per-section fallback so
-  // the feed is never an empty shell. See lib/use-feed-content.
-  const feed = useFeedContent()
 
   useEffect(() => {
     fetch('/api/member/me')
@@ -88,40 +80,11 @@ export default function MemberHomePage() {
           </div>
         )}
 
-        {/* ── Feed ──
-            Live content from the admin content tables, falling back to the
-            built-in copy per section while they are still being filled in. */}
-
-        {/* The "Upgrade to VIP" card is filtered out for members who already
-            subscribe — selling someone what they already pay for. Filtered by
-            id rather than by title so re-wording the copy cannot quietly switch
-            it back on. */}
-        <FeedSection title="BinPerks Promos">
-          <PromoCarousel
-            promos={feed.promos.filter(
-              p => !(p.id === 'promo-vip' && member?.subscriptionStatus === 'vip'),
-            )}
-          />
-        </FeedSection>
-
-        <FeedSection title="Shop From Home" subtitle="Buy from BinPerks stores online">
-          <FeedCarousel>
-            {feed.shopFromHome.map(s => <OnlineStoreCard key={s.id} store={s} />)}
-          </FeedCarousel>
-        </FeedSection>
-
-        <FeedSection title="Deals Near You" subtitle="Flea markets, estate sales and garage sales">
-          <FeedCarousel>
-            {feed.deals.map(d => <DealCard key={d.id} deal={d} />)}
-          </FeedCarousel>
-        </FeedSection>
-
-        <FeedSection title="Beyond the Bins" subtitle="Tools and partners for resellers">
-          <FeedCarousel>
-            {feed.beyondBins.map(p => <BeyondBinsCard key={p.id} partner={p} />)}
-          </FeedCarousel>
-        </FeedSection>
-
+        {/* ── Beyond the Bins ──
+            PINNED items only. A section with nothing pinned is hidden
+            entirely, so Home stays a curated shortlist rather than the full
+            catalogue — that lives on the MORE tab. */}
+        <BeyondSections pinnedOnly showEmptySections={false} />
 
         {/* Clears the fixed bottom nav. A dedicated spacer rather than padding
             on an ancestor: the scanner and account screens each set their own
