@@ -11,44 +11,26 @@
  * clipboard, because a merchant usually wants one or the other, not both
  * glued together.
  *
- * Hardcoded for now. The admin Suggested Perks tab writes to a suggested_perks
- * table; pointing this at GET /api/admin/content/suggested-perks (or a
- * merchant-facing equivalent) is the only change needed to make it live.
+ * Content comes from the suggested_perks table, curated in the admin dashboard.
+ * There is NO mock fallback: an empty table renders the header and intro with
+ * no items, because inventing examples would put words in BinPerks' mouth that
+ * no admin approved.
+ *
+ * Read through /api/merchant/suggested-perks, not the admin content route —
+ * that one requires an admin session and 403s for every merchant.
  *
  * Module scope so its state cannot be reset by a parent re-render.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const BLUE = '#4A4B98'
 
 interface Suggestion {
+  id: string
   title: string
   description: string
 }
-
-const SUGGESTIONS: Suggestion[] = [
-  {
-    title: 'Early Bird Access',
-    description: 'VIP members get first pick of new bin inventory before doors open to the public.',
-  },
-  {
-    title: 'Free Bag Day',
-    description: 'Fill a bag for a flat fee on select Saturdays — VIP members get an extra bag free.',
-  },
-  {
-    title: 'Loyalty Price Lock',
-    description: "VIP members pay yesterday's bin price on the last day of the pricing cycle.",
-  },
-  {
-    title: 'Referral Bonus',
-    description: 'Earn store credit when a friend you referred makes their first purchase.',
-  },
-  {
-    title: 'Birthday Surprise',
-    description: 'A special surprise reward delivered to VIP members during their birthday month.',
-  },
-]
 
 /** How long the "Copied!" confirmation stays up. */
 const COPIED_MS = 1500
@@ -57,6 +39,23 @@ export default function SuggestedPerks() {
   /** Which exact string was copied last — keyed by value so the tick appears on
    *  the tapped line, not on the whole card. */
   const [copied, setCopied] = useState<string | null>(null)
+
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
+  // Derived rather than stored, so there is no setState in the effect body.
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/merchant/suggested-perks')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (cancelled) return
+        setSuggestions(d?.perks ?? [])
+        setLoaded(true)
+      })
+      .catch(() => { if (!cancelled) setLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
 
   async function copy(text: string) {
     try {
@@ -81,10 +80,13 @@ export default function SuggestedPerks() {
         </p>
       </div>
 
+      {/* Nothing at all until the admin has published some — no placeholder
+          items, and no skeleton for a section that may legitimately be empty. */}
+      {loaded && suggestions.length > 0 && (
       <div className="flex flex-col gap-2">
-        {SUGGESTIONS.map(s => (
+        {suggestions.map(s => (
           <div
-            key={s.title}
+            key={s.id}
             className="bg-white/70 rounded-xl px-3.5 py-3 border border-[#EBEBF2] flex flex-col gap-1"
           >
             <button
@@ -115,6 +117,7 @@ export default function SuggestedPerks() {
           </div>
         ))}
       </div>
+      )}
     </div>
   )
 }

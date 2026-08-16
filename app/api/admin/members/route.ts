@@ -18,18 +18,25 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminSupabaseClient()
 
-  // An empty search used to short-circuit to an empty array, so the Members
-  // tab looked broken until something was typed. It now lists the most recent
-  // members and narrows as you search.
+  // An empty search used to short-circuit to an empty array, so the Members tab
+  // looked broken until something was typed. With no search it now returns the
+  // 10 most recently created ACTIVE members; a search widens the limit and
+  // narrows the rows.
+  //
+  // status = 'active' excludes deactivated accounts from the default list.
+  // A SEARCH deliberately does not apply that filter — an admin looking up a
+  // specific person needs to find them whether or not they deactivated.
   let query = admin
     .from('members')
     .select(`
       id, first_name, last_name, phone, email,
-      subscription_status, total_stamps, is_blacklisted, created_at,
+      subscription_status, total_stamps, is_blacklisted, status, created_at,
       stores:home_store_id ( display_name, canonical_key )
     `)
     .order('created_at', { ascending: false })
-    .limit(20)
+    .limit(search ? 20 : 10)
+
+  if (!search) query = query.eq('status', 'active')
 
   if (search) {
     // Escape PostgREST's or() delimiters — a comma or paren typed into the box
