@@ -6,10 +6,20 @@
  * Returns headline scan counts, the split of what members did after a scan,
  * the 20 most-scanned products, and Product Image Service metrics.
  *
- * ON THE TWO RATES: catalog hit rate and image search rate are independent and
- * do NOT sum to 100%. A single scan writes CATALOG_HIT when the product was
- * already known AND a second row for the search that followed, so one scan can
- * contribute to both. Reading them as a split would be wrong.
+ * ON THE RATES: they are independent and do NOT sum to 100%. A scan that finds
+ * a known product with no stored image writes CATALOG_HIT and then a second row
+ * for the search that followed, so one scan contributes to both. Reading them as
+ * a split would be wrong.
+ *
+ * CATALOG IMAGE HIT is the exception, and the one worth watching: the product
+ * was known AND its representative image was already stored, so the scan was
+ * answered entirely from BinPerks storage and never reached the provider. It is
+ * terminal — a CATALOG_IMAGE_HIT scan writes no other row.
+ *
+ * TRUE BRAVE RATE is IMAGE_SEARCH + SEARCH_FAILED over all scans: the calls
+ * that actually hit the API and are actually billable. As stored images
+ * accumulate this should fall while catalog image hit rises — that gap is the
+ * saving the image store exists to produce.
  *
  * Responses:
  *   200 { totalScans, scansThisMonth, choices, topProducts, imageService }
@@ -52,6 +62,7 @@ export async function GET() {
     // ── Product Image Service ──
     { count: catalogSize },
     { count: catalogHits },
+    { count: catalogImageHits },
     { count: imageSearches },
     { count: searchFailures },
     { count: lowConfidenceSkips },
@@ -79,6 +90,7 @@ export async function GET() {
 
     admin.from('product_catalog').select('*', { count: 'exact', head: true }),
     logCount('CATALOG_HIT'),
+    logCount('CATALOG_IMAGE_HIT'),
     logCount('IMAGE_SEARCH'),
     logCount('SEARCH_FAILED'),
     logCount('LOW_CONFIDENCE_SKIP'),
@@ -122,6 +134,11 @@ export async function GET() {
     imageService: {
       catalogSize:          catalogSize ?? 0,
       catalogHit:           { count: catalogHits ?? 0, pct: pct(catalogHits ?? 0, total) },
+      // Answered from stored images — no provider call, no cost.
+      catalogImageHit:      { count: catalogImageHits ?? 0, pct: pct(catalogImageHits ?? 0, total) },
+      // Calls that truly reached Brave and are truly billable. Surfaced in the
+      // UI as the True Brave Rate; there is deliberately no second field
+      // carrying the same number under another name.
       imageSearchRequests:  { count: braveCalls,       pct: pct(braveCalls, total) },
       lowConfidenceSkips:   { count: lowConfidenceSkips ?? 0, pct: pct(lowConfidenceSkips ?? 0, total) },
       specificitySkips:     { count: specificitySkips ?? 0,   pct: pct(specificitySkips ?? 0, total) },

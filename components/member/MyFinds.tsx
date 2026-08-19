@@ -6,12 +6,21 @@
  * Every scan is a find. There is no manual save step: the "Save to My Finds"
  * button was removed because the history is automatic.
  *
- * PHOTOS are the member's OWN, served through short-lived signed URLs minted
- * per request. Scans from before photo storage existed have none and fall back
- * to a category tile, so history stays readable rather than half-broken.
+ * TWO PICTURES PER FIND, either of which may be missing:
  *
- * A signed URL can expire while this list is open, so a failed image load falls
- * back to the tile too rather than leaving a torn thumbnail.
+ *   the member's OWN photo of the item in the bin
+ *   a REPRESENTATIVE image of the product, shared across everyone who scanned it
+ *
+ * They are labelled, and deliberately so. The representative image is a
+ * reference photo of the product, not a picture of the thing in the bin — an
+ * unlabelled pair invites a member to read a clean studio shot as the condition
+ * of the item they are holding.
+ *
+ * Both arrive as short-lived signed URLs minted per request. Scans from before
+ * either store existed have neither and fall back to a category tile, so old
+ * history stays readable rather than half-broken. A signed URL can also expire
+ * while this list is open, so a failed load falls back the same way rather than
+ * leaving a torn thumbnail.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -33,8 +42,12 @@ interface Find {
   estimatedRetail: string | null
   scannedAt: string
   storeName: string | null
-  /** Fresh signed URL, or null for scans taken before photo storage. */
-  photoUrl: string | null
+  /** The member's own photo. Fresh signed URL, or null for scans taken before
+   *  photo storage existed. */
+  memberPhotoUrl: string | null
+  /** Reference photo of the product, shared by everyone who scanned it. Null
+   *  until one has been stored for that product. */
+  representativeImageUrl: string | null
 }
 
 /** "Aug 15" for this year, "Aug 15, 2025" otherwise. */
@@ -75,9 +88,11 @@ export default function MyFinds({ onBack }: { onBack: () => void }) {
 
   const [loadingMore, setLoadingMore] = useState(false)
 
-  /** Photos whose signed URL failed to load — expired, or removed. Falls back
-   *  to the category tile rather than showing a broken image. */
-  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set())
+  /** Images whose signed URL failed to load — expired, or removed. Keyed
+   *  "<find id>:member" / "<find id>:representative" so one dead URL never
+   *  hides the other picture. */
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set())
+  const markFailed = (key: string) => setFailedImages(prev => new Set(prev).add(key))
 
   useEffect(() => {
     let cancelled = false
@@ -106,6 +121,22 @@ export default function MyFinds({ onBack }: { onBack: () => void }) {
 
   return (
     <>
+      {/* Plain text link, not a button: the primary way out of My Finds, at the
+          top where it is reachable without scrolling a long history. The
+          full-width Back button at the foot of the list stays for the other
+          case — reaching the end and not wanting to scroll back up. */}
+      <button
+        onClick={onBack}
+        className="self-start text-[14px] font-semibold bg-transparent p-0 -mb-1 active:opacity-60 transition-opacity"
+        style={{ color: BINPERKS_BLUE }}
+      >
+        ← Back
+      </button>
+
+      <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E] leading-none -mt-1">
+        My Finds
+      </h1>
+
       <div className="flex rounded-xl bg-white p-1 shadow-sm" role="group" aria-label="Time range">
         {RANGES.map(r => (
           <button
@@ -145,27 +176,66 @@ export default function MyFinds({ onBack }: { onBack: () => void }) {
         <div className="flex flex-col gap-2">
           {finds.map(f => (
             <article key={f.id} className="w-full bg-white rounded-2xl px-4 py-3.5 shadow-sm flex items-start gap-3.5">
-              {/* The member's own photo when there is one, else the tile. */}
-              {f.photoUrl && !failedPhotos.has(f.id) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={f.photoUrl}
-                  alt={f.product ?? 'Scanned item'}
-                  onError={() => setFailedPhotos(prev => new Set(prev).add(f.id))}
-                  // Not loading="lazy": an offscreen lazy image never requests,
-                  // so onError never fires and an expired URL would leave a gap
-                  // where the tile should have been.
-                  decoding="async"
-                  className="w-14 h-14 rounded-xl object-cover bg-[#F5F5F8] border border-[#EBEBF2] flex-shrink-0"
-                />
-              ) : (
-                <div
-                  className="w-14 h-14 rounded-xl bg-[#F5F5F8] border border-[#EBEBF2] flex items-center justify-center flex-shrink-0"
-                  aria-hidden="true"
-                >
-                  <span className="text-[22px]">{categoryGlyph(f.category)}</span>
-                </div>
-              )}
+              {/* Member photo first, representative image beside it. Whichever
+                  exists renders; when neither does, one category tile stands in
+                  for both rather than two empty boxes. */}
+              {(() => {
+                const showMember = !!f.memberPhotoUrl && !failedImages.has(f.id + ':member')
+                const showRep    = !!f.representativeImageUrl && !failedImages.has(f.id + ':representative')
+
+                if (!showMember && !showRep) {
+                  return (
+                    <div
+                      className="w-14 h-14 rounded-xl bg-[#F5F5F8] border border-[#EBEBF2] flex items-center justify-center flex-shrink-0"
+                      aria-hidden="true"
+                    >
+                      <span className="text-[22px]">{categoryGlyph(f.category)}</span>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    {showMember && (
+                      <figure className="flex flex-col items-center gap-0.5 m-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={f.memberPhotoUrl!}
+                          alt={f.product ?? 'Scanned item'}
+                          onError={() => markFailed(f.id + ':member')}
+                          // Not loading="lazy": an offscreen lazy image never
+                          // requests, so onError never fires and an expired URL
+                          // would leave a gap where the tile should have been.
+                          decoding="async"
+                          className="w-14 h-14 rounded-xl object-cover bg-[#F5F5F8] border border-[#EBEBF2]"
+                        />
+                        <figcaption className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#B0B0C8] leading-none">
+                          Your photo
+                        </figcaption>
+                      </figure>
+                    )}
+
+                    {showRep && (
+                      <figure className="flex flex-col items-center gap-0.5 m-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={f.representativeImageUrl!}
+                          alt={`Representative image of ${f.product ?? 'this product'}`}
+                          onError={() => markFailed(f.id + ':representative')}
+                          decoding="async"
+                          // object-contain, not cover: a product reference photo
+                          // is usually the whole item on white, and cropping it
+                          // to a square throws away the part worth seeing.
+                          className="w-14 h-14 rounded-xl object-contain bg-[#F5F5F8] border border-[#EBEBF2]"
+                        />
+                        <figcaption className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#B0B0C8] leading-none">
+                          Representative
+                        </figcaption>
+                      </figure>
+                    )}
+                  </div>
+                )
+              })()}
 
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-bold text-[#1A1A2E] leading-snug">

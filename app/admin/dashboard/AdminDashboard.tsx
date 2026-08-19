@@ -95,6 +95,9 @@ interface ScannerProduct {
 interface ScannerImageService {
   catalogSize: number
   catalogHit: ScannerChoiceStat
+  /** Scans answered entirely from a stored image — no provider call at all.
+   *  Absent on a response from before the image store shipped. */
+  catalogImageHit?: ScannerChoiceStat
   imageSearchRequests: ScannerChoiceStat
   lowConfidenceSkips: ScannerChoiceStat
   specificitySkips: ScannerChoiceStat
@@ -1218,15 +1221,19 @@ export default function AdminDashboard() {
                 value={sc.imageService.braveCallsThisMonth}
                 sub="this month (billable)" />
             </div>
-            <div className="grid grid-cols-2 gap-3 mt-3">
+            <div className="grid grid-cols-3 gap-3 mt-3">
               <StatCard
                 label="Catalog Hit"
                 value={sc.imageService.catalogHit.count}
                 sub={`${sc.imageService.catalogHit.pct}% of scans`} />
               <StatCard
-                label="Image Search"
+                label="Catalog Image"
+                value={sc.imageService.catalogImageHit?.count ?? 0}
+                sub={`${sc.imageService.catalogImageHit?.pct ?? 0}% free`} />
+              <StatCard
+                label="True Brave Rate"
                 value={sc.imageService.imageSearchRequests.count}
-                sub={`${sc.imageService.imageSearchRequests.pct}% of scans`} />
+                sub={`${sc.imageService.imageSearchRequests.pct}% billable`} />
             </div>
             <div className="grid grid-cols-3 gap-3 mt-3">
               <StatCard
@@ -1243,10 +1250,13 @@ export default function AdminDashboard() {
                 sub="searches" />
             </div>
             <p className="text-[10px] text-[#8E8EA8] font-medium px-1 mt-2 leading-relaxed">
-              Catalog hit and image search are independent — one scan can count toward
-              both, so these do not add up to 100%. Brave calls counts searches and
-              failures together; both hit the API and both are billable. All zero while
-              IMAGE_SEARCH_ENABLED is off.
+              Catalog hit and true Brave rate are independent — a known product with no
+              stored image counts toward both, so these do not add up to 100%. Catalog
+              image is the one that costs nothing: product known AND its image already
+              stored, so the scan never reached Brave. True Brave rate counts searches
+              and failures together; both hit the API and both are billable. As stored
+              images accumulate, catalog image should rise and true Brave should fall.
+              All zero while IMAGE_SEARCH_ENABLED is off.
             </p>
           </div>
         )}

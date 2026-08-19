@@ -359,10 +359,15 @@ export async function GET(req: NextRequest) {
     // reached the Product Image Service, so this is not an average over every
     // scan and should not be read as one.
     confidenceSampleSize: confidences.length,
+    // imageSearchRate is the TRUE provider rate: calls that reached Brave and
+    // are billable. catalogImageHitRate is its opposite — scans answered from a
+    // stored representative image, which never reached the provider at all.
     imageSearchRate: pct(imageSearchCalls, totalScans),
     catalogHitRate:  pct(methodCount('CATALOG_HIT'), totalScans),
+    catalogImageHitRate: pct(methodCount('CATALOG_IMAGE_HIT'), totalScans),
     imageSearchCalls,
     catalogHits: methodCount('CATALOG_HIT'),
+    catalogImageHits: methodCount('CATALOG_IMAGE_HIT'),
   }
 
   // ── 5. Financial health ─────────────────────────────────────────────────

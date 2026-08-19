@@ -10,19 +10,29 @@
  *   limit?  — page size, default 20, max 50
  *   offset? — rows to skip
  *
- * PHOTOS are the member's own, from the private scan-photos bucket. A fresh
- * SIGNED URL is minted per request and expires in an hour — the URL is never
- * stored, because a stored one outlives its own expiry and would be treated as
- * shareable. Scans taken before photo storage existed have no path and fall
- * back to a category tile.
+ * TWO PICTURES PER FIND, either of which may be absent:
  *
- * Still no PRODUCT image: representative_image_url was dropped, and the Brave
- * URLs behind it are transient and may not be persisted.
+ *   memberPhotoUrl        the member's OWN photo of the item in the bin, from
+ *                         the private scan-photos bucket
+ *   representativeImageUrl a reference photo of the PRODUCT, from the private
+ *                         representative-images bucket, shared by every member
+ *                         who scanned the same product
+ *
+ * Both are fresh SIGNED URLs minted per request and expiring in an hour. The
+ * URLs are never stored: a stored one outlives its own expiry and starts being
+ * treated as shareable. Scans predating either store fall back to a category
+ * tile, so old history stays readable rather than half-broken.
+ *
+ * HOW A SCAN FINDS ITS PRODUCT: scanner_events has no catalog foreign key, so
+ * the link runs through image_search_log, which records the catalog row a scan
+ * resolved to. A scan that never reached the Product Image Service — feature
+ * off, low confidence, too vague — has no log row and therefore no
+ * representative image. That is correct: nothing was ever looked up for it.
  *
  * Auth: member session (server client for identity), admin client for reads.
  *
  * Responses:
- *   200 { finds: [...], hasMore: boolean }
+ *   200 { finds: [{ ..., memberPhotoUrl, representativeImageUrl }], hasMore }
  *   401 { error: 'not_authenticated' }
  *   404 { error: 'member_not_found' }
  */
@@ -30,6 +40,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { signRepresentativeImages } from '@/lib/representative-image-store'
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
@@ -124,6 +135,56 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── Representative images ──
+  // Two hops, both bounded by the page size: scan -> catalog id (through the
+  // image search log) and catalog id -> stored path. Signing is batched, so a
+  // page of twenty costs one signing call regardless of how many share a
+  // product.
+  const representativeUrlById: Record<string, string> = {}
+  const scanIds = page.map(r => r.id)
+
+  if (scanIds.length > 0) {
+    const { data: logRows } = await admin
+      .from('image_search_log')
+      .select('scanner_event_id, product_catalog_id')
+      .in('scanner_event_id', scanIds)
+      .not('product_catalog_id', 'is', null)
+
+    // A scan can have several log rows (CATALOG_HIT then IMAGE_SEARCH), all
+    // pointing at the same catalog row, so the map collapses them.
+    const catalogIdByScan: Record<string, string> = {}
+    for (const row of logRows ?? []) {
+      if (row.scanner_event_id && row.product_catalog_id) {
+        catalogIdByScan[row.scanner_event_id] = row.product_catalog_id
+      }
+    }
+
+    const catalogIds = [...new Set(Object.values(catalogIdByScan))]
+    if (catalogIds.length > 0) {
+      const { data: catalogRows } = await admin
+        .from('product_catalog')
+        .select('id, representative_image_path')
+        .in('id', catalogIds)
+        .not('representative_image_path', 'is', null)
+
+      const pathByCatalogId: Record<string, string> = {}
+      for (const c of catalogRows ?? []) {
+        if (c.representative_image_path) pathByCatalogId[c.id] = c.representative_image_path
+      }
+
+      const signedByPath = await signRepresentativeImages(
+        admin,
+        [...new Set(Object.values(pathByCatalogId))],
+      )
+
+      for (const [scanId, catalogId] of Object.entries(catalogIdByScan)) {
+        const path = pathByCatalogId[catalogId]
+        const url = path ? signedByPath[path] : undefined
+        if (url) representativeUrlById[scanId] = url
+      }
+    }
+  }
+
   return NextResponse.json({
     finds: page.map(r => ({
       id:              r.id,
@@ -132,6 +193,10 @@ export async function GET(req: NextRequest) {
       estimatedRetail: r.estimated_retail_price,
       scannedAt:       r.scanned_at,
       storeName:       r.store_id ? (nameById[r.store_id] ?? null) : null,
+      memberPhotoUrl:  photoUrlById[r.id] ?? null,
+      representativeImageUrl: representativeUrlById[r.id] ?? null,
+      // Kept so a client cached from before this change keeps rendering the
+      // member's own photo instead of dropping to a category tile.
       photoUrl:        photoUrlById[r.id] ?? null,
     })),
     hasMore,

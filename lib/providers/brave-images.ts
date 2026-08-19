@@ -7,6 +7,16 @@
  * `false` as a type-level statement of that, not a runtime toggle — nothing in
  * this codebase is allowed to set it true without a licence that says so.
  *
+ * WHAT canPersistResults COVERS, PRECISELY: the RESULT — Brave's URL and the
+ * metadata around it. It stays false and the URL is still never stored.
+ *
+ * We download and re-host in Supabase Storage rather than storing Brave's URL
+ * directly. This is architecturally independent of Brave's storage terms.
+ *
+ * See lib/representative-image-store for that path. Note that re-hosting raises
+ * a separate question this flag has never spoken to — who owns the photograph —
+ * which sits with the standing attorney review, not with this provider.
+ *
  * Every configuration value comes from the environment. Nothing here is tuned
  * by editing code.
  */
@@ -62,6 +72,7 @@ export class BraveImagesProvider implements ImageSearchProvider {
       return null
     }
     // IMPORTANT: Do not log or store result URLs.
-    // Brave standard-plan results remain transient.
+    // Brave standard-plan results remain transient. A caller may download the
+    // image behind a URL and host its own copy; it may not keep the URL.
   }
 }

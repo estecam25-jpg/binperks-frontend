@@ -45,8 +45,8 @@ interface Analytics {
     topCategories: { category: string; scans: number }[]
     topProducts: { product: string | null; category: string | null; scans: number }[]
     avgConfidence: number | null; confidenceSampleSize: number
-    imageSearchRate: number; catalogHitRate: number
-    imageSearchCalls: number; catalogHits: number
+    imageSearchRate: number; catalogHitRate: number; catalogImageHitRate: number
+    imageSearchCalls: number; catalogHits: number; catalogImageHits: number
   }
   financialHealth: {
     commissionsEarned: number; commissionsRetained: number; couponsFundedByBinPerks: number
@@ -419,18 +419,27 @@ export default function AnalyticsTab() {
           <StatCard label="Total Scans" value={sc.totalScans}     sub="all time" />
           <StatCard label="This Month"  value={sc.scansThisMonth} sub="scans" />
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <StatCard
             label="Avg Confidence"
             value={sc.avgConfidence === null ? '—' : sc.avgConfidence.toFixed(2)}
             sub={`over ${sc.confidenceSampleSize} logged`} />
-          <StatCard label="Catalog Hit"  value={sc.catalogHitRate + '%'}  sub={`${sc.catalogHits} of scans`} />
-          <StatCard label="Image Search" value={sc.imageSearchRate + '%'} sub={`${sc.imageSearchCalls} calls`} />
+          <StatCard label="Catalog Hit" value={sc.catalogHitRate + '%'} sub={`${sc.catalogHits} of scans`} />
+          <StatCard
+            label="Catalog Image"
+            value={sc.catalogImageHitRate + '%'}
+            sub={`${sc.catalogImageHits} free of charge`} />
+          <StatCard
+            label="True Brave Rate"
+            value={sc.imageSearchRate + '%'}
+            sub={`${sc.imageSearchCalls} billable calls`} />
         </div>
         <p className="text-[10px] text-[#8E8EA8] font-medium leading-relaxed">
           Confidence is averaged over image_search_log rows only — scans that never reached
-          the image service are not in it. Catalog hit and image search are independent
-          rates over the same scan total, so they do not add to 100%.
+          the image service are not in it. Catalog hit and true Brave rate are independent
+          rates over the same scan total, so they do not add to 100%. Catalog image is the
+          one that costs nothing: the product was known and its representative image was
+          already stored, so the scan never reached Brave.
         </p>
 
         <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8] pt-2">
