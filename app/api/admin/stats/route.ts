@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { verifyAdmin } from '@/lib/admin-auth'
+import { computeMrr, monthlyBilling, VIP_PRICE } from '@/lib/mrr'
 
 export async function GET() {
   const adminEmail = await verifyAdmin()
@@ -71,41 +72,11 @@ export async function GET() {
 
   const totalStamps = (stampSum ?? []).reduce((sum: number, r: { effective_stamps: number }) => sum + (r.effective_stamps ?? 0), 0)
 
-  // V3 billing: the first cycle is $299.99 Implementation & Launch, then the
-  // $99.00 platform subscription from cycle 2 onward. Additional locations are
-  // $49.99 in every cycle, including the first.
-  const IMPLEMENTATION_PRICE = 299.99
-  const PLATFORM_PRICE       = 99.00
-  const EXTRA_LOCATION_PRICE = 49.99
-
-  const oneMonthAgo = new Date()
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
-
-  /**
-   * What one merchant bills per month.
-   *
-   * Merchants still inside their first billing cycle are paying the
-   * implementation fee. A null implementation_fee_paid_at means a pre-V3
-   * merchant, who is by definition past their first cycle. Additional
-   * locations are charged in every cycle, including the first.
-   *
-   * Shared by the MRR total and the growth figure so the two can't drift.
-   */
-  const monthlyBilling = (m: {
-    location_count: number | null
-    implementation_fee_paid_at: string | null
-  }) => {
-    const locs = Math.max(1, m.location_count ?? 1)
-    const paidAt = m.implementation_fee_paid_at ? new Date(m.implementation_fee_paid_at) : null
-    const inFirstCycle = paidAt !== null && paidAt > oneMonthAgo
-    const basePrice = inFirstCycle ? IMPLEMENTATION_PRICE : PLATFORM_PRICE
-    return basePrice + (locs - 1) * EXTRA_LOCATION_PRICE
-  }
-
-  const activeMerchants = (merchants ?? []).filter(m => m.subscription_status === 'active')
-  const merchantMrr = activeMerchants.reduce((sum, m) => sum + monthlyBilling(m), 0)
-  const memberMrr  = (totalVip ?? 0) * 29.99
-  const totalMrr   = merchantMrr + memberMrr
+  // Pricing and the per-merchant billing rule live in lib/mrr, shared with
+  // /api/admin/analytics. Two copies of the price table is how one dashboard
+  // ends up reporting two different MRRs on two different tabs.
+  const { activeMerchantCount, merchantMrr, memberMrr, totalMrr } =
+    computeMrr(merchants ?? [], totalVip ?? 0)
 
   // Growth is priced per merchant, not as a flat implementation fee each. The
   // old version multiplied a bare count by $299.99, so it both ignored extra
@@ -116,7 +87,7 @@ export async function GET() {
   )
   const mrrGrowthThisMonth =
     newActiveMerchantsThisMonth.reduce((sum, m) => sum + monthlyBilling(m), 0)
-    + (newVipThisMonth ?? 0) * 29.99
+    + (newVipThisMonth ?? 0) * VIP_PRICE
   const vipConversionRate     = (totalMembers ?? 0) > 0 ? ((totalVip ?? 0) / (totalMembers ?? 0)) * 100 : 0
   const referralConversionRate = (totalReferrals ?? 0) > 0 ? ((qualifiedReferrals ?? 0) / (totalReferrals ?? 0)) * 100 : 0
 
@@ -126,10 +97,10 @@ export async function GET() {
     totalStamps,
     couponsIssued:           couponsIssued ?? 0,
     couponsRedeemed:         couponsRedeemed ?? 0,
-    activeMerchantCount:     activeMerchants.length,
-    merchantMrr:             Math.round(merchantMrr * 100) / 100,
-    memberMrr:               Math.round(memberMrr * 100) / 100,
-    totalMrr:                Math.round(totalMrr * 100) / 100,
+    activeMerchantCount,
+    merchantMrr,
+    memberMrr,
+    totalMrr,
     newMembersThisMonth:     newMembersThisMonth ?? 0,
     newMerchantsThisMonth:   newMerchantsThisMonth ?? 0,
     mrrGrowthThisMonth:      Math.round(mrrGrowthThisMonth * 100) / 100,

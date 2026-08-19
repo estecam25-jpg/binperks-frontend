@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin-emails'
 import ContentTab from './ContentTab'
 import AnnouncementsTab from './AnnouncementsTab'
+import AnalyticsTab from './AnalyticsTab'
+import { StatCard, Spinner } from './ui'
 import { CONTENT_TYPES, contentTypeBySlug } from '@/lib/admin-content'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -112,24 +114,12 @@ interface ScannerStats {
 }
 type TabId =
   | 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'scanner' | 'alerts'
-  | 'announcements'
+  | 'analytics' | 'announcements'
   // Content tabs, one per entry in CONTENT_TYPES. Prefixed so a content slug
   // can never collide with an operational tab name.
   | `content:${string}`
 
 // ── Module-level helper components ────────────────────────────────────────
-
-function StatCard({ label, value, sub, accent }: {
-  label: string; value: string | number; sub?: string; accent?: boolean
-}) {
-  return (
-    <div className={`rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-1 ${accent ? 'bg-[#1A1A2E]' : 'bg-white'}`}>
-      <p className={`text-[10px] font-bold tracking-[0.1em] uppercase ${accent ? 'text-white/50' : 'text-[#8E8EA8]'}`}>{label}</p>
-      <p className={`font-['Coiny'] text-3xl leading-none ${accent ? 'text-[#FFB217]' : 'text-[#1A1A2E]'}`}>{value}</p>
-      {sub && <p className={`text-[11px] font-medium ${accent ? 'text-white/60' : 'text-[#8E8EA8]'}`}>{sub}</p>}
-    </div>
-  )
-}
 
 function TierBadge({ status, stamps }: { status: string; stamps: number }) {
   const t =
@@ -139,10 +129,6 @@ function TierBadge({ status, stamps }: { status: string; stamps: number }) {
     stamps >= 200       ? { label: '🥈 Silver',  bg: 'bg-slate-100 text-slate-600' }  :
                           { label: '🥉 Bronze',  bg: 'bg-orange-100 text-orange-700' }
   return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.bg}`}>{t.label}</span>
-}
-
-function Spinner() {
-  return <div className="flex justify-center py-12"><span className="w-8 h-8 border-[3px] border-[#EBEBF2] border-t-[#4A4B98] rounded-full animate-spin" /></div>
 }
 
 /** Small static pill used for V3 status chips. */
@@ -1345,6 +1331,7 @@ export default function AdminDashboard() {
 
   const TABS: { id: TabId; label: string }[] = [
     { id: 'overview',  label: 'Overview' },
+    { id: 'analytics', label: 'Analytics' },
     { id: 'merchants', label: 'Merchants' },
     { id: 'stores',    label: 'Stores' },
     { id: 'members',   label: 'Members' },
@@ -1396,7 +1383,8 @@ export default function AdminDashboard() {
         {tab === 'scanner'   && renderScanner()}
         {tab === 'alerts'    && renderAlerts()}
 
-        {/* Fetches its own data; nothing to lazy-load from here. */}
+        {/* Both fetch their own data; nothing to lazy-load from here. */}
+        {tab === 'analytics' && <AnalyticsTab />}
         {tab === 'announcements' && <AnnouncementsTab />}
 
         {/* ContentTab fetches its own rows keyed on the slug, so switching

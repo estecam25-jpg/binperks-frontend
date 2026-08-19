@@ -91,3 +91,38 @@ export function topProducts(
       binsPct: pct(g.bins, g.scans),
     }))
 }
+
+export interface TopCategory {
+  category: string
+  scans: number
+}
+
+/**
+ * The most-scanned categories, highest first.
+ *
+ * Grouped case-insensitively for the same reason topProducts is: the model is
+ * inconsistent about capitalisation and splitting "Tools" from "tools" would
+ * understate both. Scans with no category are skipped rather than bucketed as
+ * "Unknown" — an absent category is a gap in the model's answer, not a kind of
+ * product, and showing it as a leading category would be misleading.
+ */
+export function topCategories(
+  rows: { identified_category: string | null }[],
+  limit = 10,
+): TopCategory[] {
+  const groups = new Map<string, { label: string; scans: number }>()
+
+  for (const row of rows) {
+    const raw = (row.identified_category ?? '').trim()
+    if (!raw) continue
+    const key = raw.toLowerCase()
+    const g = groups.get(key) ?? { label: raw, scans: 0 }
+    g.scans++
+    groups.set(key, g)
+  }
+
+  return [...groups.values()]
+    .sort((a, b) => b.scans - a.scans || a.label.localeCompare(b.label))
+    .slice(0, limit)
+    .map(g => ({ category: g.label, scans: g.scans }))
+}
