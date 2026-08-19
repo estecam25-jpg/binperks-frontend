@@ -7,6 +7,12 @@
  * once alerts have landed in members' apps, rewriting the record they came
  * from would make the log disagree with what people actually received.
  *
+ * IN-APP ONLY. Announcements do not send SMS. The GHL webhook that used to fan
+ * out texts here has been removed deliberately — it is not a wiring gap to fill
+ * back in. GHL stays comms for the flows that own consent (CLAUDE.md rule 4),
+ * and broadcast marketing texts are exactly what TCPA and Florida 501.059
+ * govern.
+ *
  * Auth: admin session on both verbs. Data: admin client — member_alerts and
  * binperks_announcements both have RLS on with no policies.
  */
@@ -14,7 +20,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { verifyAdmin } from '@/lib/admin-auth'
-import { postToGhl } from '@/lib/ghl-webhook'
 
 export type AnnouncementTarget = 'all' | 'vip' | 'starter'
 
@@ -28,24 +33,8 @@ const MAX_BODY = 500
  */
 const INSERT_BATCH = 100
 
-/**
- * Ceiling on announcement SMS per send.
- *
- * Each webhook is a bounded HTTP call, but they still add up against the
- * function's own time limit. Past this the in-app alerts are all still
- * written — only the texts stop — and the shortfall is logged rather than
- * silently dropped.
- */
-const MAX_SMS = 200
-
-/** How many go out at once. Enough to be quick, small enough not to hammer GHL. */
-const SMS_CONCURRENCY = 10
-
 interface TargetMember {
   id: string
-  phone: string | null
-  first_name: string | null
-  sms_opt_in: boolean | null
 }
 
 export async function GET() {
@@ -122,7 +111,7 @@ export async function POST(req: NextRequest) {
   // Sending marketing to somebody who has been barred is also just wrong.
   let query = admin
     .from('members')
-    .select('id, phone, first_name, sms_opt_in')
+    .select('id')
     .eq('status', 'active')
     .eq('is_blacklisted', false)
 
@@ -181,46 +170,8 @@ export async function POST(req: NextRequest) {
     console.error('[admin/announcements] record insert failed:', recordError)
   }
 
-  // ── SMS (optional) ────────────────────────────────────────────────────────
-  // Skipped entirely until GHL_ANNOUNCEMENT_WEBHOOK_URL is set.
-  //
-  // ONLY MEMBERS WHO OPTED IN TO SMS. The in-app alert goes to everyone
-  // targeted, but a text is a different channel with different consent:
-  // sms_opt_in is what the member agreed to at signup, and an announcement is
-  // marketing. TCPA and Florida §501.059 are already flagged for counsel in
-  // CLAUDE.md; ignoring the opt-out here would be the thing that matters.
-  const webhook = process.env.GHL_ANNOUNCEMENT_WEBHOOK_URL
-  let smsAttempted = 0
-
-  if (webhook) {
-    const reachable = targets.filter(m => m.sms_opt_in === true && !!m.phone)
-    const capped = reachable.slice(0, MAX_SMS)
-    if (reachable.length > capped.length) {
-      console.warn(
-        `[admin/announcements] SMS capped at ${MAX_SMS}; ` +
-        `${reachable.length - capped.length} member(s) not texted`,
-      )
-    }
-
-    for (let i = 0; i < capped.length; i += SMS_CONCURRENCY) {
-      const group = capped.slice(i, i + SMS_CONCURRENCY)
-      await Promise.all(group.map(m =>
-        // postToGhl never throws and bounds itself at 5s.
-        postToGhl(webhook, {
-          phone:     m.phone,
-          firstName: m.first_name ?? '',
-          title,
-          body: text,
-        }, 'announcement'),
-      ))
-    }
-    smsAttempted = capped.length
-  }
-
   return NextResponse.json({
     sent: true,
     recipientCount: inserted,
-    // Surfaced so an admin can see the two channels are not the same number.
-    smsAttempted,
   })
 }

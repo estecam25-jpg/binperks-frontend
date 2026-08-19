@@ -17,17 +17,23 @@
  *     referralsThisWeek, newMembersThisWeek
  *   },
  *   originMetrics: { originatedMembers, originatedVipMembers, monthlyCommissionPotential },
+ *   lifetimeStats: { totalStampsGiven, totalCouponsEarned, membersEnrolled, vipMembers },
  *   fiscalWeekChart: [{ date, dayLabel, visitCount, stampCount }]
  * }
  *
  * No member identities are returned. Merchants see aggregates only — BinPerks
  * owns the member relationship (CLAUDE.md rule 16).
  *
- * NOTE ON SCOPE: commissionEligible and originMetrics are MERCHANT-level and are
- * deliberately NOT filtered by the storeId param. Commission eligibility belongs
+ * NOTE ON SCOPE: commissionEligible, originMetrics, and three of the four
+ * lifetimeStats are MERCHANT-level and are deliberately NOT filtered by the
+ * storeId param. Commission eligibility belongs
  * to the merchant account, not a location, and Origin Store attribution is counted
  * per originating merchant. Switching locations in the dashboard must not change
  * these numbers — see CLAUDE.md "STORE AND MERCHANT STATUS MODEL (V3)".
+ *
+ * lifetimeStats.totalStampsGiven is the exception: stamps are awarded AT a
+ * location, so it follows the location selector like the rest of the activity
+ * figures. The other three are Origin attribution and stay merchant-wide.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -61,6 +67,51 @@ function getFiscalWeekRange(fiscalWeekStart: string = 'friday') {
 }
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/**
+ * All-time effective stamps, summed in the route rather than by the database.
+ *
+ * PostgREST aggregate functions are disabled on this project ("Use of aggregate
+ * functions is not allowed"), so effective_stamps.sum() is not available and the
+ * rows have to come back. They are read in pages because PostgREST caps a
+ * response at 1000 rows by default — a plain select would silently stop counting
+ * at row 1000 and report a number that only ever looks slightly low.
+ *
+ * Paged on id, which is unique, so no row is read twice or skipped when rows
+ * share an occurred_at. On a partial read the total so far is returned and the
+ * shortfall logged: an undercount is visible in the logs rather than passed off
+ * as complete.
+ */
+const STAMP_PAGE_SIZE = 1000
+const STAMP_MAX_PAGES = 100
+
+async function sumEffectiveStamps(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  storeIds: string[],
+): Promise<number> {
+  let total = 0
+  for (let page = 0; page < STAMP_MAX_PAGES; page++) {
+    const from = page * STAMP_PAGE_SIZE
+    const { data, error } = await admin
+      .from('activity_events')
+      .select('effective_stamps')
+      .in('store_id', storeIds)
+      .order('id', { ascending: true })
+      .range(from, from + STAMP_PAGE_SIZE - 1)
+
+    if (error) {
+      console.error('[/api/merchant/dashboard] stamp sum page failed:', error)
+      return total
+    }
+    const rows = (data ?? []) as { effective_stamps: number | null }[]
+    total += rows.reduce((sum, r) => sum + (r.effective_stamps ?? 0), 0)
+    if (rows.length < STAMP_PAGE_SIZE) return total
+  }
+  console.warn(
+    `[/api/merchant/dashboard] stamp sum stopped at ${STAMP_MAX_PAGES} pages — total is a floor`,
+  )
+  return total
+}
 
 export async function GET(req: NextRequest) {
   // Resolved through lib/merchant-auth, which falls back to owner_email when
@@ -104,6 +155,7 @@ export async function GET(req: NextRequest) {
       stores: [],
       stats:           null,
       originMetrics:   null,
+      lifetimeStats:   null,
       fiscalWeekChart: [],
     })
   }
@@ -127,6 +179,8 @@ export async function GET(req: NextRequest) {
     fiscalChartRes,
     originatedMembersRes,
     originatedVipRes,
+    couponsEarnedRes,
+    totalStampsGiven,
   ] = await Promise.all([
     admin
       .from('members')
@@ -188,6 +242,22 @@ export async function GET(req: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .eq('origin_merchant_id', merchant.id)
       .eq('subscription_status', 'vip'),
+
+    // Coupons EARNED by members this merchant originated, wherever they were
+    // earned and whether or not they have been redeemed yet — the merchant's
+    // all-time contribution to the network, not its redemption traffic (which
+    // the fiscal-week "Coupons this week" tile already covers).
+    //
+    // rewards carries no origin column, so the filter goes through an inner
+    // join on the owning member. reward_type is pinned to 'visit_reward' so a
+    // future reward kind cannot quietly inflate the count.
+    admin
+      .from('rewards')
+      .select('id, members!inner(origin_merchant_id)', { count: 'exact', head: true })
+      .eq('reward_type', 'visit_reward')
+      .eq('members.origin_merchant_id', merchant.id),
+
+    sumEffectiveStamps(admin, storeIds),
   ])
 
   const weekActivity = (fiscalChartRes.data ?? []) as
@@ -256,6 +326,14 @@ export async function GET(req: NextRequest) {
       monthlyCommissionPotential: commissionEligible
         ? Number((originatedVipMembers * ORIGIN_COMMISSION_PER_VIP).toFixed(2))
         : null,
+    },
+    lifetimeStats: {
+      // Store-scoped, so this one follows the location selector.
+      totalStampsGiven:   totalStampsGiven,
+      // Merchant-level, all-time, by Origin attribution.
+      totalCouponsEarned: couponsEarnedRes.count ?? 0,
+      membersEnrolled:    originatedMembersRes.count ?? 0,
+      vipMembers:         originatedVipMembers,
     },
     fiscalWeekChart: chartDays,
     fiscalWeekStart,

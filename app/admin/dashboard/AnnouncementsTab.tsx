@@ -121,8 +121,7 @@ export default function AnnouncementsTab() {
 
     const d = await res.json()
     setResult(
-      `Sent to ${d.recipientCount} member${d.recipientCount === 1 ? '' : 's'}` +
-      (d.smsAttempted ? ` · ${d.smsAttempted} SMS queued` : ''),
+      `Sent to ${d.recipientCount} member${d.recipientCount === 1 ? '' : 's'}`,
     )
     // Cleared so the form cannot be submitted twice by reflex — an announcement
     // cannot be unsent.

@@ -13,11 +13,10 @@ interface Store {
 // No 'members' tab: merchants do not see individual member identities.
 // BinPerks owns the member relationship (CLAUDE.md rule 16) — the Overview tab
 // shows aggregates only.
-type TabId = 'start' | 'overview' | 'redemptions' | 'perks' | 'marketing' | 'settlement' | 'settings'
+type TabId = 'start' | 'overview' | 'perks' | 'marketing' | 'settlement' | 'settings'
 
 const BASE_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'overview',     label: 'Overview',     icon: '📊' },
-  { id: 'redemptions',  label: 'Redemptions',  icon: '🎟️' },
   { id: 'perks',        label: 'Perks',        icon: '✨' },
   { id: 'marketing',    label: 'Marketing',    icon: '📣' },
   { id: 'settlement',   label: 'Settlement',   icon: '🧾' },

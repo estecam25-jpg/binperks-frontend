@@ -21,6 +21,20 @@ interface OriginMetrics {
   monthlyCommissionPotential: number | null
 }
 
+/**
+ * All-time totals.
+ *
+ * totalStampsGiven is counted at the LOCATION and so follows the location
+ * selector. The other three are Origin Store attribution, which is permanent
+ * and merchant-wide — they do not change when a location is picked.
+ */
+interface LifetimeStats {
+  totalStampsGiven: number
+  totalCouponsEarned: number
+  membersEnrolled: number
+  vipMembers: number
+}
+
 interface OverviewData {
   merchant: {
     commissionEligible: boolean
@@ -35,6 +49,7 @@ interface OverviewData {
     newMembersThisWeek: number
   } | null
   originMetrics: OriginMetrics | null
+  lifetimeStats: LifetimeStats | null
   fiscalWeekChart: ChartDay[]
   fiscalWeekStart: string
 }
@@ -55,7 +70,7 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
   if (loading) return <LoadingSkeleton />
   if (!data?.stats) return <EmptyState />
 
-  const { stats, fiscalWeekChart, merchant, originMetrics } = data
+  const { stats, fiscalWeekChart, merchant, originMetrics, lifetimeStats } = data
   const showStamps = metric === 'stamps'
   const valueFor = (d: ChartDay) => showStamps ? d.stampCount : d.visitCount
   const maxValue = Math.max(...fiscalWeekChart.map(valueFor), 1)
@@ -123,58 +138,69 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
         ))}
       </div>
 
-      {/* ── Members you originated ──
-          Attribution is permanent and merchant-wide, so these figures do not
-          change when switching between locations. */}
-      {originMetrics && (
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3.5 border-b border-[#EBEBF2]">
-            <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Members you enrolled</h2>
-            <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
-              Members who joined the BinPerks network through your store. This never changes,
-              even if they shop elsewhere in the network.
+      {/* ── All time ──
+          Weekly figures above answer "how is this week going"; these answer
+          "what has this store put into the network". */}
+      {lifetimeStats && (
+        <div className="flex flex-col gap-2.5">
+          <div className="px-0.5">
+            <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">All time</h2>
+            <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">
+              Stamps are counted where they were awarded. Coupons and members are counted by
+              Origin Store — members who joined BinPerks through your store stay yours
+              permanently, even when they shop elsewhere in the network.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 divide-x divide-[#EBEBF2]">
-            <div className="px-4 py-4">
-              <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] mb-1">
-                Total enrolled
-              </p>
-              <p className="font-['Coiny'] text-3xl text-[#4A4B98] leading-none">
-                {originMetrics.originatedMembers.toLocaleString()}
-              </p>
-            </div>
-            <div className="px-4 py-4">
-              <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] mb-1">
-                Currently VIP
-              </p>
-              <p className="font-['Coiny'] text-3xl text-[#FFB217] leading-none">
-                {originMetrics.originatedVipMembers.toLocaleString()}
-              </p>
-            </div>
-          </div>
-
-          {/* Only shown while commission_eligible — a paused merchant has no
-              potential to project, and BinPerks retains those commissions. */}
-          {originMetrics.monthlyCommissionPotential !== null && (
-            <div className="px-4 py-4 border-t border-[#EBEBF2] bg-[#F5F5F8]">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
-                  Monthly commission potential
-                </p>
-                <p className="font-['Coiny'] text-2xl text-[#2A7D34] leading-none">
-                  ${originMetrics.monthlyCommissionPotential.toFixed(2)}
-                </p>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Stamps awarded',   value: lifetimeStats.totalStampsGiven,   icon: '🏷️', color: '#4A4B98' },
+              { label: 'Coupons earned',   value: lifetimeStats.totalCouponsEarned, icon: '🎟️', color: '#DA1212' },
+              { label: 'Members enrolled', value: lifetimeStats.membersEnrolled,    icon: '👥', color: '#2A7D34' },
+              { label: 'VIP members',      value: lifetimeStats.vipMembers,         icon: '⭐', color: '#FFB217' },
+            ].map(stat => (
+              <div key={stat.label} className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
+                    {stat.label}
+                  </span>
+                  <span className="text-lg">{stat.icon}</span>
+                </div>
+                <span
+                  className="font-['Coiny'] text-3xl leading-none"
+                  style={{ color: stat.color }}
+                >
+                  {stat.value.toLocaleString()}
+                </span>
               </div>
-              <p className="text-[11px] text-[#8E8EA8] font-medium mt-1.5 leading-relaxed">
-                {originMetrics.originatedVipMembers.toLocaleString()} VIP member
-                {originMetrics.originatedVipMembers === 1 ? '' : 's'} × $19.99. An estimate at
-                today&apos;s numbers, not an amount owed — your actual payout is calculated in the
-                monthly settlement and shown on the Settlement tab.
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Commission potential ──
+          The enrolled and VIP counts live in the All time grid above; this card
+          is what those VIP members are worth. Only shown while
+          commission_eligible — a paused merchant has no potential to project,
+          and BinPerks retains those commissions. */}
+      {originMetrics && originMetrics.monthlyCommissionPotential !== null && (
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-4 py-4 bg-[#F5F5F8]">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
+                Monthly commission potential
+              </p>
+              <p className="font-['Coiny'] text-2xl text-[#2A7D34] leading-none">
+                ${originMetrics.monthlyCommissionPotential.toFixed(2)}
               </p>
             </div>
-          )}
+            <p className="text-[11px] text-[#8E8EA8] font-medium mt-1.5 leading-relaxed">
+              {originMetrics.originatedVipMembers.toLocaleString()} VIP member
+              {originMetrics.originatedVipMembers === 1 ? '' : 's'} × $19.99. An estimate at
+              today&apos;s numbers, not an amount owed — your actual payout is calculated in the
+              monthly settlement and shown on the Settlement tab.
+            </p>
+          </div>
         </div>
       )}
 
