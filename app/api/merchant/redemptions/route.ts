@@ -1,6 +1,19 @@
 /**
  * GET /api/merchant/redemptions
  *
+ * Coupon redemptions at the merchant's own locations, by fiscal week.
+ *
+ * NO MEMBER IS IDENTIFIED HERE, DELIBERATELY. This returned memberName until
+ * the terms were tightened: Merchant Terms 10.3 now states that location
+ * operational reporting "does not identify individual members", and Privacy
+ * Policy 6.3 says merchants receive no individual member-level activity. A name
+ * on each row contradicted both.
+ *
+ * The members embed was dropped from the query as well, not just from the
+ * response — an unused join still pulls names out of the database on every
+ * request, and leaving it there is an invitation to map it back into the output.
+ * Do not add it back without changing the terms first.
+ *
  * Query params:
  *   storeId?      — scope to one location
  *   weekOffset?   — 0 = current fiscal week, -1 = last week, etc. (default 0)
@@ -13,11 +26,7 @@ import { findMerchantForRequest } from '@/lib/merchant-auth'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { toOne } from '@/lib/supabase-relations'
 
-/** to-ONE embeds — object-or-array because toOne accepts either. */
-type MemberRelation =
-  | { first_name: string; last_name: string; total_stamps: number }
-  | { first_name: string; last_name: string; total_stamps: number }[]
-  | null
+/** to-ONE embed — object-or-array because toOne accepts either. */
 type StoreRelation =
   | { display_name: string }
   | { display_name: string }[]
@@ -75,7 +84,6 @@ export async function GET(req: NextRequest) {
       coupon_value,
       redeemed_at,
       status,
-      members ( first_name, last_name, total_stamps ),
       stores!redeemed_at_location_id ( display_name )
     `, { count: 'exact' })
     .eq('merchant_id', merchant.id)
@@ -101,19 +109,16 @@ export async function GET(req: NextRequest) {
       id: string
       coupon_value: number
       redeemed_at: string
-      // Both are to-ONE embeds: objects, not arrays — see lib/supabase-relations.
-      members: MemberRelation
+      // A to-ONE embed: an object, not an array — see lib/supabase-relations.
       stores: StoreRelation
     }) => {
-      // Was r.members[0] / r.stores[0], always undefined on a to-one embed, so
-      // every redemption rendered as "Unknown" for both member and store.
-      const member = toOne(r.members)
-      const store  = toOne(r.stores)
+      // Was r.stores[0], always undefined on a to-one embed, so every
+      // redemption rendered as "Unknown" for the store.
+      const store = toOne(r.stores)
       return {
         id:           r.id,
         couponValue:  r.coupon_value,
         redeemedAt:   r.redeemed_at,
-        memberName:   member ? `${member.first_name} ${member.last_name}` : 'Unknown',
         storeName:    store?.display_name ?? 'Unknown',
       }
     }),
