@@ -38,7 +38,7 @@ export default function PrivacyPolicyPage() {
             'Name, phone number, email address',
             'Stamp history, coupon history, referral history',
             'Store visit activity and behavioral data',
-            'AI product scanner data including: item photo hashes (not the photos themselves), identified products, product categories, retail price estimates, and Shopping Cart / Back to Bins choices',
+            'AI product scanner data including: compressed scan photographs, identified products, product categories, retail price estimates, and Shopping Cart / Back to Bins choices',
             'Device type, browser type, and platform usage data',
           ]} />
           <Sub>2.2 Merchants</Sub>
@@ -79,12 +79,13 @@ export default function PrivacyPolicyPage() {
         </Section>
 
         <Section title="4. AI Product Scanner Data">
-          <P><B>4.1</B> When you use the BinPerks AI scanner, your item photo is transmitted to Anthropic&apos;s Claude AI for product identification. BinPerks does not permanently retain the submitted item photograph — only a cryptographic hash is retained by BinPerks. The photograph is transmitted to Anthropic for processing and may be retained by Anthropic in accordance with Anthropic&apos;s then-current commercial API data-retention terms.</P>
-          <P><B>4.2</B> Product identification results, categories, retail price estimates, and your Shopping Cart or Back to Bins choice are stored in BinPerks&apos; product intelligence database and used to improve identification accuracy over time.</P>
-          <P><B>4.3</B> BinPerks uses the Brave Search API to retrieve representative product images. These images are displayed temporarily during your scan session and are not permanently stored by BinPerks.</P>
-          <P><B>4.4</B> Scanner data is used for product intelligence, member preference insights, and network analytics. It is not sold to third parties.</P>
-          <P><B>4.5</B> &quot;Shopping Cart&quot; selections represent declared member interest only — not verified purchases. BinPerks does not represent scanner data as verified sales information.</P>
-          <P><B>4.6</B> BinPerks maintains a product intelligence catalog containing product names, brands, categories, and scan counts. Member-linked scanner records are subject to deletion rights described in Section 10. To the extent product intelligence has been deidentified in accordance with applicable law so that it can no longer reasonably be associated with a member or household, BinPerks may retain that deidentified information as a proprietary data asset. BinPerks will not attempt to reidentify information maintained as deidentified, except where permitted by applicable law for purposes of testing the effectiveness of deidentification safeguards.</P>
+          <P><B>4.1</B> When you use the BinPerks AI scanner, your item photo is transmitted to Anthropic&apos;s Claude AI for product identification. The photograph is transmitted to Anthropic for processing and may be retained by Anthropic in accordance with Anthropic&apos;s then-current commercial API data-retention terms.</P>
+          <P><B>4.2</B> BinPerks stores a compressed copy of your scan photo in BinPerks&apos; private cloud storage. Other members and participating merchants cannot access your stored scan photos. Access is protected through private storage and access controls. Scan photos are deleted when you deactivate your account and are subject to valid deletion requests.</P>
+          <P><B>4.3</B> BinPerks maintains a product intelligence catalog. When the AI identifies a product, BinPerks may download and store a compressed representative reference image of that product type for accuracy measurement and product identification improvement. Representative images are stored at the product level only — they are not linked to your identity or specific scan. These images may be sourced through third-party image search under applicable licensing arrangements.</P>
+          <P><B>4.4</B> Product identification results, categories, retail price estimates, and your Shopping Cart or Back to Bins choice are stored in BinPerks&apos; product intelligence database and used to improve identification accuracy over time.</P>
+          <P><B>4.5</B> Scanner data is used for product intelligence, member preference insights, and network analytics. It is not sold to third parties.</P>
+          <P><B>4.6</B> &quot;Shopping Cart&quot; selections represent declared member interest only — not verified purchases. BinPerks does not represent scanner data as verified sales information.</P>
+          <P><B>4.7</B> The product intelligence catalog contains product names, brands, categories, scan counts, and representative reference images. Member-linked scanner records are subject to deletion rights described in Section 10. To the extent product intelligence has been deidentified in accordance with applicable law so that it can no longer reasonably be associated with a member or household, BinPerks may retain that deidentified information as a proprietary data asset. BinPerks will not attempt to reidentify information maintained as deidentified, except where permitted by applicable law for purposes of testing the effectiveness of deidentification safeguards.</P>
         </Section>
 
         <Section title="5. Payment Data">
@@ -102,7 +103,7 @@ export default function PrivacyPolicyPage() {
             rows={[
               ['Stripe',            'Payment processing, merchant payouts, fraud detection'],
               ['Anthropic',         'AI product identification (image transmitted for processing; see Section 4.1 for retention terms)'],
-              ['Brave',             'Representative product image search (transient display only, not stored by BinPerks)'],
+              ['Brave',             'Representative product image search (see Section 4.3; images may be stored at the product level, never linked to a member)'],
               ['GoHighLevel (GHL)', 'SMS and email communications delivery'],
               ['Resend',            'Transactional email delivery'],
               ['Supabase',          'Database, authentication, and file storage'],
@@ -113,11 +114,11 @@ export default function PrivacyPolicyPage() {
           <Sub>6.3 Merchant Access to Member Information</Sub>
           <P>Participating merchants may access member information only as follows:</P>
           <Ul items={[
-            'Cashier staff at any participating location may access only the information necessary to identify the member, determine tier and stamp status, award a stamp, or redeem a coupon at the moment of service',
-            'Origin Merchants may view their enrolled member list (name, tier, stamps, join date) and their own commission and settlement reporting through the BinPerks merchant dashboard',
-            "A Merchant whose location was visited may receive operational reporting about stamp and coupon activity that occurred at that Merchant's own location; this reporting does not include the member's activity history at other merchants' locations",
-            'No merchant receives member phone numbers, email addresses, or the ability to export member contact information',
-            "Merchants do not receive information about member activity at other merchants' locations",
+            'When you initiate a BinPerks transaction at a participating location by providing your phone number, authorized cashier staff may see limited transaction-level information necessary to complete that transaction — your name, membership status and tier, stamp eligibility and status, and available reward information. This access is limited to the active transaction',
+            'Origin Merchant dashboard reporting is aggregate only — total members enrolled, total VIP members, aggregate stamps awarded, aggregate coupons earned, and commission and settlement activity',
+            'Merchants do not receive an individual member list, individual member-level activity history, member contact information, or exportable member data through dashboard reporting',
+            "A Merchant whose location was visited may receive aggregate operational reporting about stamp and coupon activity that occurred at that Merchant's own location",
+            "No merchant receives cross-merchant member activity history — reporting never includes a member's activity at other merchants' locations",
           ]} />
           <P><B>6.4</B> BinPerks may disclose information when required by law, court order, or government authority, or to protect the safety of users or the integrity of the platform.</P>
         </Section>
@@ -146,6 +147,7 @@ export default function PrivacyPolicyPage() {
         <Section title="9. Data Retention">
           <P><B>Members:</B> Member personal information is retained for the life of the account and for a period following deactivation as required for audit, dispute resolution, and applicable legal obligations.</P>
           <P><B>Merchants:</B> Merchant data including settlement records, commission history, and tax compliance information is retained for the period required by applicable law and legitimate business purposes.</P>
+          <P><B>Member scan photographs:</B> Stored scan photos are deleted when the member deactivates their account. BinPerks does not apply an extended retention period to member scan photos beyond deactivation. This is distinct from financial and settlement records — including payment, commission, settlement, dispute, and tax records — which are retained for the periods required by applicable law and legitimate business purposes regardless of account status.</P>
           <P><B>Scanner records:</B> Member-linked scan records are subject to deletion as described in Section 10. To the extent product intelligence has been deidentified in accordance with applicable law so that it can no longer reasonably be associated with a member or household, BinPerks may retain that deidentified information as a proprietary data asset indefinitely. BinPerks will not attempt to reidentify such deidentified information except as permitted by applicable law.</P>
           <P><B>Authentication tokens:</B> OTP codes and short-lived authentication tokens are automatically deleted after use or expiration.</P>
         </Section>
@@ -154,7 +156,7 @@ export default function PrivacyPolicyPage() {
           <P>BinPerks offers the following rights regarding your personal information:</P>
           <P><B>Access:</B> You may request a copy of the personal information BinPerks holds about you.</P>
           <P><B>Correction:</B> You may request correction of inaccurate personal information.</P>
-          <P><B>Deletion:</B> You may request deletion of your personal information. BinPerks will delete or deidentify member-linked personal information upon a valid deletion request, subject to legitimate legal retention requirements (such as tax records, dispute resolution, and fraud prevention).</P>
+          <P><B>Deletion:</B> You may request deletion of your personal information. BinPerks will delete or deidentify member-linked personal information upon a valid deletion request, subject to legitimate legal retention requirements (such as tax records, dispute resolution, and fraud prevention). Stored member scan photographs are included within the information subject to these deletion rights, and are also deleted automatically when you deactivate your account.</P>
           <P><B>Opt-out of marketing SMS:</B> Reply STOP to any BinPerks marketing message.</P>
           <P>These rights are offered by BinPerks as a matter of policy. Additional rights may exist under applicable state or federal privacy laws. To exercise any of these rights, contact support@binperks.com.</P>
         </Section>

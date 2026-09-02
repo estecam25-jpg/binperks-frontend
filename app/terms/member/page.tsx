@@ -133,7 +133,7 @@ export default function MemberTermsPage() {
         <Section title="9. AI Product Scanner">
           <P><B>9.1</B> BinPerks offers an AI-powered product scanner feature for use inside participating bin stores.</P>
           <P><B>9.2</B> The scanner uses artificial intelligence to attempt to identify products. Results are best guesses and are not guaranteed to be accurate. Always inspect the item before purchasing.</P>
-          <P><B>9.3</B> The scanner records your scan activity including the item photo hash (not the photo itself), AI identification result, estimated retail price, and your Shopping Cart or Back to Bins choice. This data is used to improve the BinPerks network and member experience.</P>
+          <P><B>9.3</B> The scanner records your scan activity including a compressed copy of your item photo, the AI identification result, the estimated retail price, and your Shopping Cart or Back to Bins choice. This data is used to improve the BinPerks network and member experience. Your stored scan photos are private to you, are deleted when you deactivate your account, and are described further in Section 4 of the BinPerks Privacy Policy.</P>
           <P><B>9.4</B> Scan results are for informational purposes only. BinPerks does not guarantee the accuracy of product identification, retail price estimates, or representative product images shown.</P>
           <P><B>9.5</B> &quot;Shopping Cart&quot; selections represent your declared interest in an item. They do not represent a verified purchase.</P>
           <P><B>9.6</B> Representative product images are sourced from third-party image search and shown for general reference only. The image shown may not match the exact item in the bin.</P>

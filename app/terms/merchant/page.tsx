@@ -171,23 +171,27 @@ export default function MerchantTermsPage() {
 
         <Section title="10. Data Access and Permissions">
           <Sub>10.1 Serving Merchant / Cashier Access</Sub>
-          <P>When serving a BinPerks member at a participating location, the Merchant&apos;s cashier staff may access only the minimum information necessary to:</P>
+          <P>When a member voluntarily provides their phone number at a participating location to earn a stamp, redeem a coupon, or otherwise use BinPerks, authorized cashier staff may access only the limited member information necessary to process that specific transaction, including:</P>
           <Ul items={[
-            'Identify the member by name',
-            "Determine the member's tier and stamp status",
-            'Award a valid stamp',
-            'Verify and redeem an available coupon',
+            'Member name',
+            'Membership status and tier',
+            'Stamp eligibility and status',
+            'Available reward information',
           ]} />
+          <P>This access is limited to the active transaction and does not give the Merchant ongoing access to an individual member database.</P>
           <Sub>10.2 Origin Merchant Reporting Access</Sub>
-          <P>The Origin Merchant may access through the BinPerks merchant dashboard:</P>
+          <P>The Origin Merchant may access aggregate reporting through the BinPerks merchant dashboard concerning members attributed to the Merchant as their Origin Store, including:</P>
           <Ul items={[
-            'A list of members attributed to the Merchant as their Origin Store, including name, tier, total stamps, and join date',
-            'Commission and settlement reporting for originated members',
-            'Coupon settlement credits and debits',
+            'Total members enrolled',
+            'Total VIP members',
+            'Aggregate Merchant Commission and settlement activity',
+            'Aggregate stamps awarded',
+            'Aggregate coupons earned',
           ]} />
-          <P>The Origin Merchant may not access member phone numbers, email addresses, raw contact exports, or member activity history at other merchants&apos; locations.</P>
-          <Sub>10.3 Location Visit Reporting</Sub>
-          <P>A Merchant whose location was visited may access operational reporting about stamp and coupon activity that occurred at its own location. This reporting does not include the member&apos;s activity history at other merchants&apos; locations.</P>
+          <P>Coupon settlement credits and debits are also available.</P>
+          <P>Origin Merchant dashboard reporting does not provide an individual member list or individual member-level activity history. Merchants do not receive member names, phone numbers, email addresses, individual tier records, individual stamp histories, individual join dates, or other personally identifying member information through dashboard reporting.</P>
+          <Sub>10.3 Location Operational Reporting</Sub>
+          <P>A Merchant whose location was visited may access aggregate operational reporting about stamp and coupon activity that occurred at its own location. This reporting does not include the member&apos;s activity history at other merchants&apos; locations and does not identify individual members.</P>
           <Sub>10.4 No Exportable Member Database</Sub>
           <P>No Merchant receives the ability to export, download, or otherwise obtain a portable database of member contact information. Participation in the BinPerks network does not give any Merchant a portable member or contact database.</P>
           <Sub>10.5 Ordinary-Course Merchant Records Exception</Sub>
