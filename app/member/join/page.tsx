@@ -4,10 +4,17 @@
  * Shows all active stores. Member selects their store to proceed to
  * /join/[storeKey] to sign up.
  *
+ * NAMES YES, BRANDING NO. This is a directory — it cannot do its job without
+ * naming the stores it lists, so display_name stays. What went is the
+ * brand-colour accent bar: decorative store branding on a BinPerks surface.
+ * Card format follows CLAUDE.md "STORE CARD FORMAT": canonical_key small,
+ * display_name bold, city/state subtitle.
+ *
  * Server component — uses admin client to bypass RLS.
  */
 
 import Link from 'next/link'
+import EntryBrand from '@/components/EntryBrand'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 export const dynamic = 'force-dynamic'
@@ -16,8 +23,6 @@ interface Store {
   id: string
   canonical_key: string
   display_name: string
-  brand_name: string
-  brand_color: string
   city: string
   state: string
 }
@@ -27,17 +32,15 @@ export default async function MemberJoinPage() {
 
   const { data: stores } = await admin
     .from('stores')
-    .select('id, canonical_key, display_name, brand_name, brand_color, city, state')
+    .select('id, canonical_key, display_name, city, state')
     .eq('is_active', true)
     .order('canonical_key', { ascending: true }) as { data: Store[] | null }
 
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* Header */}
-      <div className="px-5 py-4 flex items-center justify-center" style={{ backgroundColor: '#4A4B98' }}>
-        <span className="font-['Coiny'] text-2xl text-white tracking-wide">BinPerks</span>
-      </div>
+      {/* The standard BinPerks door, same as every other entry surface. */}
+      <EntryBrand subtitle="One membership. Every participating store." />
 
       <main className="flex-1 flex flex-col items-center px-4 py-8 gap-6 max-w-md mx-auto w-full">
 
@@ -68,19 +71,19 @@ export default async function MemberJoinPage() {
                 href={`/member/join/${store.canonical_key}`}
                 className="w-full flex items-center gap-4 bg-white rounded-2xl px-5 py-4 shadow-sm active:scale-[0.98] transition-transform"
               >
-                {/* Brand color accent bar */}
-                <div
-                  className="w-1.5 h-12 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: store.brand_color ?? '#4A4B98' }}
-                />
+                {/* A fixed BinPerks-blue accent, not the store's colour — the
+                    bar is page furniture, not a place to fly a store's brand. */}
+                <div className="w-1.5 h-12 rounded-full flex-shrink-0 bg-[#4A4B98]" />
                 <div className="flex-1 min-w-0">
                   {/* Canonical key — small/light, top */}
                   <p className="text-[10px] font-medium text-[#B0B0C8] tracking-wide truncate">
                     {store.canonical_key}
                   </p>
-                  {/* Display name — bold, primary */}
+                  {/* Display name — bold, primary (CLAUDE.md store card format;
+                      this rendered brand_name before, which is the merchant's
+                      brand rather than the location's name) */}
                   <p className="text-[15px] font-bold text-[#1A1A2E] truncate leading-tight">
-                    {store.brand_name}
+                    {store.display_name}
                   </p>
                   {/* City, State — subtitle */}
                   {(store.city || store.state) && (

@@ -266,7 +266,14 @@ export async function POST(req: NextRequest) {
     //    ("BinPerks at EstaBins Tampa") for the workflow to switch over to, so a
     //    member reads as joining the network through a store rather than joining
     //    that store's own program.
-    const finalReferralUrl = `${APP_URL}/member/join/${store.canonical_key}?ref=${referralCode}`
+    // THE SHORT LINK, not the old /member/join/[storeKey]?ref=… form.
+    //
+    // members.referral_url has stored the short format since it shipped; this
+    // response and the GHL welcome payload were the two places still handing
+    // out the long one, which is why the thank-you page showed it. Built from
+    // the same shortCode that was actually written to the row above, so the
+    // link on screen and the link in the database cannot disagree.
+    const finalReferralUrl = shortReferralUrl(shortCode, APP_URL)
     const ghlWebhook = process.env.GHL_MEMBER_CREATED_WEBHOOK_URL
     if (ghlWebhook) {
       await postToGhl(ghlWebhook, {

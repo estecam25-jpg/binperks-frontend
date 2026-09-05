@@ -36,7 +36,12 @@ export default function JoinLayout({ children }: { children: React.ReactNode }) 
       const res = await fetch(`/api/join/${storeKey}`)
       if (!res.ok) return
       const data = await res.json()
-      signupStore.set(data)
+      // Only the functional fields, even though the route returns branding too.
+      // Storing the whole response would put a store's colour back into session
+      // for a future page to find — the same leak SignupStore was trimmed to
+      // prevent. A member who opens /signup directly gets the same three fields
+      // JoinLanding caches.
+      signupStore.set({ id: data.id, storeKey: data.storeKey, merchantId: data.merchantId })
       resolveRef(referrerParam())
     }
 

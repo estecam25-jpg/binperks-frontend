@@ -27,18 +27,15 @@ import { useStampFill } from '@/lib/use-stamp-fill'
 /** The only brand color on this page. */
 const BINPERKS_BLUE = '#4A4B98'
 
+/**
+ * Props are FUNCTIONAL ONLY — no store name, colour, logo or location.
+ * This page sells BinPerks membership; the store key behind it decides Origin
+ * Store attribution and nothing that is drawn on screen.
+ */
 interface Props {
   storeKey:          string
   storeId:           string
   merchantId:        string
-  storeName:         string
-  brandColor:        string
-  brandName:         string
-  logoUrl:           string | null
-  googleReviewUrl:   string | null
-  facebookReviewUrl: string | null
-  city:              string | null
-  state:             string | null
   referrer: {
     code:              string
     referrerMemberId:  string
@@ -50,14 +47,6 @@ export default function JoinLanding({
   storeKey,
   storeId,
   merchantId,
-  storeName,
-  brandColor,
-  brandName,
-  logoUrl,
-  googleReviewUrl,
-  facebookReviewUrl,
-  city,
-  state,
   referrer,
 }: Props) {
   const router = useRouter()
@@ -68,17 +57,9 @@ export default function JoinLanding({
 
   // Cache store + referral in sessionStorage on mount so child pages can read them
   useEffect(() => {
-    signupStore.set({
-      id:               storeId,
-      storeKey,
-      storeName,
-      brandName,
-      brandColor,
-      logoUrl,
-      merchantId,
-      googleReviewUrl,
-      facebookReviewUrl,
-    })
+    // Only what the later steps actually need: the origin store, its key for
+    // URLs, and the merchant for the VIP checkout.
+    signupStore.set({ id: storeId, storeKey, merchantId })
     if (referrer) {
       signupRef.set(referrer as SignupRef)
     }
@@ -99,13 +80,6 @@ export default function JoinLanding({
 
   // Fixed against BinPerks blue rather than derived from a store color.
   const textOpacity  = 'rgba(255,255,255,0.75)'
-  const locationLine = [city, state].filter(Boolean).join(', ')
-
-  // The store is context, not the headline. Referral arrivals get the phrasing
-  // that matches how they got here.
-  const storeContext = referrer
-    ? `You were invited to shop at ${storeName}`
-    : `You're joining at ${storeName}`
 
   function handleJoin() {
     // The referrer rides in the URL rather than relying on the sessionStorage
@@ -144,18 +118,6 @@ export default function JoinLanding({
             One membership. Every participating store.
           </p>
 
-          {/* Store context — the location they arrived through, not the brand
-              they're joining. */}
-          <div className="mt-3 rounded-full bg-white/15 px-4 py-2">
-            <p className="text-[13px] font-semibold text-white leading-snug">
-              {storeContext}
-            </p>
-            {locationLine && (
-              <p className="text-[11px] font-medium" style={{ color: textOpacity }}>
-                {locationLine}
-              </p>
-            )}
-          </div>
         </div>
 
         {/* Stamp grid */}
@@ -291,8 +253,9 @@ export default function JoinLanding({
 
       {/* Footer */}
       <div className="px-5 pb-8 text-center">
+        {/* No "Powered by BinPerks" — this IS BinPerks. */}
         <p className="text-[10px] text-[#8E8EA8] font-medium">
-          Powered by BinPerks ·{' '}
+          Questions?{' '}
           <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
         </p>
       </div>

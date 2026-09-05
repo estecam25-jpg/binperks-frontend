@@ -1,8 +1,30 @@
 'use client'
 
+/**
+ * /member/join/[storeKey]/thankyou — confirmation + sign-in code entry.
+ *
+ * This is also the OTP screen a new member reaches during signup: the code was
+ * already texted by /api/join/create, so they finish here rather than being
+ * bounced to the login page.
+ *
+ * ALWAYS BINPERKS BRANDED. Every accent on this page used to be the store's
+ * brand colour — the header, the confetti circle, the phone tile, the
+ * "Open my dashboard" button, the VIP card and the copy button.
+ *
+ * THE REFERRAL LINK is the short /join/XXXXXX form. If what came back is not
+ * that shape the block is hidden rather than showing the old long URL, which
+ * is a link the member would then share.
+ */
+
 import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
+import EntryBrand from '@/components/EntryBrand'
 import { signupStore, signupMember, signupForm, type SignupStore, type SignupMember } from '@/lib/signup-session'
+
+const BINPERKS_BLUE = '#4A4B98'
+
+/** app.binperks.com/join/XXXXXX — the only shape we are willing to display. */
+const SHORT_REFERRAL_RE = /^https?:\/\/[^/]+\/join\/[0-9A-Z]{6}$/i
 
 export default function ThankYouPage() {
   const router = useRouter()
@@ -123,19 +145,16 @@ export default function ThankYouPage() {
 
   const isVip = plan === 'vip'
 
+  // A short code is generated for every member at signup, so this should always
+  // hold. If it somehow does not, showing nothing beats handing the member a
+  // link in a format we have retired.
+  const showReferral = SHORT_REFERRAL_RE.test(member.referralUrl ?? '')
+
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* Mini header */}
-      <div
-        className="px-5 py-3 flex items-center gap-2.5"
-        style={{ backgroundColor: store.brandColor }}
-      >
-        <span className="font-['Coiny'] text-xl leading-none text-white">{store.brandName}</span>
-        <span className="text-white/50 text-[10px] font-semibold tracking-widest uppercase ml-auto">
-          Powered by BinPerks
-        </span>
-      </div>
+      {/* The BinPerks door, same as every other entry surface. */}
+      <EntryBrand />
 
       <main className="flex-1 flex flex-col items-center px-4 py-10 gap-6 max-w-md mx-auto w-full">
 
@@ -143,7 +162,7 @@ export default function ThankYouPage() {
         <div className="flex flex-col items-center text-center gap-3">
           <div
             className="w-20 h-20 rounded-full flex items-center justify-center text-4xl"
-            style={{ backgroundColor: `${store.brandColor}18` }}
+            style={{ backgroundColor: `${BINPERKS_BLUE}18` }}
           >
             🎉
           </div>
@@ -163,7 +182,7 @@ export default function ThankYouPage() {
           <div className="flex items-start gap-4">
             <div
               className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-              style={{ backgroundColor: `${store.brandColor}15` }}
+              style={{ backgroundColor: `${BINPERKS_BLUE}15` }}
             >
               📱
             </div>
@@ -204,7 +223,7 @@ export default function ThankYouPage() {
               type="submit"
               disabled={code.length !== 8 || verifying}
               className="w-full py-4 rounded-2xl font-bold text-[16px] text-white font-['Montserrat'] disabled:opacity-35 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
-              style={{ backgroundColor: store.brandColor }}
+              style={{ backgroundColor: BINPERKS_BLUE }}
             >
               {verifying && (
                 <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -227,7 +246,7 @@ export default function ThankYouPage() {
         {isVip && (
           <div
             className="w-full rounded-2xl px-5 py-4 flex items-center gap-4"
-            style={{ backgroundColor: `${store.brandColor}12`, border: `2px solid ${store.brandColor}30` }}
+            style={{ backgroundColor: `${BINPERKS_BLUE}12`, border: `2px solid ${BINPERKS_BLUE}30` }}
           >
             <span className="text-2xl flex-shrink-0">⭐</span>
             <div>
@@ -239,7 +258,10 @@ export default function ThankYouPage() {
           </div>
         )}
 
-        {/* ── Referral section ── */}
+        {/* ── Referral section ──
+            Hidden entirely when the URL is not the short form, rather than
+            falling back to the old long link the member would then share. */}
+        {showReferral && (
         <div className="w-full flex flex-col gap-3">
           <div className="flex flex-col items-center text-center gap-1">
             <p className="font-['Coiny'] text-xl text-[#1A1A2E]">Share &amp; both earn bonus stamps</p>
@@ -257,8 +279,8 @@ export default function ThankYouPage() {
               onClick={handleCopyReferral}
               className="flex-shrink-0 text-[12px] font-bold px-3 py-1.5 rounded-lg transition-colors"
               style={{
-                backgroundColor: copied ? '#2A7D34' : `${store.brandColor}15`,
-                color: copied ? 'white' : store.brandColor,
+                backgroundColor: copied ? '#2A7D34' : `${BINPERKS_BLUE}15`,
+                color: copied ? 'white' : BINPERKS_BLUE,
               }}
             >
               {copied ? '✓ Copied' : 'Copy'}
@@ -266,6 +288,7 @@ export default function ThankYouPage() {
           </div>
 
         </div>
+        )}
 
         {/* Footer */}
         <p className="text-[11px] text-[#8E8EA8] text-center font-medium">

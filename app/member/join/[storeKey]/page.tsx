@@ -1,8 +1,13 @@
 /**
  * /member/join/[storeKey] — Member join landing page.
  *
- * Server component: fetches store branding from Supabase at request time so
- * the brand color is correct on first paint — zero flash.
+ * Server component: resolves the store key at request time.
+ *
+ * NO STORE BRANDING IS FETCHED OR PASSED. The store record exists here to
+ * confirm the key is real and to hand JoinLanding the ids the funnel needs —
+ * origin attribution and the merchant for the VIP checkout. Brand colour, brand
+ * name, logo and font are deliberately not selected: a member joining through a
+ * store is joining BinPerks.
  *
  * Also resolves the referrer server-side so the referral banner is present in
  * the initial HTML. TWO PARAMETER SHAPES arrive here:
@@ -24,19 +29,8 @@ import JoinLanding from './JoinLanding'
 interface StoreRow {
   id: string
   canonical_key: string
-  display_name: string
-  brand_name: string | null
-  brand_color: string | null
-  logo_url: string | null
   merchant_id: string
-  google_review_url: string | null
-  facebook_review_url: string | null
-  city: string | null
-  state: string | null
-  font_family: string | null
 }
-
-const FALLBACK = { brandColor: '#4A4B98', brandName: 'BinPerks' }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -55,7 +49,7 @@ export default async function JoinLandingPage({
   // Fetch store branding server-side — same pattern as /member/login/[storeKey]
   const { data: storeData } = await admin
     .from('stores')
-    .select('id, canonical_key, display_name, brand_name, brand_color, logo_url, merchant_id, google_review_url, facebook_review_url, city, state, font_family')
+    .select('id, canonical_key, merchant_id')
     .eq('canonical_key', storeKey)
     .eq('is_active', true)
     .maybeSingle()
@@ -71,7 +65,9 @@ export default async function JoinLandingPage({
           <p className="text-[14px] text-[#8E8EA8] font-medium font-['Montserrat'] leading-relaxed">
             This link doesn't match an active BinPerks store. Check with the store and try again.
           </p>
-          <p className="text-[11px] text-[#8E8EA8] font-medium">Powered by BinPerks</p>
+          <p className="text-[11px] text-[#8E8EA8] font-medium">
+            Questions? <a href="mailto:support@binperks.com" className="underline">support@binperks.com</a>
+          </p>
         </div>
       </div>
     )
@@ -122,18 +118,10 @@ export default async function JoinLandingPage({
 
   return (
     
-    <JoinLanding {...({} as any)}
+    <JoinLanding
       storeKey={storeKey}
       storeId={store.id}
       merchantId={store.merchant_id}
-      storeName={store.display_name}
-      brandColor={store.brand_color ?? FALLBACK.brandColor}
-      brandName={store.brand_name ?? FALLBACK.brandName}
-      logoUrl={store.logo_url ?? null}
-      googleReviewUrl={store.google_review_url ?? null}
-      facebookReviewUrl={store.facebook_review_url ?? null}
-      city={store.city ?? null}
-      state={store.state ?? null}
       referrer={referrer}
     />
   )

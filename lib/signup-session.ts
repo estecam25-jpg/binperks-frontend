@@ -10,16 +10,26 @@
  *   bp_signup_member   — created member record (set after Page 2 submit)
  */
 
+/**
+ * What the join funnel carries between its steps.
+ *
+ * FUNCTIONAL FIELDS ONLY, deliberately. This used to carry storeName,
+ * brandName, brandColor and logoUrl, and every page that could reach for them
+ * eventually did — the signup header, the VIP card, the thank-you page. The
+ * join flow is a BinPerks experience: the store key sets Origin Store
+ * attribution and feeds the VIP checkout, and that is the whole of its job.
+ *
+ * Removing the fields rather than the usages is the point. A page cannot paint
+ * itself in a store's colour if the colour is not in the type.
+ *
+ *   id          origin_store_id on the new member record
+ *   storeKey    canonical_key, for building funnel URLs
+ *   merchantId  passed to /api/join/vip for the Stripe checkout
+ */
 export interface SignupStore {
   id: string
   storeKey: string       // e.g. 'FL-Lakeland-BinChasers' (canonical_key)
-  storeName: string      // e.g. 'Bin Chasers Lakeland' (display_name)
-  brandName: string      // e.g. 'Bin Chasers'
-  brandColor: string     // hex
-  logoUrl: string | null
   merchantId: string
-  googleReviewUrl: string | null
-  facebookReviewUrl: string | null
 }
 
 export interface SignupRef {
