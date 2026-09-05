@@ -33,6 +33,9 @@ export interface SignupFormData {
   lastName: string
   phone: string          // digits only
   email: string
+  /** 5 digits. Optional on the type so a draft saved before this field
+   *  existed still restores instead of failing to parse. */
+  zip?: string
   smsOptIn: boolean
 }
 

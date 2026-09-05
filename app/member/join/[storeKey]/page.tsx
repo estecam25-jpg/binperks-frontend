@@ -4,8 +4,14 @@
  * Server component: fetches store branding from Supabase at request time so
  * the brand color is correct on first paint — zero flash.
  *
- * Also resolves a referral code (?ref=xxx) server-side so the referral banner
- * is present in the initial HTML.
+ * Also resolves the referrer server-side so the referral banner is present in
+ * the initial HTML. TWO PARAMETER SHAPES arrive here:
+ *
+ *   ?ref=<referral_code>   legacy 8-character code, links already in the wild
+ *   ?referrer=<member id>  the short /join/XXXXXX link, resolved by app/join/[code]
+ *
+ * Both are optional and neither affects branding — this page is BinPerks either
+ * way. The store in the URL is silent Origin Store attribution, nothing more.
  *
  * Interactive parts (stamp animation, join button, referral banner) live in
  * the JoinLanding client component which also caches data in sessionStorage
@@ -32,15 +38,17 @@ interface StoreRow {
 
 const FALLBACK = { brandColor: '#4A4B98', brandName: 'BinPerks' }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default async function JoinLandingPage({
   params,
   searchParams,
 }: {
   params:       Promise<{ storeKey: string }>
-  searchParams: Promise<{ ref?: string }>
+  searchParams: Promise<{ ref?: string; referrer?: string }>
 }) {
   const { storeKey }  = await params
-  const { ref: code } = await searchParams
+  const { ref: code, referrer: referrerId } = await searchParams
 
   const admin = createAdminSupabaseClient()
 
@@ -69,9 +77,33 @@ export default async function JoinLandingPage({
     )
   }
 
-  // Resolve referral code server-side if present
+  // Resolve the referrer server-side if either parameter is present.
   let referrer: { code: string; referrerMemberId: string; referrerFirstName: string } | null = null
-  if (code) {
+
+  // ?referrer=<member id> — from the short link. Deliberately NOT filtered by
+  // merchant: app/join/[code] already sent the visitor to this referrer's own
+  // Origin Store, so a merchant filter here could only ever reject a referral
+  // that is correct by construction.
+  if (referrerId && UUID_RE.test(referrerId)) {
+    const { data: refMember } = await admin
+      .from('members')
+      .select('id, first_name')
+      .eq('id', referrerId)
+      .eq('status', 'active')
+      .eq('is_blacklisted', false)
+      .maybeSingle()
+
+    if (refMember) {
+      referrer = {
+        code:              refMember.id,
+        referrerMemberId:  refMember.id,
+        referrerFirstName: refMember.first_name,
+      }
+    }
+  }
+
+  // ?ref=<referral_code> — the legacy form, unchanged.
+  if (!referrer && code) {
     const { data: refMember } = await admin
       .from('members')
       .select('id, first_name')

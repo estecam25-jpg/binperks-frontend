@@ -108,7 +108,13 @@ export default function JoinLanding({
     : `You're joining at ${storeName}`
 
   function handleJoin() {
-    router.push(`/member/join/${storeKey}/signup`)
+    // The referrer rides in the URL rather than relying on the sessionStorage
+    // the layout primes: a member who lands here with private storage blocked,
+    // or who opens the signup step directly, still gets credited.
+    const qs = referrer
+      ? `?referrer=${encodeURIComponent(referrer.referrerMemberId)}`
+      : ''
+    router.push(`/member/join/${storeKey}/signup${qs}`)
   }
 
   return (

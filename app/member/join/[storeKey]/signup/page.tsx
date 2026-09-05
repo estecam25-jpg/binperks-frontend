@@ -1,7 +1,24 @@
 'use client'
 
+/**
+ * /member/join/[storeKey]/signup — the BinPerks signup form.
+ *
+ * ALWAYS BINPERKS BRANDED. The store key in the URL is silent Origin Store
+ * attribution and nothing else: it never sets a colour, a logo, or a name on
+ * this page. A member is joining BinPerks through a store, not joining that
+ * store's own programme, and the header used to say otherwise by painting
+ * itself the store's brand colour.
+ *
+ * ZIP IS REQUIRED because /api/join/create requires it. This form did not
+ * collect it, so every submission came back 400 "Invalid zip code" and the
+ * member saw the generic "Something went wrong" panel — the field was added to
+ * the home-page signup when zip_code shipped and this second entry point was
+ * missed.
+ */
+
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import EntryBrand from '@/components/EntryBrand'
 import {
   signupStore, signupRef, signupForm, signupMember,
   type SignupStore, type SignupRef, type SignupFormData
@@ -26,11 +43,12 @@ interface FormErrors {
   lastName?: string
   phone?: string
   email?: string
+  zip?: string
   smsOptIn?: string
 }
 
 function validate(fields: {
-  firstName: string; lastName: string; phone: string; email: string; smsOptIn: boolean
+  firstName: string; lastName: string; phone: string; email: string; zip: string; smsOptIn: boolean
 }): FormErrors {
   const errors: FormErrors = {}
   if (!fields.firstName.trim()) errors.firstName = 'First name is required'
@@ -38,6 +56,9 @@ function validate(fields: {
   const digits = normalizePhone(fields.phone)
   if (digits.length !== 10)    errors.phone     = 'Enter a valid 10-digit US phone number'
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) errors.email = 'Enter a valid email address'
+  // Same 5-digit rule /api/join/create enforces. Validating it here turns a
+  // generic "something went wrong" into a field the member can actually fix.
+  if (!/^\d{5}$/.test(fields.zip.trim())) errors.zip = 'Enter a 5-digit zip code'
   if (!fields.smsOptIn)        errors.smsOptIn  = 'SMS consent is required to receive your rewards'
   return errors
 }
@@ -54,6 +75,7 @@ export default function JoinSignupPage() {
   const [lastName, setLastName]     = useState('')
   const [phone, setPhone]           = useState('')
   const [email, setEmail]           = useState('')
+  const [zip, setZip]               = useState('')
   const [smsOptIn, setSmsOptIn]     = useState(false)
 
   const [errors, setErrors]         = useState<FormErrors>({})
@@ -64,8 +86,25 @@ export default function JoinSignupPage() {
     const s = signupStore.get()
     if (!s) { router.replace(`/member/join/${storeKey}`); return }
     setStore(s)
-    const r = signupRef.get()
-    if (r) setRef(r)
+
+    // The referrer can arrive two ways. The URL wins: ?referrer=<member id> is
+    // forwarded by the landing page and survives a member whose sessionStorage
+    // is blocked, where the cached copy would be lost and the referral
+    // uncredited. Read off window rather than useSearchParams so this needs no
+    // Suspense boundary.
+    const cached = signupRef.get()
+    const fromUrl = new URLSearchParams(window.location.search).get('referrer')
+    if (fromUrl) {
+      setRef({
+        code: fromUrl,
+        referrerMemberId: fromUrl,
+        // The name only comes from the cached lookup; without it the strip
+        // renders its no-name wording rather than "Referred by undefined".
+        referrerFirstName: cached?.referrerMemberId === fromUrl ? cached.referrerFirstName : '',
+      })
+    } else if (cached) {
+      setRef(cached)
+    }
 
     // Restore form if user navigated back
     const saved = signupForm.get()
@@ -74,6 +113,7 @@ export default function JoinSignupPage() {
       setLastName(saved.lastName)
       setPhone(formatPhone(saved.phone))
       setEmail(saved.email)
+      setZip(saved.zip ?? '')
       setSmsOptIn(saved.smsOptIn)
     }
   }, [router, storeKey])
@@ -88,9 +128,9 @@ export default function JoinSignupPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setTouched(new Set(['firstName','lastName','phone','email','smsOptIn']))
+    setTouched(new Set(['firstName','lastName','phone','email','zip','smsOptIn']))
 
-    const fields = { firstName, lastName, phone, email, smsOptIn }
+    const fields = { firstName, lastName, phone, email, zip, smsOptIn }
     const errs = validate(fields)
     setErrors(errs)
     if (Object.keys(errs).length > 0) return
@@ -99,7 +139,7 @@ export default function JoinSignupPage() {
     setSubmitState('loading')
 
     // Save form in case of error (so user doesn't retype)
-    signupForm.set({ firstName, lastName, phone: normalizePhone(phone), email, smsOptIn })
+    signupForm.set({ firstName, lastName, phone: normalizePhone(phone), email, zip: zip.trim(), smsOptIn })
 
     const res = await fetch('/api/join/create', {
       method: 'POST',
@@ -111,6 +151,9 @@ export default function JoinSignupPage() {
         lastName:          lastName.trim(),
         phone:             normalizePhone(phone),
         email:             email.trim().toLowerCase(),
+        // Required by /api/join/create. Omitting it was the whole of the
+        // "Something went wrong" failure on this page.
+        zipCode:           zip.trim(),
         smsOptIn,
         referrerMemberId:  ref?.referrerMemberId ?? null,
       }),
@@ -153,27 +196,20 @@ export default function JoinSignupPage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* Mini white-label header */}
-      <div
-        className="px-5 py-3 flex items-center gap-2.5"
-        style={{ backgroundColor: store.brandColor }}
-      >
-        <span
-          className="font-['Coiny'] text-xl leading-none text-white"
-        >
-          {store.brandName}
-        </span>
-        <span className="text-white/50 text-[10px] font-semibold tracking-widest uppercase ml-auto">
-          Powered by BinPerks
-        </span>
-      </div>
+      {/* The BinPerks door — the same mark used on every other entry surface.
+          Deliberately NOT store.brandColor / store.brandName: the store brought
+          this member here and is recorded as their Origin Store, but they are
+          joining BinPerks. */}
+      <EntryBrand subtitle="One membership. Every participating store." />
 
       {/* Referral context strip */}
       {ref && (
         <div className="bg-green-50 border-b border-green-200 px-5 py-2.5 flex items-center gap-2">
           <span className="text-base">🎁</span>
           <p className="text-[12px] font-semibold text-[#2A7D34]">
-            Referred by <strong>{ref.referrerFirstName}</strong> — they'll earn 2 bonus stamps when you join!
+            {ref.referrerFirstName
+              ? <>Referred by <strong>{ref.referrerFirstName}</strong> — they&apos;ll earn 2 bonus stamps when you join!</>
+              : <>You were referred — they&apos;ll earn 2 bonus stamps when you join!</>}
           </p>
         </div>
       )}
@@ -238,7 +274,7 @@ export default function JoinSignupPage() {
             {submitState === 'phone_exists' && (
               <div className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-xl">
                 <p className="text-[12px] font-semibold text-orange-800">
-                  That number is already registered at {store.brandName}.{' '}
+                  That number already has a BinPerks account.{' '}
                   <button
                     type="button"
                     className="underline"
@@ -283,6 +319,26 @@ export default function JoinSignupPage() {
             )}
           </div>
 
+          {/* Zip code — matches the home-page signup: numeric keypad on mobile,
+              5 digits, required by the API. */}
+          <div>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              maxLength={5}
+              placeholder="Zip Code"
+              aria-label="Zip Code"
+              value={zip}
+              onChange={e => setZip(e.target.value.replace(/\D/g, '').slice(0, 5))}
+              onBlur={() => touch('zip')}
+              className={fieldClass('zip')}
+            />
+            {touched.has('zip') && errors.zip && (
+              <p className="text-[11px] text-[#DA1212] font-semibold mt-1 ml-1">{errors.zip}</p>
+            )}
+          </div>
+
           {/* SMS consent */}
           <div
             className={`
@@ -307,7 +363,7 @@ export default function JoinSignupPage() {
             </div>
             <p className="text-[12px] font-medium text-[#1A1A2E] leading-relaxed">
               I agree to receive SMS messages about my rewards, coupons, and account updates
-              from {store.brandName} via BinPerks. Message & data rates may apply.
+              from BinPerks. Message &amp; data rates may apply.
               Reply STOP to opt out anytime.
             </p>
           </div>

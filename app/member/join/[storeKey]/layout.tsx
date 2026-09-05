@@ -2,8 +2,12 @@
  * Layout for /member/join/[storeKey]/*
  *
  * Renders children immediately (no blocking spinner) and caches store
- * branding + referral code in sessionStorage in the background so that
- * child pages (signup, vip, thankyou) can read them via signupStore.get().
+ * branding + the referrer in sessionStorage in the background so that child
+ * pages (signup, vip, thankyou) can read them via signupStore.get().
+ *
+ * The referrer arrives as ?ref=<referral_code> on legacy links or
+ * ?referrer=<member id> from the short /join/XXXXXX link. /api/join/ref accepts
+ * both shapes, so this only has to pick whichever one is present.
  *
  * The join landing page (page.tsx) fetches branding server-side, so it
  * doesn't depend on this layout for its initial render.
@@ -25,7 +29,7 @@ export default function JoinLayout({ children }: { children: React.ReactNode }) 
       // Skip if already cached for this store
       const cached = signupStore.get()
       if (cached && cached.storeKey === storeKey) {
-        resolveRef(searchParams.get('ref'))
+        resolveRef(referrerParam())
         return
       }
 
@@ -33,7 +37,13 @@ export default function JoinLayout({ children }: { children: React.ReactNode }) 
       if (!res.ok) return
       const data = await res.json()
       signupStore.set(data)
-      resolveRef(searchParams.get('ref'))
+      resolveRef(referrerParam())
+    }
+
+    /** ?referrer= wins over ?ref= when both are somehow present — it is the
+     *  newer, unambiguous form. */
+    function referrerParam(): string | null {
+      return searchParams.get('referrer') ?? searchParams.get('ref')
     }
 
     async function resolveRef(code: string | null) {

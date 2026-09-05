@@ -1,17 +1,26 @@
 /**
- * /join/[code] — short member referral links.
+ * /join/[code] — the one short link, handling both shapes.
  *
- * app.binperks.com/join/X7K2MP, replacing the old
- * /member/join/FL-Tampa-EstaBins?ref=NR9HR3NF form. Short enough to read aloud,
- * text, or print, and it does not leak the referrer's store into the URL.
+ * app.binperks.com/join/X7K2MP  → a member's 6-character referral short code
+ * app.binperks.com/join/FL-Tampa-EstaBins → a store key, printed on QR codes
  *
- * Resolves the referrer, then hands the signup form their Origin Store so the
- * new member is attributed to the same store — a referral keeps the commission
- * with the store that earned it. A referrer with a BinPerks house origin passes
- * that along, and no merchant commission accrues.
+ * They are told apart by SHAPE, not by a lookup: a referral code is exactly 6
+ * characters from a fixed alphabet with no hyphens, so anything else is a store
+ * key. Both end up in the same place — the BinPerks-branded join funnel at
+ * /member/join/[storeKey] — with the store carried only as silent Origin Store
+ * attribution.
  *
- * OLD LINKS STILL WORK. This is an addition: /member/join/[storeKey]?ref=… is
- * untouched and still resolves through its own funnel.
+ * A REFERRAL RESOLVES TO ITS REFERRER'S ORIGIN STORE, so the new member is
+ * attributed to the store that earned the referral and the commission stays
+ * with it.
+ *
+ * WHY NOT THE HOME PAGE: this used to redirect to `/?store=…&merchant=…`, which
+ * dropped the visitor on the generic home screen instead of the join funnel the
+ * link promised. The home page is still the right destination for a referrer
+ * with no usable store (see below) — it accepts ?referrer= and handles the
+ * store-less signup — but it is the fallback, not the default.
+ *
+ * OLD LINKS STILL WORK. /member/join/[storeKey]?ref=… is untouched.
  *
  * Server component — resolves and redirects before anything paints, so the
  * member never sees an intermediate screen.
@@ -20,8 +29,15 @@
 import { redirect } from 'next/navigation'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { normalizeReferralCode, isValidReferralCode } from '@/lib/referral-code'
+import { toOne } from '@/lib/supabase-relations'
+import { isBinPerksHouseStore } from '@/lib/binperks-origin'
 
 export const dynamic = 'force-dynamic'
+
+interface OriginStore {
+  canonical_key: string
+  is_active: boolean | null
+}
 
 export default async function JoinByCodePage({
   params,
@@ -41,9 +57,19 @@ export default async function JoinByCodePage({
 
   const admin = createAdminSupabaseClient()
 
+  // The origin store is embedded rather than fetched separately: its
+  // canonical_key is what the funnel URL needs, and is_active decides whether
+  // that funnel can render at all. A to-ONE embed comes back as an object, not
+  // an array — hence toOne (see lib/supabase-relations).
   const { data: referrer } = await admin
     .from('members')
-    .select('id, origin_store_id, origin_merchant_id, status, is_blacklisted')
+    .select(`
+      id,
+      status,
+      is_blacklisted,
+      origin_store_id,
+      stores:origin_store_id ( canonical_key, is_active )
+    `)
     .eq('referral_short_code', code)
     .maybeSingle()
 
@@ -54,10 +80,29 @@ export default async function JoinByCodePage({
     redirect('/')
   }
 
-  const q = new URLSearchParams()
-  if (referrer.origin_store_id)    q.set('store', referrer.origin_store_id)
-  if (referrer.origin_merchant_id) q.set('merchant', referrer.origin_merchant_id)
-  q.set('referrer', referrer.id)
+  const originStore = toOne<OriginStore>(referrer.stores as OriginStore | OriginStore[] | null)
 
-  redirect(`/?${q.toString()}`)
+  // Two cases send the visitor to the home page instead of a store funnel:
+  //
+  //   the referrer's origin is the BinPerks house store, which is is_active
+  //   false by design and has no public funnel to render, and
+  //
+  //   the origin store has since been deactivated, where /member/join/[storeKey]
+  //   would render "Store not found" and lose the signup outright.
+  //
+  // Both still carry ?referrer=, so the referral is credited either way — the
+  // home page reads that parameter and passes it to /api/join/create.
+  const usableStore =
+    originStore?.canonical_key &&
+    originStore.is_active === true &&
+    !isBinPerksHouseStore(referrer.origin_store_id)
+
+  if (!usableStore) {
+    redirect(`/?referrer=${encodeURIComponent(referrer.id)}`)
+  }
+
+  redirect(
+    `/member/join/${encodeURIComponent(originStore!.canonical_key)}` +
+    `?referrer=${encodeURIComponent(referrer.id)}`,
+  )
 }
