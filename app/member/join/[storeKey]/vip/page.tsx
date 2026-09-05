@@ -1,10 +1,26 @@
 'use client'
 
+/**
+ * /member/join/[storeKey]/vip — the VIP upsell, step 3 of the join funnel.
+ *
+ * ALWAYS BINPERKS BRANDED, like the signup step before it. The store key in the
+ * URL is silent Origin Store attribution: it decides who earns the commission,
+ * never what the member sees. This page used to paint its header, the VIP card
+ * band, that card's shadow and the upgrade button in store.brandColor, so a
+ * member joining through EstaBins was sold a VIP membership in EstaBins green.
+ *
+ * The store record is still loaded — handleVip needs store.merchantId for the
+ * Stripe checkout — it just no longer drives any colour or copy.
+ */
+
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import EntryBrand from '@/components/EntryBrand'
 import { signupStore, signupMember, type SignupStore } from '@/lib/signup-session'
 
 const VIP_PRICE = '$29.99'
+
+const BINPERKS_BLUE = '#4A4B98'
 
 // VIP perks list — specific, not vague
 const VIP_PERKS = [
@@ -82,16 +98,11 @@ export default function VipUpsellPage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
-      {/* Mini header */}
-      <div
-        className="px-5 py-3 flex items-center gap-2.5"
-        style={{ backgroundColor: store.brandColor }}
-      >
-        <span className="font-['Coiny'] text-xl leading-none text-white">{store.brandName}</span>
-        <span className="text-white/50 text-[10px] font-semibold tracking-widest uppercase ml-auto">
-          Powered by BinPerks
-        </span>
-      </div>
+      {/* The same BinPerks mark as every other entry surface — deliberately not
+          store.brandColor / store.brandName. The member is subscribing to
+          BinPerks VIP, which works across the whole network, not to a plan that
+          belongs to the store they happened to join through. */}
+      <EntryBrand />
 
       <main className="flex-1 flex flex-col items-center px-4 py-8 gap-6 max-w-md mx-auto w-full">
 
@@ -105,12 +116,12 @@ export default function VipUpsellPage() {
         {/* ── VIP card — deliberately prominent ── */}
         <div
           className="w-full rounded-2xl overflow-hidden shadow-lg"
-          style={{ boxShadow: `0 4px 24px ${store.brandColor}30, 0 2px 8px rgba(0,0,0,0.08)` }}
+          style={{ boxShadow: `0 4px 24px ${BINPERKS_BLUE}30, 0 2px 8px rgba(0,0,0,0.08)` }}
         >
           {/* VIP header band */}
           <div
             className="px-5 py-3 flex items-center justify-between"
-            style={{ backgroundColor: store.brandColor }}
+            style={{ backgroundColor: BINPERKS_BLUE }}
           >
             <span className="font-['Coiny'] text-xl text-white tracking-wide">VIP Member</span>
             <span
@@ -142,7 +153,7 @@ export default function VipUpsellPage() {
               onClick={handleVip}
               disabled={loading === 'vip'}
               className="w-full py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide disabled:opacity-60 active:scale-[0.97] transition-all flex items-center justify-center gap-2 mt-1"
-              style={{ backgroundColor: store.brandColor }}
+              style={{ backgroundColor: BINPERKS_BLUE }}
             >
               {loading === 'vip' && (
                 <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -165,10 +176,14 @@ export default function VipUpsellPage() {
           </div>
         </div>
 
-        {/* ── Free card — intentionally low contrast ── */}
+        {/* ── Free card ──
+            The VIP card above still leads on weight — colour band, shadow, the
+            large price — but staying free is a legitimate choice and is styled
+            as one. A heading and control the member has to squint at reads as a
+            dark pattern, not as restraint. */}
         <div className="w-full rounded-2xl border-2 border-[#EBEBF2] bg-white px-5 py-5 flex flex-col gap-3">
           <div className="flex items-baseline gap-2">
-            <span className="font-['Coiny'] text-3xl text-[#8E8EA8]">Starter</span>
+            <span className="font-['Coiny'] text-3xl text-[#1A1A2E]">Starter</span>
             <span className="text-[13px] font-medium text-[#8E8EA8]">membership</span>
           </div>
 
@@ -185,11 +200,14 @@ export default function VipUpsellPage() {
             ))}
           </div>
 
-          {/* Outlined secondary button — visible and tappable but lower visual weight than VIP CTA */}
+          {/* BinPerks blue, underlined on hover, full width so it stays an easy
+              tap target on a phone. Kept a button rather than a bare text link:
+              the hit area matters more than the styling does at this size. */}
           <button
             onClick={handleFree}
             disabled={loading === 'free'}
-            className="w-full py-4 rounded-2xl font-semibold text-[15px] font-['Montserrat'] text-[#8E8EA8] border-2 border-[#EBEBF2] active:border-[#D1D1DC] active:bg-[#F5F5F8] transition-colors disabled:opacity-50"
+            className="w-full py-4 rounded-2xl font-bold text-[15px] font-['Montserrat'] border-2 border-[#4A4B98]/30 hover:underline hover:border-[#4A4B98]/60 active:bg-[#4A4B98]/10 transition-colors disabled:opacity-50"
+            style={{ color: BINPERKS_BLUE }}
           >
             {loading === 'free' ? 'Continuing…' : 'Stay with the free plan'}
           </button>
