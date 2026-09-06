@@ -7,7 +7,12 @@ import {
 import MyFinds from '@/components/member/MyFinds'
 
 /**
- * AI Product Scanner — the Scan tab.
+ * Photo Identify (the AI product scanner) — the Scan tab.
+ *
+ * NAMING: the feature is "Photo Identify" everywhere inside the tab. The bottom
+ * nav label stays "SCAN" — it is a five-item nav bar and the longer word does
+ * not fit, so the tab is reached by one name and the feature reads by another
+ * on purpose.
  *
  * Lifted from the dashboard overlay in the Phase 1 redesign. Every piece of
  * working logic came across untouched: capture and downscale, /api/member/scan,
@@ -66,6 +71,17 @@ const PRODUCT_IMAGE_TIMEOUT_MS = 5000
 // Below this, we tell the member outright that we're guessing rather than
 // presenting the result as an identification.
 const LOW_CONFIDENCE = 0.5
+
+/**
+ * Below this, the result screen offers a retake tip.
+ *
+ * Deliberately HIGHER than LOW_CONFIDENCE and deliberately a separate constant:
+ * the 0.5 banner is a warning that the identification may be wrong, while this
+ * is advice on getting a better one. A result at 60% is probably right and
+ * still worth reshooting; merging the two would either silence the warning or
+ * nag on results that are fine.
+ */
+const RETAKE_TIP_CONFIDENCE = 0.65
 
 /**
  * A store the member can say they're shopping at, from /api/member/stores —
@@ -426,7 +442,7 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
         {/* Header */}
         <div className="px-5 py-4 flex flex-col gap-1" style={{ backgroundColor: brandColor }}>
           <span className="font-['Coiny'] text-xl text-white leading-none">
-            BinPerks Scanner
+            Photo Identify
           </span>
           <p className="text-[11px] text-white/75 font-medium leading-relaxed">
             AI-powered identification — this is our best guess, not a guarantee.
@@ -660,6 +676,22 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
               </div>
             )}
 
+            {/* A low-confidence result is usually a photo problem, not an
+                identification problem — the fix is in the member's hands, so
+                say what to do rather than only flagging the uncertainty. */}
+            {result && !busy && result.confidence < RETAKE_TIP_CONFIDENCE && (
+              <div
+                className="rounded-2xl px-4 py-3.5 flex items-start gap-3"
+                style={{ backgroundColor: '#FFB21718', border: '1.5px solid #FFB21740' }}
+              >
+                <span className="text-lg flex-shrink-0 leading-none mt-0.5">💡</span>
+                <p className="text-[13px] font-semibold text-[#8A6A00] leading-relaxed">
+                  For better results, try a closer photo of the label, brand name, or any
+                  text on the item.
+                </p>
+              </div>
+            )}
+
             {/* ── Primary actions ──
                 Both return straight to the camera; there is no screen in
                 between. "Back to the Bins" records the same back_to_bins value
@@ -667,21 +699,37 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                 neither kept nor rejected the item, and inventing a value would
                 pollute the cart/bins split the admin tab measures. */}
             {result && !busy && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={reset}
+                    className="py-5 rounded-2xl font-bold text-[15px] text-white active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
+                    style={{ backgroundColor: brandColor }}
+                  >
+                    <span className="text-2xl">📷</span>
+                    Scan Another
+                  </button>
+                  <button
+                    onClick={() => recordChoice('back_to_bins')}
+                    className="py-5 rounded-2xl font-bold text-[15px] text-[#1A1A2E] bg-white border-2 border-[#EBEBF2] active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
+                  >
+                    <span className="text-2xl">🗑️</span>
+                    Back to the Bins
+                  </button>
+                </div>
+
+                {/* Same reset as "Scan Another" — deliberately. It records no
+                    choice either, so retaking a bad photo cannot pollute the
+                    cart/bins split the admin tab measures. The separate button
+                    exists because "my photo was poor" and "I'm done with this
+                    item" are different intentions, and a member acting on the
+                    tip above should not have to read "Scan Another" to find it. */}
                 <button
                   onClick={reset}
-                  className="py-5 rounded-2xl font-bold text-[15px] text-white active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
-                  style={{ backgroundColor: brandColor }}
+                  className="w-full py-3.5 rounded-2xl font-bold text-[14px] border-2 border-[#4A4B98]/30 hover:underline active:bg-[#4A4B98]/10 transition-colors"
+                  style={{ color: brandColor }}
                 >
-                  <span className="text-2xl">📷</span>
-                  Scan Another
-                </button>
-                <button
-                  onClick={() => recordChoice('back_to_bins')}
-                  className="py-5 rounded-2xl font-bold text-[15px] text-[#1A1A2E] bg-white border-2 border-[#EBEBF2] active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
-                >
-                  <span className="text-2xl">🗑️</span>
-                  Back to the Bins
+                  📷 Photo Identify Again
                 </button>
               </div>
             )}
@@ -698,7 +746,7 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                   style={{ backgroundColor: brandColor }}
                 >
                   <span className="text-3xl">📷</span>
-                  {error ? 'Try again' : 'Scan'}
+                  {error ? 'Try again' : 'Photo Identify'}
                 </button>
 
                 <button
@@ -709,10 +757,18 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                   My Finds
                 </button>
 
-                <p className="text-[11px] text-[#8E8EA8] font-medium text-center leading-relaxed px-2">
-                  Hold the item steady and fill the frame. We identify items to help you decide —
-                  scans aren&apos;t purchases and don&apos;t earn stamps.
-                </p>
+                <div className="flex flex-col gap-2 px-2">
+                  <p className="text-[12px] text-[#8E8EA8] font-medium text-center leading-relaxed">
+                    Take a clear photo of the item&apos;s label, brand name, model number, or any
+                    visible text for the best results. Our AI will identify what it is.
+                  </p>
+                  <p className="text-[11px] text-[#B0B0C8] font-medium text-center leading-relaxed">
+                    Not sure? Photo Identify again with a closer shot of the label.
+                  </p>
+                  <p className="text-[10px] text-[#B0B0C8] font-medium text-center leading-relaxed">
+                    Identifying an item isn&apos;t a purchase and doesn&apos;t earn stamps.
+                  </p>
+                </div>
               </>
             )}
 

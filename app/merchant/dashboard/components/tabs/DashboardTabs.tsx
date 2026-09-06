@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import PricingScheduleCard from '../PricingScheduleCard'
+import BinPhotosCard from '../BinPhotosCard'
 import StoreAddressCard from '../StoreAddressCard'
 import SuggestedPerks from '../SuggestedPerks'
 import { validatePin } from '@/lib/pin-strength'
@@ -1049,6 +1050,9 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
       {/* Pricing schedule — own card, own fetch/save against the same route. */}
       <PricingScheduleCard storeId={activeStoreId ?? null} />
 
+      {/* What's In The Bins — the onboarding checklist deep-links to #bin-photos. */}
+      <BinPhotosCard storeId={activeStoreId ?? null} />
+
       {/* Cashier PIN management */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[#EBEBF2]">
@@ -1155,6 +1159,10 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
 
 interface OnboardingItem {
   id: string; label: string; completed: boolean; binPerks: boolean
+  /** Optional second line, for items where the label alone does not say why. */
+  description?: string
+  /** Optional deep link to wherever the item is actually done. */
+  href?: string
 }
 
 export function GettingStartedTab({ storeId }: { storeId: string | null }) {
@@ -1282,11 +1290,24 @@ export function GettingStartedTab({ storeId }: { storeId: string | null }) {
           {merchantItems.map(item => (
             <div key={item.id} className="px-5 py-3.5 flex items-center gap-3">
               <span className="text-[18px] flex-shrink-0">{item.completed ? '✅' : '⬜'}</span>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className={`text-[13px] font-semibold ${item.completed ? 'text-[#8E8EA8] line-through' : 'text-[#1A1A2E]'}`}>
                   {item.label}
                 </p>
+                {item.description && !item.completed && (
+                  <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">
+                    {item.description}
+                  </p>
+                )}
               </div>
+              {item.href && !item.completed && (
+                <a
+                  href={item.href}
+                  className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-[#4A4B98] text-white text-[11px] font-bold"
+                >
+                  Add
+                </a>
+              )}
               {item.id === 'cashier_training' && !item.completed && (
                 <button
                   onClick={handleConfirmTraining}

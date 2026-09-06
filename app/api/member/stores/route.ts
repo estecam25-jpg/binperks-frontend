@@ -142,6 +142,22 @@ export async function GET(req: NextRequest) {
 
   const rows = (data ?? []) as StoreRow[]
 
+  // Which of these stores have at least one bin photo.
+  //
+  // ONE query for the whole page rather than a count per store: the card only
+  // needs a boolean to decide whether to offer the "see what's in the bins"
+  // link, and N round trips for N cards would be the expensive way to learn it.
+  // The photos themselves are fetched lazily when a card is expanded.
+  const storesWithPhotos = new Set<string>()
+  if (rows.length > 0) {
+    const { data: photoRows } = await admin
+      .from('store_bin_photos')
+      .select('store_id')
+      .eq('active', true)
+      .in('store_id', rows.map(s => s.id))
+    for (const p of photoRows ?? []) storesWithPhotos.add(p.store_id as string)
+  }
+
   // Origin Store first. It stays in place when a search excludes it — we do
   // not re-add it, because a member searching "Miami" should not be handed
   // their Tampa store as the top hit.
@@ -166,6 +182,9 @@ export async function GET(req: NextRequest) {
       city:          s.city ?? '',
       state:         s.state ?? '',
       brandColor:    s.brand_color ?? '#4A4B98',
+      // Drives the "See what's in the bins" link on the card. False for most
+      // stores, and the card renders nothing at all in that case.
+      hasBinPhotos:  storesWithPhotos.has(s.id),
       // Resolved per store, in that store's timezone. null means the merchant
       // has published no price for today — which is NOT the same as $0, so
       // the UI shows "—" rather than "free".

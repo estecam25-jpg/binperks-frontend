@@ -16,11 +16,20 @@ export async function GET() {
 
   const admin = createAdminSupabaseClient()
 
-  const [stores, activePerks, staff, stampCheck] = await Promise.all([
-    admin.from('stores').select('logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at, agreement_signed_at').eq('merchant_id', merchant.id),
+  const [stores, activePerks, staff, stampCheck, binPhotoCheck] = await Promise.all([
+    admin.from('stores').select('id, logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at, agreement_signed_at').eq('merchant_id', merchant.id),
     admin.from('perks').select('member_type').eq('merchant_id', merchant.id).eq('is_active', true),
     admin.from('staff_users').select('id').eq('merchant_id', merchant.id).eq('is_active', true),
     admin.from('activity_events').select('id').eq('merchant_id', merchant.id).limit(1),
+
+    // Bin photos are per STORE, and stores are only known after the query
+    // above resolves — so this reads every active photo row for the merchant's
+    // stores via a join rather than a second round trip on store ids.
+    admin.from('store_bin_photos')
+      .select('id, stores!inner(merchant_id)')
+      .eq('active', true)
+      .eq('stores.merchant_id', merchant.id)
+      .limit(1),
   ])
 
   const storeList      = stores.data ?? []
@@ -35,6 +44,7 @@ export async function GET() {
   const mktDownloaded      = storeList.some(s => !!s.marketing_downloaded_at)
   const trainingConfirmed  = storeList.some(s => !!s.cashier_training_confirmed_at)
   const agreementSigned    = storeList.some(s => !!s.agreement_signed_at)
+  const binPhotosAdded     = (binPhotoCheck.data ?? []).length > 0
 
   const items = [
     // BinPerks sets up (1-3)
@@ -51,6 +61,15 @@ export async function GET() {
     { id: 'stamp_tested',      label: 'Stamp tool tested',                               completed: stampsTested,                                binPerks: false },
     { id: 'login_confirmed',   label: 'Merchant dashboard login confirmed',               completed: true,                                        binPerks: false },
     { id: 'cashier_training',  label: 'Cashier training completed',                      completed: trainingConfirmed,                           binPerks: false },
+    {
+      id: 'bin_photos',
+      label: 'Add photos of what\u2019s in your bins',
+      description: 'Show members what\u2019s in stock this week to drive more visits.',
+      completed: binPhotosAdded,
+      binPerks: false,
+      // Deep link straight to the card rather than "go to Settings and scroll".
+      href: '/merchant/dashboard?tab=settings#bin-photos',
+    },
   ]
 
   const completedCount = items.filter(i => i.completed).length

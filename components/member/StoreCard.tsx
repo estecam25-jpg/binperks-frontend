@@ -32,6 +32,9 @@ export interface StoreCardStore {
   /** Still returned by the API and still used to order the list — it is just
    *  no longer labelled on the card. */
   isOriginStore: boolean
+  /** True when the merchant has posted photos of current stock. Most stores
+   *  have none, and the card shows nothing rather than an empty promise. */
+  hasBinPhotos?: boolean
 }
 
 export default function StoreCard({
@@ -167,6 +170,19 @@ export default function StoreCard({
           {expanded ? 'Hide Perks' : 'View Perks'}
         </button>
       </div>
+
+      {/* Offered only when there is something to see. Expanding the card is
+          what reveals the photos, so this is the same action as View Perks —
+          worded for the member who came for the stock, not the perks. */}
+      {store.hasBinPhotos && !expanded && (
+        <button
+          onClick={onToggle}
+          className="w-full px-4 pb-3 -mt-1 text-left text-[13px] font-bold active:opacity-70 transition-opacity"
+          style={{ color: BINPERKS_BLUE }}
+        >
+          📷 See what&apos;s in the bins
+        </button>
+      )}
 
       {expanded && children && (
         <div className="px-4 pb-4 pt-1 border-t border-[#F0F0F5] flex flex-col gap-2.5">

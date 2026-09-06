@@ -65,14 +65,19 @@ export default function JoinLanding({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Track first join page visit for merchant onboarding checklist
+  // Track the first join page visit for the merchant onboarding checklist.
+  //
+  // PUBLIC ROUTE. This used to PATCH /api/merchant/store, which requires a
+  // merchant session — on a join page there is none, so every real visitor got
+  // a 401 and the flag only ever set if a merchant opened their own link while
+  // signed in. /api/join/track-visit takes the store KEY and needs no auth.
   useEffect(() => {
-    if (!storeId) return
-    fetch('/api/merchant/store', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId, joinPageVisited: true }),
+    if (!storeKey) return
+    fetch('/api/join/track-visit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeKey }),
     }).catch(() => {})
-  }, [storeId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [storeKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // No store Google Font is loaded here any more. Headings on a BinPerks
   // surface are Coiny, which merchants are not permitted to use — loading the

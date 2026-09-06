@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import StoreCard from '@/components/member/StoreCard'
+import BinPhotoStrip from '@/components/member/BinPhotoStrip'
 import type { TodayPrice } from '@/lib/store-pricing'
 import Link from 'next/link'
 
@@ -51,6 +52,8 @@ interface Store {
   googleMapsUrl: string | null
   address: string | null
   isOriginStore: boolean
+  /** Set by /api/member/stores. Drives the "See what's in the bins" link. */
+  hasBinPhotos: boolean
 }
 
 interface Perk {
@@ -300,6 +303,11 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
             onToggleFavorite={() => toggleFavorite(store.id)}
           >
             <>
+                {/* What's In The Bins — above the perks, because it is the
+                    reason someone taps through. Renders nothing when the store
+                    has no photos, so it never pushes the perks down for the
+                    stores that have not posted any. */}
+                {isExpanded && <BinPhotoStrip storeId={store.id} />}
 
                 {perksLoading === store.id && (
                   <div className="py-5 flex items-center justify-center">
