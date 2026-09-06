@@ -1,17 +1,31 @@
 'use client'
 
+/**
+ * The member sign-in form: phone in, then the 8-digit code texted via GHL.
+ *
+ * BINPERKS BLUE THROUGHOUT. Every accent here used to be the store's brand
+ * colour, passed down from the page. The prop is gone rather than defaulted, so
+ * there is nothing for a future edit to thread a store colour back into.
+ *
+ * THE "WHICH STORE?" ACCOUNT PICKER IS GONE. It existed for a phone linked to
+ * more than one rewards account, which V3 does not permit: one phone is one
+ * BinPerks account network-wide (CLAUDE.md rule 17), enforced by
+ * idx_members_phone_unique, an unconditional UNIQUE index on members.phone.
+ * Two rows cannot share a number, so /api/member/login can no longer reach its
+ * multiple_accounts branch. It is still handled defensively below, because a
+ * silent generic error would be worse than an honest one if that ever changed.
+ *
+ * storeKey is only used to point the "Join BinPerks" links at
+ * /member/join/[storeKey], which keeps Origin Store attribution intact for
+ * someone who turns out not to have an account yet.
+ */
+
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-interface Account {
-  memberId: string
-  storeName: string
-  brandName: string
-  brandColor: string
-}
+const BINPERKS_BLUE = '#4A4B98'
 
 interface Props {
-  brandColor: string
   storeKey: string
 }
 
@@ -26,7 +40,7 @@ function formatPhone(raw: string): string {
 function normalizePhone(v: string): string { return v.replace(/\D/g, '') }
 
 /** Which screen the member is on. */
-type Step = 'phone' | 'accounts' | 'code'
+type Step = 'phone' | 'code'
 
 /** In-flight network state, orthogonal to the step. */
 type Status = 'idle' | 'sending' | 'verifying'
@@ -35,7 +49,7 @@ type Status = 'idle' | 'sending' | 'verifying'
  *  from burning through the server-side 5-per-15-minutes budget by reflex. */
 const RESEND_COOLDOWN = 30
 
-function LoginFormContent({ brandColor, storeKey }: Props) {
+function LoginFormContent({ storeKey }: Props) {
   const searchParams = useSearchParams()
   const codeRef = useRef<HTMLInputElement>(null)
 
@@ -43,8 +57,6 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
   const [touched, setTouched] = useState(false)
   const [step, setStep] = useState<Step>('phone')
   const [status, setStatus] = useState<Status>('idle')
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [selectedMemberId, setSelectedMemberId] = useState<string | undefined>()
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
@@ -70,8 +82,8 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
   const digits = normalizePhone(phone)
   const phoneValid = digits.length === 10
 
-  /** Requests a code. Used by the phone form, the account picker, and Resend. */
-  async function requestCode(memberId?: string) {
+  /** Requests a code. Used by the phone form and by Resend. */
+  async function requestCode() {
     setStatus('sending')
     setError(null)
     setNotFound(false)
@@ -81,7 +93,7 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
       res = await fetch('/api/member/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: digits, memberId }),
+        body: JSON.stringify({ phone: digits }),
       })
     } catch {
       setStatus('idle')
@@ -111,10 +123,12 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
 
     const data = await res.json()
 
+    // Unreachable while phone is globally unique — see the note at the top.
+    // Surfaced as a support message rather than the generic failure below, so
+    // that if the constraint ever changed the cause would be obvious.
     if (data.error === 'multiple_accounts') {
-      setAccounts(data.accounts ?? [])
       setStatus('idle')
-      setStep('accounts')
+      setError('This number is linked to more than one account. Email support@binperks.com and we’ll sort it out.')
       return
     }
 
@@ -124,7 +138,6 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
       return
     }
 
-    setSelectedMemberId(memberId)
     setCode('')
     setStatus('idle')
     setStep('code')
@@ -187,7 +200,6 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
     setCode('')
     setError(null)
     setNotFound(false)
-    setSelectedMemberId(undefined)
   }
 
   /* ---------------------------------------------------------------- code */
@@ -198,7 +210,7 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
         <div className="flex flex-col items-center gap-3 text-center pt-2">
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center text-3xl"
-            style={{ backgroundColor: `${brandColor}15` }}
+            style={{ backgroundColor: `${BINPERKS_BLUE}15` }}
           >
             📱
           </div>
@@ -243,7 +255,7 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
             type="submit"
             disabled={code.length !== 8 || status === 'verifying'}
             className="w-full py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide disabled:opacity-40 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
-            style={{ backgroundColor: brandColor }}
+            style={{ backgroundColor: BINPERKS_BLUE }}
           >
             {status === 'verifying' && (
               <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -260,10 +272,10 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
 
         <div className="flex flex-col items-center gap-2">
           <button
-            onClick={() => requestCode(selectedMemberId)}
+            onClick={() => requestCode()}
             disabled={cooldown > 0 || status === 'sending'}
             className="text-[13px] font-bold underline disabled:opacity-40 disabled:no-underline"
-            style={{ color: brandColor }}
+            style={{ color: BINPERKS_BLUE }}
           >
             {status === 'sending'
               ? 'Sending…'
@@ -282,55 +294,14 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
     )
   }
 
-  /* ------------------------------------------------------------ accounts */
-
-  if (step === 'accounts') {
-    return (
-      <div className="w-full flex flex-col gap-4">
-        <div className="text-center">
-          <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-1">Which store?</h1>
-          <p className="text-[13px] text-[#8E8EA8] font-medium">
-            This number is linked to more than one rewards account.
-          </p>
-        </div>
-        <div className="flex flex-col gap-2.5">
-          {accounts.map(acc => (
-            <button
-              key={acc.memberId}
-              onClick={() => requestCode(acc.memberId)}
-              disabled={status === 'sending'}
-              className="w-full flex items-center gap-3 bg-white rounded-2xl px-4 py-4 shadow-sm active:scale-[0.98] transition-transform disabled:opacity-50"
-            >
-              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: acc.brandColor }} />
-              <span className="text-[14px] font-bold text-[#1A1A2E]">{acc.storeName}</span>
-            </button>
-          ))}
-        </div>
-
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
-            <p className="text-[12px] font-semibold text-[#DA1212]">{error}</p>
-          </div>
-        )}
-
-        <button
-          onClick={backToPhone}
-          className="text-[13px] font-semibold text-[#8E8EA8] underline self-center mt-1"
-        >
-          Back
-        </button>
-      </div>
-    )
-  }
-
   /* --------------------------------------------------------------- phone */
 
   return (
     <>
+      {/* No logo here: EntryBrand above the form already carries the mark, and
+          two BinPerks logos stacked is one too many. */}
       <div className="w-full flex flex-col items-center text-center">
-        {/* Same asset and sizing as AppHeader. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/BinPerks_Landscape_Logo.png" alt="BinPerks" className="h-8 w-auto mb-3" />
+        <h1 className="font-['Coiny'] text-2xl text-[#1A1A2E] mb-1">Sign in</h1>
         <p className="text-[14px] text-[#8E8EA8] font-medium">
           Enter your phone number and we&apos;ll text you a sign-in code.
         </p>
@@ -376,9 +347,9 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
               <a
                 href={`/member/join/${storeKey}`}
                 className="underline font-bold"
-                style={{ color: brandColor }}
+                style={{ color: BINPERKS_BLUE }}
               >
-                Join this store →
+                Join BinPerks →
               </a>
             </p>
           </div>
@@ -394,7 +365,7 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
           type="submit"
           disabled={status === 'sending'}
           className="w-full py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] tracking-wide disabled:opacity-50 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
-          style={{ backgroundColor: brandColor }}
+          style={{ backgroundColor: BINPERKS_BLUE }}
         >
           {status === 'sending' && (
             <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -408,9 +379,9 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
         <a
           href={`/member/join/${storeKey}`}
           className="font-bold underline"
-          style={{ color: brandColor }}
+          style={{ color: BINPERKS_BLUE }}
         >
-          Join this store →
+          Join BinPerks →
         </a>
       </p>
 
@@ -423,10 +394,10 @@ function LoginFormContent({ brandColor, storeKey }: Props) {
 
 // Suspense wrapper required because useSearchParams() opts the component into
 // dynamic rendering — Next.js requires this at the page boundary.
-export default function LoginForm({ brandColor, storeKey }: Props) {
+export default function LoginForm({ storeKey }: Props) {
   return (
     <Suspense>
-      <LoginFormContent brandColor={brandColor} storeKey={storeKey} />
+      <LoginFormContent storeKey={storeKey} />
     </Suspense>
   )
 }
