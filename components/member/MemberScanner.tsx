@@ -699,37 +699,21 @@ export default function Scanner({ brandColor }: { brandColor: string }) {
                 neither kept nor rejected the item, and inventing a value would
                 pollute the cart/bins split the admin tab measures. */}
             {result && !busy && (
-              <div className="flex flex-col gap-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={reset}
-                    className="py-5 rounded-2xl font-bold text-[15px] text-white active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
-                    style={{ backgroundColor: brandColor }}
-                  >
-                    <span className="text-2xl">📷</span>
-                    Scan Another
-                  </button>
-                  <button
-                    onClick={() => recordChoice('back_to_bins')}
-                    className="py-5 rounded-2xl font-bold text-[15px] text-[#1A1A2E] bg-white border-2 border-[#EBEBF2] active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
-                  >
-                    <span className="text-2xl">🗑️</span>
-                    Back to the Bins
-                  </button>
-                </div>
-
-                {/* Same reset as "Scan Another" — deliberately. It records no
-                    choice either, so retaking a bad photo cannot pollute the
-                    cart/bins split the admin tab measures. The separate button
-                    exists because "my photo was poor" and "I'm done with this
-                    item" are different intentions, and a member acting on the
-                    tip above should not have to read "Scan Another" to find it. */}
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={reset}
-                  className="w-full py-3.5 rounded-2xl font-bold text-[14px] border-2 border-[#4A4B98]/30 hover:underline active:bg-[#4A4B98]/10 transition-colors"
-                  style={{ color: brandColor }}
+                  className="py-5 rounded-2xl font-bold text-[15px] text-white active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
+                  style={{ backgroundColor: brandColor }}
                 >
-                  📷 Photo Identify Again
+                  <span className="text-2xl">📷</span>
+                  Scan Another
+                </button>
+                <button
+                  onClick={() => recordChoice('back_to_bins')}
+                  className="py-5 rounded-2xl font-bold text-[15px] text-[#1A1A2E] bg-white border-2 border-[#EBEBF2] active:scale-[0.97] transition-transform flex flex-col items-center gap-1"
+                >
+                  <span className="text-2xl">🗑️</span>
+                  Back to the Bins
                 </button>
               </div>
             )}
