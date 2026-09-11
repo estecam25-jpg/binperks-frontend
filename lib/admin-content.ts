@@ -20,6 +20,8 @@ export interface ContentField {
   kind: FieldKind
   required?: boolean
   placeholder?: string
+  /** Hard cap, enforced by the input itself and shown as a live counter. */
+  maxLength?: number
 }
 
 export interface ContentType {
@@ -56,11 +58,17 @@ export const CONTENT_TYPES: ContentType[] = [
     subtitleField: 'subtitle',
     pinned: true,
     fields: [
-      { name: 'title',     label: 'Title',      kind: 'text',  required: true, placeholder: 'Upgrade to VIP' },
-      { name: 'subtitle',  label: 'Subtitle',   kind: 'textarea', placeholder: 'Earn up to 5x faster' },
-      { name: 'cta_label', label: 'CTA label',  kind: 'text',  placeholder: 'See VIP' },
-      { name: 'cta_url',   label: 'CTA URL',    kind: 'url',   placeholder: '/member/upgrade' },
-      { name: 'bg_color',  label: 'Background', kind: 'color' },
+      { name: 'title',       label: 'Title',       kind: 'text',     required: true, placeholder: 'Upgrade to VIP' },
+      // Single line on purpose. The subtitle sits directly under the title on a
+      // 248px carousel card; a paragraph there is what the Description is for.
+      { name: 'subtitle',    label: 'Subtitle',    kind: 'text',     placeholder: 'Earn up to 5x faster' },
+      { name: 'description', label: 'Description', kind: 'textarea', maxLength: 300, placeholder: 'What the member gets (up to 300 characters)' },
+      // No CTA label. Every feed card now carries the same "Learn More" button
+      // (see CtaButton in components/member/FeedCards) so the control reads the
+      // same in every section. binperks_promos.cta_label keeps its data — the
+      // column has simply left the read/write path.
+      { name: 'cta_url',     label: 'CTA URL',     kind: 'url',      placeholder: '/member/upgrade' },
+      { name: 'bg_color',    label: 'Background',  kind: 'color' },
     ],
   },
   {
@@ -68,19 +76,26 @@ export const CONTENT_TYPES: ContentType[] = [
     table: 'shop_from_home',
     label: 'Shop From Home',
     titleField: 'store_name',
-    subtitleField: 'product_title',
+    subtitleField: 'subtitle',
     pinned: true,
+    // product_title and platform used to hold these two fields, and held them
+    // the opposite way round from their names — a paragraph in product_title, a
+    // short brand in platform. Both columns still exist with their data; the
+    // migration copied them across (crossed) into honestly named columns.
     fields: [
-      { name: 'store_name',    label: 'Store name',    kind: 'text', required: true },
-      { name: 'product_title', label: 'Product title', kind: 'text', required: true },
-      { name: 'platform',      label: 'Platform',      kind: 'text', required: true, placeholder: 'Whatnot' },
-      { name: 'cta_url',       label: 'CTA URL',       kind: 'url',  required: true, placeholder: 'https://…' },
+      { name: 'store_name',       label: 'Store name',  kind: 'text', required: true },
+      { name: 'subtitle',         label: 'Subtitle',    kind: 'text', required: true, placeholder: 'HiBid' },
+      { name: 'description_text', label: 'Description', kind: 'textarea', maxLength: 300, placeholder: 'What they sell (up to 300 characters)' },
+      { name: 'cta_url',          label: 'CTA URL',     kind: 'url',  required: true, placeholder: 'https://…' },
     ],
   },
   {
     slug: 'beyond-the-bins',
     table: 'beyond_the_bins',
-    label: 'Beyond The Bins',
+    // Label only. The slug is the live API path (/api/*/content/beyond-the-bins)
+    // and the table name is the table — renaming either would break the member
+    // feed for the sake of a word in a tab strip.
+    label: 'Sponsored Perks',
     titleField: 'partner_name',
     subtitleField: 'description',
     pinned: true,
@@ -102,8 +117,10 @@ export const CONTENT_TYPES: ContentType[] = [
       { name: 'event_name',  label: 'Event name',  kind: 'text',     required: true },
       { name: 'event_type',  label: 'Event type',  kind: 'text',     required: true, placeholder: 'Flea market' },
       { name: 'location',    label: 'Location',    kind: 'text',     required: true, placeholder: 'Tampa, FL' },
-      { name: 'event_date',  label: 'Date',        kind: 'date' },
-      { name: 'description', label: 'Description', kind: 'textarea' },
+      // No date field. These are standing listings rather than one-off events,
+      // and a stale date on a card is worse than no date at all. event_date
+      // keeps whatever it holds; it is simply no longer read or written.
+      { name: 'description', label: 'Description', kind: 'textarea', maxLength: 300, placeholder: 'What is on offer (up to 300 characters)' },
       { name: 'cta_url',     label: 'CTA URL',     kind: 'url',      placeholder: 'https://…' },
     ],
   },

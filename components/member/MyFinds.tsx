@@ -194,8 +194,13 @@ export default function MyFinds({ onBack }: { onBack: () => void }) {
                   )
                 }
 
+                // One COLUMN of photos, not a row: side by side, two 56px
+                // thumbnails plus their labels took 145px of a 343px card and
+                // squeezed the product name into what was left. Stacked, the
+                // text column gets the width and the labels stay under the
+                // picture each one names.
                 return (
-                  <div className="flex gap-1.5 flex-shrink-0">
+                  <div className="flex flex-col gap-1.5 flex-shrink-0">
                     {showMember && (
                       <figure className="flex flex-col items-center gap-0.5 m-0">
                         {/* eslint-disable-next-line @next/next/no-img-element */}

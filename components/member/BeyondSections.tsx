@@ -21,23 +21,15 @@
  */
 
 import { useEffect, useState } from 'react'
-import { FeedSection, FeedCarousel, PromoCarousel, OnlineStoreCard, DealCard } from './FeedCards'
+import {
+  FeedSection, FeedCarousel, PromoCarousel, OnlineStoreCard, DealCard, CtaButton, CARD_W,
+} from './FeedCards'
 import type { PromoCard, OnlineStore, Deal } from '@/lib/member-mock-data'
 
 const BINPERKS_BLUE = '#4A4B98'
 
 type Row = Record<string, unknown>
 const str = (v: unknown) => (v === null || v === undefined ? '' : String(v))
-
-/** "2026-09-01" → "Sep 1". Dates are optional. */
-function shortDate(v: unknown): string {
-  const raw = str(v)
-  if (!raw) return ''
-  const d = new Date(`${raw}T00:00:00`)
-  return Number.isNaN(d.getTime())
-    ? raw
-    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
 
 interface Partner {
   id: string
@@ -66,25 +58,22 @@ async function load(slug: string, pinnedOnly: boolean): Promise<Row[]> {
   }
 }
 
-/** Sponsored partner card. Its own markup rather than BeyondBinsCard's, because
- *  this one is a full-width row with a real CTA button, not a carousel tile. */
+/**
+ * Sponsored perk card.
+ *
+ * A carousel tile at the shared card width, not the full-width stack it used to
+ * be: it sits among Shop From Home and Deals Near You, and one section scrolling
+ * sideways while its neighbour grows downwards made a member scroll two
+ * different ways through what is one row of sponsors.
+ */
 function PartnerCard({ p }: { p: Partner }) {
   return (
-    <article className="w-full bg-white rounded-2xl px-5 py-4 shadow-sm flex flex-col gap-2">
-      <p className="text-[15px] font-extrabold text-[#1A1A2E] leading-tight">{p.partner_name}</p>
-      <p className="text-[13px] font-medium text-[#8E8EA8] leading-relaxed">{p.description}</p>
-      {/* Only when there is somewhere to send them — a dead CTA is worse than none. */}
-      {p.cta_url && (
-        <a
-          href={p.cta_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="self-start mt-1 px-4 py-2 rounded-xl text-[13px] font-bold text-white active:opacity-80 transition-opacity"
-          style={{ backgroundColor: BINPERKS_BLUE }}
-        >
-          {p.cta_label?.trim() || 'Learn more'}
-        </a>
-      )}
+    <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
+      <div className="min-w-0">
+        <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{p.partner_name}</p>
+        <p className="text-[12px] font-medium text-[#8E8EA8] mt-1 leading-snug">{p.description}</p>
+      </div>
+      <CtaButton href={p.cta_url} label={p.cta_label} />
     </article>
   )
 }
@@ -126,13 +115,15 @@ export default function BeyondSections({
       setContent({
         shop: shop.map(r => ({
           id: str(r.id), storeName: str(r.store_name),
-          featuredProduct: str(r.product_title), platform: str(r.platform),
-          cta: 'Shop', href: str(r.cta_url) || null,
+          subtitle: str(r.subtitle),
+          description: str(r.description_text) || null,
+          href: str(r.cta_url) || null,
         })),
         deals: deals.map(r => ({
           id: str(r.id), name: str(r.event_name),
           location: [str(r.event_type), str(r.location)].filter(Boolean).join(' · '),
-          date: shortDate(r.event_date), href: str(r.cta_url) || null,
+          description: str(r.description) || null,
+          href: str(r.cta_url) || null,
         })),
         partners: partners.map(r => ({
           id: str(r.id), partner_name: str(r.partner_name),
@@ -185,9 +176,9 @@ export default function BeyondSections({
             ))}
 
             {section('Sponsored Perks', partners.length, (
-              <div className="flex flex-col gap-2.5">
+              <FeedCarousel>
                 {partners.map(p => <PartnerCard key={p.id} p={p} />)}
-              </div>
+              </FeedCarousel>
             ))}
           </>
         )}
@@ -218,7 +209,7 @@ export function PromosSection() {
         id: str(r.id),
         title: str(r.title),
         body: str(r.subtitle),
-        cta: str(r.cta_label) || 'Learn more',
+        description: str(r.description) || null,
         href: str(r.cta_url) || null,
         accent: str(r.bg_color) || BINPERKS_BLUE,
       })))

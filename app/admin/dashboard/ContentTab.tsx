@@ -4,7 +4,7 @@
  * Generic admin CRUD screen for one content type.
  *
  * Driven entirely by the registry in lib/admin-content, so all five tabs —
- * Suggested Perks, Promos, Shop From Home, Beyond The Bins, Deals Near You —
+ * Suggested Perks, Promos, Shop From Home, Sponsored Perks, Deals Near You —
  * are this one component with a different ContentType. Five copies of a list,
  * a form and three fetch calls would have drifted the first time any of them
  * was touched.
@@ -33,6 +33,19 @@ function str(v: unknown): string {
 
 // ── Form ────────────────────────────────────────────────────────────────────
 
+/** Live "123 / 300" under a capped field, so the limit is visible before it
+ *  bites rather than as a keystroke that silently does nothing. */
+function CharCount({ length, max }: { length: number; max: number }) {
+  return (
+    <span
+      className="text-[10px] font-bold self-end"
+      style={{ color: length >= max ? '#DA1212' : '#B0B0C8' }}
+    >
+      {length} / {max}
+    </span>
+  )
+}
+
 function FieldInput({
   field, value, onChange,
 }: {
@@ -42,14 +55,18 @@ function FieldInput({
 }) {
   if (field.kind === 'textarea') {
     return (
-      <textarea
-        rows={3}
-        value={value}
-        placeholder={field.placeholder}
-        onChange={e => onChange(e.target.value)}
-        className={inputClass}
-        aria-label={field.label}
-      />
+      <div className="flex flex-col gap-1">
+        <textarea
+          rows={3}
+          value={value}
+          maxLength={field.maxLength}
+          placeholder={field.placeholder}
+          onChange={e => onChange(e.target.value)}
+          className={inputClass}
+          aria-label={field.label}
+        />
+        {field.maxLength !== undefined && <CharCount length={value.length} max={field.maxLength} />}
+      </div>
     )
   }
 
@@ -75,15 +92,19 @@ function FieldInput({
   }
 
   return (
-    <input
-      type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'text'}
-      inputMode={field.kind === 'number' ? 'numeric' : undefined}
-      value={value}
-      placeholder={field.placeholder}
-      onChange={e => onChange(e.target.value)}
-      className={inputClass}
-      aria-label={field.label}
-    />
+    <div className="flex flex-col gap-1">
+      <input
+        type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'text'}
+        inputMode={field.kind === 'number' ? 'numeric' : undefined}
+        value={value}
+        maxLength={field.maxLength}
+        placeholder={field.placeholder}
+        onChange={e => onChange(e.target.value)}
+        className={inputClass}
+        aria-label={field.label}
+      />
+      {field.maxLength !== undefined && <CharCount length={value.length} max={field.maxLength} />}
+    </div>
   )
 }
 

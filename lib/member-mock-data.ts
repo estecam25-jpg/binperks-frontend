@@ -10,8 +10,10 @@
 export interface PromoCard {
   id: string
   title: string
+  /** The single-line subtitle. */
   body: string
-  cta: string
+  /** Longer copy under the subtitle, up to 300 characters. */
+  description: string | null
   href: string | null
   accent: string
 }
@@ -27,9 +29,10 @@ export interface Find {
 export interface OnlineStore {
   id: string
   storeName: string
-  featuredProduct: string
-  platform: string
-  cta: string
+  /** Short line under the store name — the marketplace, usually. */
+  subtitle: string
+  /** Up to 300 characters on what they sell. */
+  description: string | null
   href?: string | null
 }
 
@@ -39,7 +42,8 @@ export interface Deal {
   id: string
   name: string
   location: string
-  date: string
+  /** Up to 300 characters on what is on offer. */
+  description: string | null
   /** Set only for admin-managed rows that carry a link. */
   href?: string | null
 }
@@ -57,24 +61,24 @@ export const MOCK_PROMOS: PromoCard[] = [
   {
     id: 'promo-vip',
     title: 'Upgrade to VIP',
-    body: 'Earn up to 5× faster and unlock bigger rewards every 20 stamps.',
-    cta: 'See VIP',
+    body: 'Earn up to 5× faster',
+    description: 'Unlock bigger rewards every 20 stamps, at every store in the network.',
     href: '/member/upgrade',
     accent: '#4A4B98',
   },
   {
     id: 'promo-invite',
     title: 'Invite Friends',
-    body: 'Earn +5 stamps when a friend joins and earns their first stamp.',
-    cta: 'Invite',
+    body: 'Earn +5 stamps',
+    description: 'You get the bonus when a friend joins and earns their first stamp.',
     href: '/member/rewards',
     accent: '#FFB217',
   },
   {
     id: 'promo-network',
     title: 'New Stores Joining',
-    body: 'More BinPerks locations are opening near you every month.',
-    cta: 'Browse stores',
+    body: 'More locations every month',
+    description: 'More BinPerks locations are opening near you every month.',
     href: '/member/stores',
     accent: '#2A7D34',
   },
@@ -103,16 +107,14 @@ export const MOCK_ONLINE_STORES: OnlineStore[] = [
   {
     id: 'online-1',
     storeName: 'EstaBins Tampa',
-    featuredProduct: 'Mystery Electronics Box',
-    platform: 'Available on Whatnot',
-    cta: 'Shop now',
+    subtitle: 'Whatnot',
+    description: 'Mystery electronics boxes and weekly drops, live on Whatnot.',
   },
   {
     id: 'online-2',
     storeName: 'WinBin Main St',
-    featuredProduct: 'Weekly Pallet Drop',
-    platform: 'Available on Whatnot',
-    cta: 'Shop now',
+    subtitle: 'Whatnot',
+    description: 'Weekly pallet drops, streamed live.',
   },
 ]
 
@@ -122,13 +124,13 @@ export const MOCK_DEALS: Deal[] = [
     id: 'event-1',
     name: 'Grand Reopening — New Bins',
     location: 'EstaBins Tampa',
-    date: 'Sat, Aug 23 · 9:00 AM',
+    description: 'Fresh bins, first pick of the restock.',
   },
   {
     id: 'event-2',
     name: 'Bin Hunter Meetup',
     location: 'WinBin Main St',
-    date: 'Sun, Aug 31 · 11:00 AM',
+    description: 'Trade tips with other bin hunters.',
   },
 ]
 
