@@ -35,12 +35,12 @@ interface Tab {
 }
 
 const LEFT_TABS: Tab[] = [
-  { href: '/member/home',   label: 'Home',   icon: '🏠' },
-  { href: '/member/stores', label: 'Stores', icon: '🎟️' },
+  { href: '/member/home',    label: 'Home',    icon: '🏠' },
+  { href: '/member/rewards', label: 'Rewards', icon: '🎫' },
 ]
 
 const RIGHT_TABS: Tab[] = [
-  { href: '/member/rewards', label: 'Rewards', icon: '📍' },
+  { href: '/member/stores', label: 'Stores', icon: '📍' },
   // Account moved to the gear in AppHeader — the fifth slot is worth more as a
   // destination than as settings. Labelled MORE rather than "Beyond the Bins":
   // the tab bar has ~60px per label and the longer name wrapped or truncated.
