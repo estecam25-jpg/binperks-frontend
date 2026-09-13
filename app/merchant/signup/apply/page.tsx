@@ -218,7 +218,7 @@ export default function MerchantApplyPage() {
 
             <Field
               label="Store Name (DBA)"
-              hint="The name your customers know you by (e.g. 'Deal Daze')"
+              hint="The name your customers know you by (e.g. 'Acme Bins')"
               error={err('storeName')}
             >
               <input type="text" placeholder="Acme Bins Prosperous"

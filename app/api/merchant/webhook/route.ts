@@ -4,8 +4,8 @@
  * Handles Stripe webhook events for merchant platform subscriptions.
  *
  * Events handled:
- *   checkout.session.completed       → activate merchant, create Subscription Schedule,
- *                                       set commission_eligible, fire GHL onboarding
+ *   checkout.session.completed       → activate merchant, set commission_eligible,
+ *                                       fire GHL onboarding
  *   invoice.payment_failed           → start grace period (billing_status: grace_period)
  *   invoice.payment_succeeded        → resume from grace period if applicable
  *   customer.subscription.updated   → detect cancellation scheduling
@@ -13,7 +13,6 @@
  *
  * Idempotency: ALL side effects go through claim_webhook_event() RPC first.
  * Every financial/external effect is independently idempotent:
- *   - Subscription Schedule: check stripe_subscription_schedule_id IS NULL first
  *   - GHL onboarding call: check ghl_onboarding_sent_at IS NULL first
  *   - commission_eligible write: check column before setting
  *   - origin_eligibility_history: always safe to insert (no UNIQUE constraint)
@@ -147,61 +146,18 @@ export async function POST(req: NextRequest) {
           .update({ is_active: true })
           .eq('merchant_id', merchantId)
 
-        // ── 4. Subscription Schedule (idempotent: only if not already created)
+        // ── 4. Current merchant state for the idempotency checks below ──────
+        //
+        // No Subscription Schedule any more. Checkout now puts the $99.99/month
+        // platform price on the subscription from the first invoice, alongside
+        // the one-time setup fee, so there is no phase to switch to.
+        // merchants.stripe_subscription_schedule_id is left in place (and
+        // unused) rather than dropped with this change.
         const { data: merchantRow } = await supabase
           .from('merchants')
-          .select('stripe_subscription_schedule_id, owner_email, company_name, commission_eligible, ghl_onboarding_sent_at')
+          .select('owner_email, company_name, commission_eligible, ghl_onboarding_sent_at')
           .eq('id', merchantId)
           .single()
-
-        if (!merchantRow?.stripe_subscription_schedule_id) {
-          try {
-            const PLATFORM_PRICE_ID = isTest
-              ? process.env.STRIPE_PRICE_PLATFORM_TEST
-              : process.env.STRIPE_PRICE_PLATFORM
-
-            const schedule = await stripe.subscriptionSchedules.create(
-              {
-                from_subscription: subscriptionId,
-                end_behavior: 'release',
-                phases: [
-                  {
-                    // Phase 1: current billing cycle (Implementation fee already paid)
-                    items: subscription.items.data.map(item => ({
-                      price:    item.price.id,
-                      quantity: item.quantity ?? 1,
-                    })),
-                    end_date: subscription.current_period_end,
-                  },
-                  {
-                    // Phase 2: ongoing at $99/month + additional locations
-                    items: [
-                      { price: PLATFORM_PRICE_ID!, quantity: 1 },
-                      // Additional location prices are carried over from original subscription
-                      ...subscription.items.data
-                        .filter(item => item.price.id !== (isTest
-                          ? process.env.STRIPE_PRICE_IMPLEMENTATION_TEST
-                          : process.env.STRIPE_PRICE_IMPLEMENTATION))
-                        .filter(item => item.price.id !== PLATFORM_PRICE_ID)
-                        .map(item => ({ price: item.price.id, quantity: item.quantity ?? 1 })),
-                    ],
-                  },
-                ],
-              },
-              { idempotencyKey: `schedule_${subscriptionId}` },
-            )
-
-            await supabase
-              .from('merchants')
-              .update({ stripe_subscription_schedule_id: schedule.id })
-              .eq('id', merchantId)
-
-            console.log(`[merchant/webhook] Subscription Schedule created: ${schedule.id}`)
-          } catch (schedErr) {
-            // Non-fatal: log but don't fail the webhook — schedule can be created manually
-            console.error(`[merchant/webhook] Subscription Schedule creation failed for ${merchantId}:`, schedErr)
-          }
-        }
 
         // ── 5. commission_eligible (idempotent: only if not already set) ──────
         if (!merchantRow?.commission_eligible) {

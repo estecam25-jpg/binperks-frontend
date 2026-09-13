@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { merchantCheckoutLineItems } from '@/lib/merchant-checkout'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 
@@ -33,25 +34,15 @@ export async function POST() {
     return NextResponse.json({ error: 'Subscription already active' }, { status: 400 })
   }
 
-  // V3 pricing: Month 1 is Implementation & Launch + additional locations.
-  // The $99/month platform price takes over via the Subscription Schedule that
-  // /api/merchant/webhook creates on checkout.session.completed — never here.
-  const isTest = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test')
-
-  const IMPLEMENTATION_PRICE = isTest
-    ? process.env.STRIPE_PRICE_IMPLEMENTATION_TEST
-    : process.env.STRIPE_PRICE_IMPLEMENTATION
-
-  const LOCATION_PRICE = isTest
-    ? process.env.STRIPE_PRICE_LOCATION_TEST
-    : process.env.STRIPE_PRICE_LOCATION
-
-  const count = merchant.location_count ?? 1
-
-  const lineItems = [
-    { price: IMPLEMENTATION_PRICE, quantity: 1 },
-    ...(count > 1 ? [{ price: LOCATION_PRICE, quantity: count - 1 }] : []),
-  ]
+  // Same line items as /api/merchant/apply — one shared builder, so the two
+  // checkout paths cannot drift apart again (they had identical copies of the
+  // one-time-only item list, and both failed the same way).
+  const count = Math.max(1, merchant.location_count ?? 1)
+  const lineItems = merchantCheckoutLineItems(count)
+  if (!lineItems) {
+    console.error('[/api/merchant/resume-checkout] Stripe price env vars missing')
+    return NextResponse.json({ error: 'Checkout is not configured' }, { status: 500 })
+  }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.binperks.com'
 

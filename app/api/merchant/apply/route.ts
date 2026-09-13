@@ -21,16 +21,18 @@
  *   - stores.is_active = true
  *   - GHL sends magic link email — BinPerks admin provisions logo/brand color/QR manually
  *
- * Pricing (V3):
- *   Month 1:  $299.99 Implementation & Launch (first location) + $49.99 x additional locations
- *   Month 2+: $99.00 Platform Subscription (first location)    + $49.99 x additional locations
+ * Pricing — see merchantCheckoutLineItems() below, shared with resume-checkout:
+ *   $200.00 setup fee          one-time, first invoice only
+ *   $99.99/month platform      recurring, starts immediately
+ *   $49.99/month per location  recurring, additional locations only (2+)
  *
- *   This route creates the Month 1 checkout only. The transition to $99/month is
- *   handled by the Subscription Schedule that /api/merchant/webhook creates on
- *   checkout.session.completed — never here.
+ *   Month 1 = $200.00 + $99.99 = $299.99 for one location; $99.99/month after.
+ *   There is no Subscription Schedule: the recurring price is on the
+ *   subscription from the first invoice and simply continues.
  *
- *   FOUNDING100 waives the Implementation & Launch fee only (product-restricted
- *   coupon); it does not discount platform or additional-location prices.
+ *   Promotion codes (FOUNDING100, BETA2026) are entered on the Stripe checkout
+ *   page — allow_promotion_codes below. What each one discounts is set on the
+ *   coupon in Stripe, not here.
  *
  * Request body: MerchantSignupForm + { locationCount }
  * Response: { checkoutUrl: string, merchantId: string }
@@ -41,6 +43,7 @@ import Stripe from 'stripe'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { postToGhl } from '@/lib/ghl-webhook'
+import { merchantCheckoutLineItems } from '@/lib/merchant-checkout'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 
@@ -63,6 +66,16 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminSupabaseClient()
     const count = Math.max(1, Number(locationCount) || 1)
+
+    // Resolve the Stripe prices FIRST. Everything below writes — an auth user,
+    // a Stripe customer, a merchant row, a store row — before Stripe is asked
+    // for a checkout session, so a missing price discovered at step 6 left all
+    // four behind as orphans. Fail here instead, while nothing exists yet.
+    const lineItems = merchantCheckoutLineItems(count)
+    if (!lineItems) {
+      console.error('[/api/merchant/apply] Stripe price env vars missing — refusing before any writes')
+      return NextResponse.json({ error: 'Checkout is not configured' }, { status: 500 })
+    }
 
     const normalizedEmail = email.toLowerCase().trim()
 
@@ -149,21 +162,7 @@ export async function POST(req: NextRequest) {
       created_at:        new Date().toISOString(),
     })
 
-    // 5. Build Stripe line items using V3 catalog price IDs (required for coupons/promotions to apply)
-    const isTest = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test')
-
-    const IMPLEMENTATION_PRICE = isTest
-      ? process.env.STRIPE_PRICE_IMPLEMENTATION_TEST
-      : process.env.STRIPE_PRICE_IMPLEMENTATION
-
-    const LOCATION_PRICE = isTest
-      ? process.env.STRIPE_PRICE_LOCATION_TEST
-      : process.env.STRIPE_PRICE_LOCATION
-
-    const lineItems = [
-      { price: IMPLEMENTATION_PRICE, quantity: 1 },
-      ...(count > 1 ? [{ price: LOCATION_PRICE, quantity: count - 1 }] : []),
-    ]
+    // 5. Line items were resolved at the top — see merchantCheckoutLineItems().
 
     // 6. Create Stripe checkout session
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
