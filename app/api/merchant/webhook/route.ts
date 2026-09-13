@@ -4,8 +4,8 @@
  * Handles Stripe webhook events for merchant platform subscriptions.
  *
  * Events handled:
- *   checkout.session.completed       → activate merchant, set commission_eligible,
- *                                       fire GHL onboarding
+ *   checkout.session.completed       → activateMerchant()
+ *   customer.subscription.created    → activateMerchant()  (same function — see below)
  *   invoice.payment_failed           → start grace period (billing_status: grace_period)
  *   invoice.payment_succeeded        → resume from grace period if applicable
  *   customer.subscription.updated   → detect cancellation scheduling
@@ -86,6 +86,150 @@ async function markFailed(
     .eq('event_id', eventId)
 }
 
+/**
+ * Activate a merchant once Stripe has a paid subscription for them.
+ *
+ * CALLED FROM TWO EVENTS, on purpose. checkout.session.completed was the only
+ * activation path, and the live Stripe endpoint for this URL has never
+ * delivered it — processed_webhook_events holds no checkout.session.completed
+ * row from any date. customer.subscription.created IS delivered, so a merchant
+ * who paid sat at subscription_status='pending' with an inactive store and no
+ * welcome. Both events now run this one function, so whichever arrives does the
+ * whole job and the two can never drift into half-activating a merchant.
+ *
+ * SAFE WHEN BOTH ARRIVE, including at the same moment. claim_webhook_event()
+ * dedupes by event id, and these are two different events, so the one-time
+ * side effects are guarded on the merchant row itself with conditional UPDATEs
+ * — Postgres re-checks the WHERE after taking the row lock, so only one caller
+ * can win each of them:
+ *   - the eligibility history row (written only when this call flipped it)
+ *   - the GHL welcome             (claimed before sending; released on failure)
+ *   - implementation_fee_paid_at  (stamped once, never rewritten)
+ *
+ * The subscription is retrieved from the API rather than read off the event:
+ * event payloads use the endpoint's API version (2025-05-28.basil, where
+ * current_period_end moved onto subscription items), while this client is
+ * pinned to 2025-02-24.acacia.
+ */
+async function activateMerchant(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  args: { merchantId: string; subscriptionId: string; eventId: string; eventType: string },
+): Promise<void> {
+  const { merchantId, subscriptionId, eventId, eventType } = args
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+
+  // A subscription can exist before it is paid for (e.g. 'incomplete' while a
+  // payment still needs confirming). Activation follows payment, not creation.
+  if (subscription.status !== 'active' && subscription.status !== 'trialing') {
+    console.warn(`[merchant/webhook] ${eventType}: subscription ${subscriptionId} is '${subscription.status}' — merchant ${merchantId} not activated`)
+    return
+  }
+
+  const nextBillingDate = new Date(subscription.current_period_end * 1000).toISOString()
+  const locationCount   = Math.max(1, Number(subscription.metadata?.locationCount ?? 1) || 1)
+  const now             = new Date().toISOString()
+
+  // ── 1. Merchant + billing state (plain UPDATE — safe to repeat) ─────────────
+  await supabase
+    .from('merchants')
+    .update({
+      subscription_status: 'active',
+      billing_status:      'active',
+      location_count:      locationCount,
+    })
+    .eq('id', merchantId)
+
+  // Setup fee stamp: first activation only, so a second event cannot move it.
+  await supabase
+    .from('merchants')
+    .update({ implementation_fee_paid: true, implementation_fee_paid_at: now })
+    .eq('id', merchantId)
+    .not('implementation_fee_paid', 'is', true)
+
+  // ── 2. Stores ─────────────────────────────────────────────────────────────
+  await supabase
+    .from('stores')
+    .update({ is_active: true })
+    .eq('merchant_id', merchantId)
+
+  // ── 3. Commission eligibility ───────────────────────────────────────────────
+  //
+  // Claimed atomically: only the call that actually changes the row writes the
+  // history record. Also catches a merchant flagged eligible by hand with no
+  // commission_eligible_from and no history, which is how a stuck merchant can
+  // look after someone patches the row directly.
+  //
+  // Never over an admin suspension — a new subscription is not an admin's
+  // decision to lift one (CLAUDE.md: administrative suspension).
+  const { data: flipped } = await supabase
+    .from('merchants')
+    .update({ commission_eligible: true, commission_eligible_from: now })
+    .eq('id', merchantId)
+    .not('admin_suspended', 'is', true)
+    .or('commission_eligible.is.null,commission_eligible.eq.false,commission_eligible_from.is.null')
+    .select('id')
+
+  if (flipped && flipped.length > 0) {
+    await supabase.from('origin_eligibility_history').insert({
+      merchant_id:         merchantId,
+      event_type:          'activated',
+      effective_at:        now,
+      triggered_by:        'stripe_webhook',
+      reason:              `${eventType} — merchant activated after payment`,
+      commission_eligible: true,
+      stripe_event_id:     eventId,
+    })
+  }
+
+  // ── 4. GHL welcome / onboarding ────────────────────────────────────────────
+  //
+  // GHL_MERCHANT_ONBOARDING_WEBHOOK_URL is honoured if it is ever added, but it
+  // does not exist in Vercel today — the post-payment workflow is wired to
+  // GHL_MERCHANT_ACTIVATED_WEBHOOK_URL ("BinPerks Merchant Activation", the same
+  // hook the admin Activate action uses). Reading only the new name would have
+  // silently sent nothing.
+  const ghlWebhook = process.env.GHL_MERCHANT_ONBOARDING_WEBHOOK_URL
+    || process.env.GHL_MERCHANT_ACTIVATED_WEBHOOK_URL
+
+  if (ghlWebhook) {
+    // Claim first so two events cannot both send the welcome.
+    const { data: claimed } = await supabase
+      .from('merchants')
+      .update({ ghl_onboarding_sent_at: now })
+      .eq('id', merchantId)
+      .is('ghl_onboarding_sent_at', null)
+      .select('owner_email, company_name')
+
+    if (claimed && claimed.length > 0) {
+      // postToGhl is bounded and never throws, so a hung GHL cannot hold the
+      // webhook open until Vercel kills it and Stripe retries the whole event.
+      const delivered = await postToGhl(ghlWebhook, {
+        merchantId,
+        merchantEmail: claimed[0].owner_email ?? '',
+        companyName:   claimed[0].company_name ?? '',
+        subscriptionId,
+        locationCount,
+        nextBillingDate,
+      }, `merchant/webhook ${eventType}`)
+
+      // Release the claim on failure so the other activation event, or a
+      // resend from the Stripe dashboard, gets another go.
+      if (!delivered) {
+        await supabase
+          .from('merchants')
+          .update({ ghl_onboarding_sent_at: null })
+          .eq('id', merchantId)
+          .eq('ghl_onboarding_sent_at', now)
+      }
+    }
+  } else {
+    console.warn('[merchant/webhook] No GHL merchant onboarding webhook URL configured — welcome not sent')
+  }
+
+  console.log(`[merchant/webhook] Merchant ${merchantId} activated via ${eventType} (sub=${subscriptionId}, status=${subscription.status})`)
+}
+
 // ── route ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -114,111 +258,74 @@ export async function POST(req: NextRequest) {
       if (!await claimEvent(supabase, event.id, event.type)) break
 
       try {
-        const session      = event.data.object as Stripe.Checkout.Session
-        const merchantId   = session.metadata?.merchantId
-        const locationCount = Number(session.metadata?.locationCount ?? 1)
-        const subscriptionId = session.subscription as string | null
+        const session        = event.data.object as Stripe.Checkout.Session
+        const merchantId     = session.metadata?.merchantId
+        const subscriptionId = typeof session.subscription === 'string'
+          ? session.subscription
+          : session.subscription?.id ?? null
 
-        if (!merchantId || !subscriptionId) {
+        // Member VIP checkouts arrive here too; they carry no merchantId.
+        if (merchantId && subscriptionId) {
+          await activateMerchant(supabase, { merchantId, subscriptionId, eventId: event.id, eventType: event.type })
+        }
+        await markCompleted(supabase, event.id)
+      } catch (err) {
+        console.error('[merchant/webhook] checkout.session.completed error:', err)
+        await markFailed(supabase, event.id, String(err))
+      }
+      break
+    }
+
+    // ── Subscription created → activate merchant ─────────────────────────────
+    //
+    // The event this endpoint actually receives when a merchant pays. Every
+    // subscription on the Stripe account fires it — member VIP ones included —
+    // so anything that does not resolve to a merchant is ignored.
+    case 'customer.subscription.created': {
+      if (!await claimEvent(supabase, event.id, event.type)) break
+
+      try {
+        const subscription = event.data.object as Stripe.Subscription
+        const customerId   = typeof subscription.customer === 'string'
+          ? subscription.customer
+          : subscription.customer.id
+
+        if (subscription.metadata?.type === 'vip_membership') {
           await markCompleted(supabase, event.id)
           break
         }
 
-        // ── 1. Retrieve subscription ─────────────────────────────────────────
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-        const nextBillingDate = new Date(subscription.current_period_end * 1000).toISOString()
-
-        // ── 2. Activate merchant (idempotent — UPDATE is safe to repeat) ─────
-        await supabase
+        // By Stripe customer first. /api/merchant/apply creates one customer per
+        // application and stores it on the merchant row, so this is exact.
+        const { data: byCustomer } = await supabase
           .from('merchants')
-          .update({
-            subscription_status:        'active',
-            billing_status:             'active',
-            location_count:             locationCount,
-            implementation_fee_paid:    true,
-            implementation_fee_paid_at: new Date().toISOString(),
-          })
-          .eq('id', merchantId)
+          .select('id')
+          .eq('stripe_customer_id', customerId)
+          .maybeSingle()
 
-        // ── 3. Activate stores ───────────────────────────────────────────────
-        await supabase
-          .from('stores')
-          .update({ is_active: true })
-          .eq('merchant_id', merchantId)
-
-        // ── 4. Current merchant state for the idempotency checks below ──────
-        //
-        // No Subscription Schedule any more. Checkout now puts the $99.99/month
-        // platform price on the subscription from the first invoice, alongside
-        // the one-time setup fee, so there is no phase to switch to.
-        // merchants.stripe_subscription_schedule_id is left in place (and
-        // unused) rather than dropped with this change.
-        const { data: merchantRow } = await supabase
-          .from('merchants')
-          .select('owner_email, company_name, commission_eligible, ghl_onboarding_sent_at')
-          .eq('id', merchantId)
-          .single()
-
-        // ── 5. commission_eligible (idempotent: only if not already set) ──────
-        if (!merchantRow?.commission_eligible) {
-          const now = new Date().toISOString()
-
-          await supabase
+        // Fallback: the merchantId apply puts in subscription_data.metadata.
+        let merchantId = byCustomer?.id as string | undefined
+        if (!merchantId && subscription.metadata?.merchantId) {
+          const { data: byMeta } = await supabase
             .from('merchants')
-            .update({
-              commission_eligible:      true,
-              commission_eligible_from: now,
-            })
-            .eq('id', merchantId)
-
-          // Write history record
-          await supabase.from('origin_eligibility_history').insert({
-            merchant_id:         merchantId,
-            event_type:          'activated',
-            effective_at:        now,
-            triggered_by:        'stripe_webhook',
-            reason:              'checkout.session.completed — merchant activated',
-            commission_eligible: true,
-            stripe_event_id:     event.id,
-          })
+            .select('id')
+            .eq('id', subscription.metadata.merchantId)
+            .maybeSingle()
+          merchantId = byMeta?.id as string | undefined
         }
 
-        // ── 6. GHL onboarding (idempotent: only if not already sent) ──────────
-        if (!merchantRow?.ghl_onboarding_sent_at) {
-          const ghlWebhook = process.env.GHL_MERCHANT_ACTIVATED_WEBHOOK_URL
-          if (ghlWebhook) {
-            // Bounded (postToGhl) so a hung GHL can't hold this open until
-            // Vercel kills it — Stripe would then see a timeout and retry the
-            // whole event. Non-fatal either way: GHL failure never fails the
-            // Stripe webhook.
-            const delivered = await postToGhl(ghlWebhook, {
-              merchantId,
-              merchantEmail: merchantRow?.owner_email ?? '',
-              companyName:   merchantRow?.company_name ?? '',
-              subscriptionId,
-              locationCount,
-              nextBillingDate,
-            }, 'merchant/webhook onboarding')
-
-            // Only stamp the idempotency marker on real delivery. The previous
-            // version stamped it whenever fetch didn't throw — and a non-2xx
-            // response doesn't throw, so a GHL 500 marked onboarding as sent
-            // and permanently suppressed the retry, leaving the merchant with
-            // no onboarding email. Leaving it unset lets Stripe's retry of this
-            // event have another go.
-            if (delivered) {
-              await supabase
-                .from('merchants')
-                .update({ ghl_onboarding_sent_at: new Date().toISOString() })
-                .eq('id', merchantId)
-            }
-          }
+        if (!merchantId) {
+          console.log(`[merchant/webhook] customer.subscription.created: no merchant for customer ${customerId} — ignored`)
+          await markCompleted(supabase, event.id)
+          break
         }
 
-        console.log(`[merchant/webhook] Merchant ${merchantId} activated`)
+        await activateMerchant(supabase, {
+          merchantId, subscriptionId: subscription.id, eventId: event.id, eventType: event.type,
+        })
         await markCompleted(supabase, event.id)
       } catch (err) {
-        console.error('[merchant/webhook] checkout.session.completed error:', err)
+        console.error('[merchant/webhook] customer.subscription.created error:', err)
         await markFailed(supabase, event.id, String(err))
       }
       break
