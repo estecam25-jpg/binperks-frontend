@@ -14,6 +14,48 @@
 
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { STAMPTOOL_HOSTS } from '@/lib/pwa-manifest'
+
+/**
+ * stamptool.binperks.com — the cashier stamp tool as its own installable app.
+ *
+ * Only TWO paths are rewritten on that host; everything else is served as-is:
+ *
+ *   /                      → /stamptool            the store list, and the
+ *                                                  installed app's start_url
+ *   /manifest.webmanifest  → /cashier.webmanifest  so the app installs as
+ *                                                  "BinPerks Cashier", not as
+ *                                                  the member app
+ *
+ * Deliberately not a blanket /stamptool prefix. The stamp pages navigate with
+ * absolute /stamptool/... paths and call /api/..., and static assets live at
+ * the root — prefixing every path would turn /stamptool/lookup into
+ * /stamptool/stamptool/lookup and /api/stamp into a 404. Leaving those alone
+ * means the existing pages work on the subdomain untouched.
+ *
+ * Returns null for every other host, so app.binperks.com is unaffected.
+ */
+function stamptoolRewrite(request: NextRequest): URL | null {
+  // From the Host header, NOT request.nextUrl.hostname. Next rebuilds
+  // request.url from the address the server is listening on, so nextUrl reads
+  // "localhost" even for a request to stamptool.localhost:3000 — confirmed in
+  // dev, where host-based routing on nextUrl silently never matched. The
+  // header is what the browser actually asked for. x-forwarded-host first, for
+  // when a proxy in front rewrites Host.
+  const rawHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? ''
+  const hostname = rawHost.split(',')[0].trim().split(':')[0].toLowerCase()
+  if (!STAMPTOOL_HOSTS.has(hostname)) return null
+
+  const target =
+    request.nextUrl.pathname === '/'                     ? '/stamptool' :
+    request.nextUrl.pathname === '/manifest.webmanifest' ? '/cashier.webmanifest' :
+    null
+  if (!target) return null
+
+  const url = request.nextUrl.clone()   // keeps the query string
+  url.pathname = target
+  return url
+}
 
 export async function middleware(request: NextRequest) {
   // The current URL, passed forward as a header.
@@ -31,7 +73,15 @@ export async function middleware(request: NextRequest) {
   forwardedHeaders.set('x-binperks-path', request.nextUrl.pathname)
   forwardedHeaders.set('x-binperks-query', request.nextUrl.search)
 
-  let supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders } })
+  // Every response below is built by this one function, so the stamptool
+  // rewrite survives the cookie refresh in setAll() — which replaces the
+  // response object and would otherwise silently drop back to next().
+  const rewriteTo = stamptoolRewrite(request)
+  const continueRequest = () => rewriteTo
+    ? NextResponse.rewrite(rewriteTo, { request: { headers: forwardedHeaders } })
+    : NextResponse.next({ request: { headers: forwardedHeaders } })
+
+  let supabaseResponse = continueRequest()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,7 +97,7 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
-          supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders } })
+          supabaseResponse = continueRequest()
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )

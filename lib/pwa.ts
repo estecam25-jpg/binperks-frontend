@@ -14,6 +14,15 @@
 export const PWA_DISMISSED_KEY = 'binperks_pwa_dismissed'
 
 /**
+ * localStorage key for the "Install the Cashier App" banner on the stamp tool
+ * (components/stamp/CashierInstallBanner). Its own name rather than a
+ * PwaSurface key: it belongs to a different banner, and localStorage is
+ * per-origin anyway, so a dismissal on app.binperks.com and one on
+ * stamptool.binperks.com are already independent.
+ */
+export const CASHIER_PWA_DISMISSED_KEY = 'cashier-pwa-dismissed'
+
+/**
  * Which surface the banner is on.
  *
  * Each gets its own dismissal key, so a cashier dismissing it on the stamp

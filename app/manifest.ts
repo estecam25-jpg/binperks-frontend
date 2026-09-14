@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next'
+import { BINPERKS_MANIFEST_ICONS } from '@/lib/pwa-manifest'
 
 /**
  * Web app manifest — what a member gets if they add BinPerks to their home
@@ -8,6 +9,10 @@ import type { MetadataRoute } from 'next'
  * theme_color is BinPerks blue and background_color is white, matching the
  * app's own chrome rather than the logo's red circle — the splash screen
  * should read as the app, not as the mark.
+ *
+ * On stamptool.binperks.com this URL serves the CASHIER manifest instead —
+ * middleware.ts rewrites it to app/cashier.webmanifest. Icons are shared with
+ * that manifest through lib/pwa-manifest.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -18,17 +23,6 @@ export default function manifest(): MetadataRoute.Manifest {
     display: 'standalone',
     background_color: '#FFFFFF',
     theme_color: '#4A4B98',
-    icons: [
-      { src: '/favicon.ico',  sizes: 'any',     type: 'image/x-icon' },
-      { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: '/icon.png',     sizes: '512x512', type: 'image/png', purpose: 'any' },
-
-      // Android needs a maskable icon or it ignores the ones above and falls
-      // back to a generated glyph — which is why the icon appeared on iPhone
-      // but not on Android. A launcher crops this to its own shape (circle,
-      // squircle, rounded square), so the artwork is full-bleed #DA1212 with
-      // the logo confined to the centre 80% safe zone. See public/icon-maskable.png.
-      { src: '/icon-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-    ],
+    icons: BINPERKS_MANIFEST_ICONS,
   }
 }
