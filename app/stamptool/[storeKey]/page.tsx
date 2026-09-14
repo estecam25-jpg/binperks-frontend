@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import { cashierSession, storeSession, type CashierSession } from '@/lib/stamp-session'
 import InstallAppBanner from '@/components/pwa/InstallAppBanner'
+import { PWA_APPS } from '@/lib/pwa-manifest'
+import { saveLastStore, readLastStore, clearLastStore } from '@/lib/stamp-store-url'
 
 const PIN_LENGTH = 4
 
@@ -32,7 +34,13 @@ export default function StampSignInPage() {
     async function loadStore() {
       try {
         const res = await fetch(`/api/join/${storeKey}`)
-        if (!res.ok) { setStatus('store_error'); return }
+        if (!res.ok) {
+          // Forget it if this was the remembered store, or every launch of the
+          // app would land back on "Store not found".
+          if (readLastStore() === storeKey) clearLastStore()
+          setStatus('store_error')
+          return
+        }
         const data = await res.json()
         const s = {
           id: data.id,
@@ -44,6 +52,18 @@ export default function StampSignInPage() {
         storeSession.set({ ...s, storeKey })
         setStore(s)
         setStatus('idle')
+
+        // Remember this store for the next time the Cashier app opens.
+        //
+        // Saved on EVERY successful load — direct URL, QR code, or picked from
+        // the list — not only direct URLs. Inside the installed app a cashier
+        // reaches their store by picking it (on iOS the home-screen app cannot
+        // even see what Safari stored from a QR scan), so remembering only
+        // direct arrivals would mean the app never remembered anything.
+        //
+        // Only after the store resolved: remembering a mistyped URL would send
+        // every future launch straight to "Store not found".
+        saveLastStore(storeKey)
       } catch {
         setStatus('store_error')
       }
@@ -80,6 +100,16 @@ export default function StampSignInPage() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [pin, handleDigit, handleDelete, status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * "Not your store? Change store" — forget the remembered store and show the
+   * list. On the stamptool subdomain that is "/" (clean URL, and nothing left
+   * to redirect to); elsewhere the list lives at /stamptool.
+   */
+  function changeStore() {
+    clearLastStore()
+    router.replace(PWA_APPS.cashier.hosts.has(window.location.hostname) ? '/' : '/stamptool')
+  }
 
   async function submitPin(enteredPin: string) {
     setStatus('loading')
@@ -220,6 +250,17 @@ export default function StampSignInPage() {
         >
           {isLoading ? 'Signing in\u2026' : 'Sign In'}
         </button>
+
+        <p className="-mt-4 text-[13px] font-medium text-[#8E8EA8]">
+          Not your store?{' '}
+          <button
+            type="button"
+            onClick={changeStore}
+            className="font-semibold text-[#4A4B98] underline underline-offset-2"
+          >
+            Change store
+          </button>
+        </p>
       </main>
     </div>
   )

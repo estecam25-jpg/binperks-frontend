@@ -15,6 +15,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { pwaAppForHost } from '@/lib/pwa-manifest'
+import { storeKeyFromPath } from '@/lib/stamp-store-url'
 
 /**
  * Subdomain apps — stamptool., merchant. and admin.binperks.com — each served
@@ -28,6 +29,17 @@ import { pwaAppForHost } from '@/lib/pwa-manifest'
  *                                                    admin.      → /admin/dashboard
  *   /manifest.webmanifest  → the app's manifest      so it installs under its
  *                                                    own name, not as the member app
+ *
+ * And on stamptool. only, one more:
+ *
+ *   /<storeKey>            → /stamptool/<storeKey>   a store's own printable,
+ *                                                    bookmarkable URL, e.g.
+ *                                                    /FL-LakeWales-BinChasersLakeWales
+ *
+ *   Matched by SHAPE (lib/stamp-store-url), not "any single segment": the
+ *   subdomain still serves /terms, /api, the manifest and so on, and those must
+ *   not become "Store not found". Store keys start with a capitalised state
+ *   code; every app route is lowercase.
  *
  * Deliberately not a blanket path prefix. Each app's pages navigate with
  * absolute paths (/stamptool/lookup, /merchant/login, /admin/dashboard) and call
@@ -57,9 +69,13 @@ function subdomainRewrite(request: NextRequest): URL | null {
   const app = pwaAppForHost(hostname)
   if (!app) return null
 
+  const { pathname } = request.nextUrl
+  const storeKey = app.id === 'cashier' ? storeKeyFromPath(pathname) : null
+
   const target =
-    request.nextUrl.pathname === '/'                     ? app.homePath :
-    request.nextUrl.pathname === '/manifest.webmanifest' ? app.manifestPath :
+    pathname === '/'                     ? app.homePath :
+    pathname === '/manifest.webmanifest' ? app.manifestPath :
+    storeKey                             ? `/stamptool/${storeKey}` :
     null
   if (!target) return null
 

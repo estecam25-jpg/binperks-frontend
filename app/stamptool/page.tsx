@@ -10,6 +10,7 @@
 import Link from 'next/link'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import EntryBrand from '@/components/EntryBrand'
+import LastStoreRedirect from '@/components/stamp/LastStoreRedirect'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,10 @@ export default async function StampHomePage() {
 
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
+
+      {/* Opening stamptool.binperks.com with a store remembered on this device
+          goes straight to that store. Only at "/" — see the component. */}
+      <LastStoreRedirect />
 
       {/* Header */}
       <EntryBrand />
