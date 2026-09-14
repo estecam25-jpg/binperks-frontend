@@ -1,9 +1,8 @@
 import type { MetadataRoute } from 'next'
 
 /**
- * Icons shared by both installable apps — the member app (app/manifest.ts) and
- * the cashier app (app/cashier.webmanifest/route.ts). One list so the two can
- * never ship different artwork.
+ * Icons shared by every installable app — the member app (app/manifest.ts) and
+ * each subdomain app below. One list so they can never ship different artwork.
  */
 export const BINPERKS_MANIFEST_ICONS: NonNullable<MetadataRoute.Manifest['icons']> = [
   { src: '/favicon.ico',  sizes: 'any',     type: 'image/x-icon' },
@@ -19,15 +18,114 @@ export const BINPERKS_MANIFEST_ICONS: NonNullable<MetadataRoute.Manifest['icons'
 ]
 
 /**
- * Hosts that serve the cashier stamp tool as its own installable app.
+ * The subdomain apps: one installable PWA per audience, each on its own origin.
  *
- * stamptool.localhost is for local testing only: browsers resolve any
- * *.localhost name to 127.0.0.1, so http://stamptool.localhost:3000 exercises
- * the same host branch as production without touching DNS.
+ * WHY SEPARATE ORIGINS: a browser installs one app per manifest scope, and the
+ * member app already claims app.binperks.com. Cashier, merchant and admin each
+ * need their own origin to install alongside it with their own name and start
+ * screen.
+ *
+ * ONE REGISTRY drives all three layers, so adding an app is one entry here:
+ *   middleware.ts                  host → rewrite of / and /manifest.webmanifest
+ *   app/<id>.webmanifest/route.ts  the manifest itself (pwaAppManifest)
+ *   components/pwa/InstallAppBanner  the install prompt and its dismissal key
+ *
+ * `<id>.localhost` is for local testing: browsers resolve any *.localhost name
+ * to 127.0.0.1, so http://merchant.localhost:3000 exercises the same host branch
+ * as production without touching DNS.
+ *
+ * SESSIONS ARE PER-ORIGIN. Supabase auth cookies set on merchant.binperks.com
+ * are not sent to app.binperks.com and vice versa, so a merchant signs in once
+ * on the subdomain. That is also what finally separates the admin and merchant
+ * sessions that used to overwrite each other in one browser.
  */
-export const STAMPTOOL_HOSTS: ReadonlySet<string> = new Set([
-  'stamptool.binperks.com',
-  'stamptool.localhost',
-])
+export type PwaAppId = 'cashier' | 'merchant' | 'admin'
 
-export const STAMPTOOL_ORIGIN = 'https://stamptool.binperks.com'
+export interface PwaApp {
+  id:           PwaAppId
+  name:         string
+  shortName:    string
+  /** Production origin; also the manifest's absolute start_url. */
+  origin:       string
+  hosts:        ReadonlySet<string>
+  /** What `/` shows on the subdomain — and so what the installed app opens to. */
+  homePath:     string
+  /** Internal route serving this app's manifest (rewritten from /manifest.webmanifest). */
+  manifestPath: string
+  /** localStorage key recording that the install banner was dismissed. */
+  dismissKey:   string
+  bannerHeading: string
+  bannerBody:    string
+}
+
+export const PWA_APPS: Record<PwaAppId, PwaApp> = {
+  cashier: {
+    id:            'cashier',
+    name:          'BinPerks Cashier',
+    shortName:     'Cashier',
+    origin:        'https://stamptool.binperks.com',
+    hosts:         new Set(['stamptool.binperks.com', 'stamptool.localhost']),
+    homePath:      '/stamptool',
+    manifestPath:  '/cashier.webmanifest',
+    dismissKey:    'cashier-pwa-dismissed',
+    bannerHeading: 'Install the Cashier App',
+    bannerBody:    'Add BinPerks Cashier to your home screen for quick access during your shift.',
+  },
+  merchant: {
+    id:            'merchant',
+    name:          'BinPerks Merchant',
+    shortName:     'Merchant',
+    origin:        'https://merchant.binperks.com',
+    hosts:         new Set(['merchant.binperks.com', 'merchant.localhost']),
+    homePath:      '/merchant/dashboard',
+    manifestPath:  '/merchant.webmanifest',
+    dismissKey:    'merchant-pwa-dismissed',
+    bannerHeading: 'Install the Merchant App',
+    bannerBody:    'Add BinPerks Merchant to your home screen for quick access to your dashboard.',
+  },
+  admin: {
+    id:            'admin',
+    name:          'BinPerks Admin',
+    shortName:     'Admin',
+    origin:        'https://admin.binperks.com',
+    hosts:         new Set(['admin.binperks.com', 'admin.localhost']),
+    homePath:      '/admin/dashboard',
+    manifestPath:  '/admin.webmanifest',
+    dismissKey:    'admin-pwa-dismissed',
+    bannerHeading: 'Install the Admin App',
+    bannerBody:    'Add BinPerks Admin to your home screen for quick access to the admin dashboard.',
+  },
+}
+
+/** The subdomain app a hostname belongs to, or null (e.g. app.binperks.com). */
+export function pwaAppForHost(hostname: string): PwaApp | null {
+  const h = hostname.toLowerCase()
+  return Object.values(PWA_APPS).find(app => app.hosts.has(h)) ?? null
+}
+
+/**
+ * The manifest for one subdomain app.
+ *
+ * start_url is absolute and only valid when served from that app's own origin —
+ * a browser ignores a cross-origin start_url — which is exactly what the
+ * middleware rewrite guarantees.
+ */
+export function pwaAppManifest(id: PwaAppId): MetadataRoute.Manifest {
+  const app = PWA_APPS[id]
+  return {
+    name:             app.name,
+    short_name:       app.shortName,
+    start_url:        app.origin,
+    display:          'standalone',
+    theme_color:      '#4A4B98',
+    background_color: '#4A4B98',
+    icons:            BINPERKS_MANIFEST_ICONS,
+  }
+}
+
+/** A manifest Response with the right content type. */
+export function pwaManifestResponse(id: PwaAppId): Response {
+  return new Response(JSON.stringify(pwaAppManifest(id)), {
+    headers: { 'Content-Type': 'application/manifest+json; charset=utf-8' },
+  })
+}

@@ -1,28 +1,28 @@
 'use client'
 
 /**
- * "Install the Cashier App" — the install prompt on the stamp tool store page.
+ * "Install the <Cashier|Merchant|Admin> App" — the install prompt for the
+ * subdomain apps in lib/pwa-manifest (PWA_APPS).
  *
- * Deliberately separate from components/member/AddToHomeScreen. This one is
- * bigger (a cashier should notice it on the first shift, not the tenth), has
- * its own dismissal key, and has one job that banner never had to do: make
- * sure the app that gets installed is the CASHIER app.
+ * Shown on the cashier store page (/stamptool/[storeKey]), /merchant/login and
+ * /admin/login. One component for all three so the rules below cannot drift;
+ * everything that differs — copy, dismissal key, origin — comes from the
+ * registry entry.
  *
  * WHICH APP GETS INSTALLED DEPENDS ON THE ORIGIN, not on this page. On
  * app.binperks.com the manifest is the member app's, so "Add to Home Screen"
- * there puts a BinPerks member icon on the till tablet that opens the member
- * home page. Cashiers still reach this page on app.binperks.com (bookmarks,
- * printed materials), so on that host the banner sends them to
- * stamptool.binperks.com instead of giving install steps that would install
- * the wrong thing.
+ * there installs a BinPerks member icon that opens the member home page. These
+ * pages are still reachable on app.binperks.com (bookmarks, printed materials,
+ * old links), so on that host the banner sends the user to the app's own
+ * subdomain instead of giving install steps that would install the wrong thing.
  *
  * HIDDEN: when already running installed, once dismissed on this device, and
  * on desktop, where Add to Home Screen is not a gesture that exists.
  */
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { detectPlatform, isStandalone, CASHIER_PWA_DISMISSED_KEY } from '@/lib/pwa'
-import { STAMPTOOL_HOSTS, STAMPTOOL_ORIGIN } from '@/lib/pwa-manifest'
+import { detectPlatform, isStandalone } from '@/lib/pwa'
+import { PWA_APPS, type PwaAppId } from '@/lib/pwa-manifest'
 
 const BLUE = '#4A4B98'
 
@@ -32,11 +32,11 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-type View = 'hidden' | 'ios' | 'android' | 'go-to-cashier-host'
+type View = 'hidden' | 'ios' | 'android' | 'go-to-app-host'
 
-function readDismissed(): boolean {
+function readDismissed(key: string): boolean {
   try {
-    return window.localStorage.getItem(CASHIER_PWA_DISMISSED_KEY) === 'true'
+    return window.localStorage.getItem(key) === 'true'
   } catch {
     return false   // storage blocked — showing the banner beats throwing
   }
@@ -47,15 +47,15 @@ function readDismissed(): boolean {
  * by value. Every input is browser-only; the server snapshot is 'hidden', so
  * the server HTML and the first client render always agree.
  */
-function readView(): View {
-  if (isStandalone() || readDismissed()) return 'hidden'
+function readView(dismissKey: string): View {
+  if (isStandalone() || readDismissed(dismissKey)) return 'hidden'
 
   const platform = detectPlatform()
   if (platform === 'other') return 'hidden'
 
   // Only the main production host is redirected. localhost and preview hosts
   // get the normal steps so the banner can still be exercised while testing.
-  if (window.location.hostname === 'app.binperks.com') return 'go-to-cashier-host'
+  if (window.location.hostname === 'app.binperks.com') return 'go-to-app-host'
 
   return platform
 }
@@ -71,8 +71,17 @@ function subscribe(onChange: () => void): () => void {
   }
 }
 
-export default function CashierInstallBanner({ storeKey }: { storeKey: string }) {
-  const view = useSyncExternalStore(subscribe, readView, () => 'hidden' as View)
+export default function InstallAppBanner({
+  app: appId,
+  appHostPath,
+}: {
+  app: PwaAppId
+  /** Where the "Open <subdomain>" button lands on the app's own origin, so the
+   *  user arrives on the same page they were on (e.g. /merchant/login). */
+  appHostPath: string
+}) {
+  const app = PWA_APPS[appId]
+  const view = useSyncExternalStore(subscribe, () => readView(app.dismissKey), () => 'hidden' as View)
 
   // Set from the click handler, so the banner disappears immediately even
   // though localStorage writes do not notify the store above.
@@ -98,7 +107,7 @@ export default function CashierInstallBanner({ storeKey }: { storeKey: string })
 
   function dismiss() {
     try {
-      window.localStorage.setItem(CASHIER_PWA_DISMISSED_KEY, 'true')
+      window.localStorage.setItem(app.dismissKey, 'true')
     } catch {
       /* storage unavailable — it will reappear next visit, which is harmless */
     }
@@ -111,12 +120,13 @@ export default function CashierInstallBanner({ storeKey }: { storeKey: string })
     setInstallEvent(null)   // an event can only be prompted once
   }
 
-  const onCashierHost = typeof window !== 'undefined' && STAMPTOOL_HOSTS.has(window.location.hostname)
+  const appHost = new URL(app.origin).host
+  const onAppHost = typeof window !== 'undefined' && app.hosts.has(window.location.hostname)
 
   return (
     <section
-      aria-label="Install the Cashier App"
-      className="w-full rounded-2xl p-5 shadow-md flex flex-col gap-3.5"
+      aria-label={app.bannerHeading}
+      className="w-full rounded-2xl p-5 shadow-md flex flex-col gap-3.5 text-left"
       style={{ backgroundColor: BLUE }}
     >
       <div className="flex items-start gap-3.5">
@@ -130,15 +140,16 @@ export default function CashierInstallBanner({ storeKey }: { storeKey: string })
         />
         <div className="flex-1 min-w-0">
           <h2 className="text-[17px] font-extrabold text-white leading-tight">
-            Install the Cashier App
+            {app.bannerHeading}
           </h2>
           <p className="text-[13px] font-medium text-white/85 mt-1 leading-snug">
-            Add BinPerks Cashier to your home screen for quick access during your shift.
+            {app.bannerBody}
           </p>
         </div>
 
         {/* 36px hit area — the glyph alone is too small to tap reliably. */}
         <button
+          type="button"
           onClick={dismiss}
           aria-label="Dismiss"
           className="flex-shrink-0 -mr-2 -mt-2 w-9 h-9 flex items-center justify-center rounded-full text-white/70 active:bg-white/10 active:text-white transition-colors"
@@ -147,14 +158,14 @@ export default function CashierInstallBanner({ storeKey }: { storeKey: string })
         </button>
       </div>
 
-      {view === 'go-to-cashier-host' && (
+      {view === 'go-to-app-host' && (
         <>
           <a
-            href={`${STAMPTOOL_ORIGIN}/stamptool/${encodeURIComponent(storeKey)}`}
+            href={`${app.origin}${appHostPath}`}
             className="w-full py-3 rounded-xl bg-white text-center text-[14px] font-bold active:opacity-90"
             style={{ color: BLUE }}
           >
-            Open stamptool.binperks.com
+            Open {appHost}
           </a>
           <p className="text-[11px] font-medium text-white/70 leading-snug">
             Install it from there — adding this page to your home screen would install the
@@ -174,6 +185,7 @@ export default function CashierInstallBanner({ storeKey }: { storeKey: string })
       {view === 'android' && (
         installEvent ? (
           <button
+            type="button"
             onClick={install}
             className="w-full py-3 rounded-xl bg-white text-[14px] font-bold active:opacity-90"
             style={{ color: BLUE }}
@@ -189,11 +201,11 @@ export default function CashierInstallBanner({ storeKey }: { storeKey: string })
         )
       )}
 
-      {/* Visible only off the cashier origin while testing (localhost/preview),
+      {/* Visible only off the app's origin while testing (localhost/preview),
           where the installed app would still be the member manifest. */}
-      {!onCashierHost && view !== 'go-to-cashier-host' && (
+      {!onAppHost && view !== 'go-to-app-host' && (
         <p className="text-[10px] font-medium text-white/50">
-          Install from stamptool.binperks.com to get the Cashier app.
+          Install from {appHost} to get the {app.shortName} app.
         </p>
       )}
     </section>

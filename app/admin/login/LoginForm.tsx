@@ -16,7 +16,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import AddToHomeScreen from '@/components/member/AddToHomeScreen'
+import InstallAppBanner from '@/components/pwa/InstallAppBanner'
 
 /** Seconds the Resend button stays disabled. The server allows 5 sends per
  *  email per 15 minutes; this keeps an admin from burning that on taps. */
@@ -171,7 +171,7 @@ export default function AdminLoginForm() {
           </div>
         </div>
 
-        <AddToHomeScreen surface="admin" label="📱 Add BinPerks Admin to your home screen" />
+        <InstallAppBanner app="admin" appHostPath="/admin/login" />
 
         <div className="bg-white rounded-3xl px-6 pt-6 pb-7 flex flex-col gap-5 shadow-2xl">
           {!onCodeStep ? (

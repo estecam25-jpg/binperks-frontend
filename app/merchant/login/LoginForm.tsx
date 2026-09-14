@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import AddToHomeScreen from '@/components/member/AddToHomeScreen'
+import InstallAppBanner from '@/components/pwa/InstallAppBanner'
 
 /** Seconds the Resend button stays disabled. The server allows 5 sends per
  *  email per 15 minutes; this keeps a merchant from burning that on taps. */
@@ -176,7 +176,7 @@ function MerchantLoginContent() {
 
       <div className="flex-1 flex flex-col items-center px-4 -mt-8 pb-12">
         <div className="w-full max-w-sm mb-3">
-          <AddToHomeScreen surface="merchant" label="📱 Add your BinPerks dashboard to your home screen" />
+          <InstallAppBanner app="merchant" appHostPath="/merchant/login" />
         </div>
 
         <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl px-6 pt-6 pb-7 flex flex-col gap-5">

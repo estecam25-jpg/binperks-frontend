@@ -12,12 +12,19 @@
  * the full path and query are handed to the login page and restored afterwards.
  */
 
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
 
 export const dynamic = 'force-dynamic'
+
+// Home-screen name for the installed Merchant app — see app/merchant/login/layout.tsx.
+export const metadata: Metadata = {
+  title: 'BinPerks Merchant',
+  appleWebApp: { title: 'Merchant' },
+}
 
 export default async function MerchantDashboardLayout({
   children,

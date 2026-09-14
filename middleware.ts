@@ -14,28 +14,37 @@
 
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { STAMPTOOL_HOSTS } from '@/lib/pwa-manifest'
+import { pwaAppForHost } from '@/lib/pwa-manifest'
 
 /**
- * stamptool.binperks.com — the cashier stamp tool as its own installable app.
+ * Subdomain apps — stamptool., merchant. and admin.binperks.com — each served
+ * as its own installable PWA. The host table lives in lib/pwa-manifest
+ * (PWA_APPS); this function only applies it.
  *
- * Only TWO paths are rewritten on that host; everything else is served as-is:
+ * Only TWO paths are rewritten on those hosts; everything else is served as-is:
  *
- *   /                      → /stamptool            the store list, and the
- *                                                  installed app's start_url
- *   /manifest.webmanifest  → /cashier.webmanifest  so the app installs as
- *                                                  "BinPerks Cashier", not as
- *                                                  the member app
+ *   /                      → the app's home          stamptool.  → /stamptool
+ *                                                    merchant.   → /merchant/dashboard
+ *                                                    admin.      → /admin/dashboard
+ *   /manifest.webmanifest  → the app's manifest      so it installs under its
+ *                                                    own name, not as the member app
  *
- * Deliberately not a blanket /stamptool prefix. The stamp pages navigate with
- * absolute /stamptool/... paths and call /api/..., and static assets live at
- * the root — prefixing every path would turn /stamptool/lookup into
- * /stamptool/stamptool/lookup and /api/stamp into a 404. Leaving those alone
- * means the existing pages work on the subdomain untouched.
+ * Deliberately not a blanket path prefix. Each app's pages navigate with
+ * absolute paths (/stamptool/lookup, /merchant/login, /admin/dashboard) and call
+ * /api/..., and static assets live at the root — prefixing every path would
+ * break all of them. Leaving those alone means the existing pages work on the
+ * subdomains untouched, including sign-in: the login routes set their session
+ * cookie on whichever host made the request, and every redirect in those flows
+ * is a relative path.
+ *
+ * On merchant. and admin., `/` reaches the dashboard's own session gate, which
+ * sends a signed-out user to the login page. The merchant gate builds ?return=
+ * from x-binperks-path, which is the ORIGINAL path — "/" — so after signing in
+ * the merchant comes back to "/" and this rewrite shows the dashboard again.
  *
  * Returns null for every other host, so app.binperks.com is unaffected.
  */
-function stamptoolRewrite(request: NextRequest): URL | null {
+function subdomainRewrite(request: NextRequest): URL | null {
   // From the Host header, NOT request.nextUrl.hostname. Next rebuilds
   // request.url from the address the server is listening on, so nextUrl reads
   // "localhost" even for a request to stamptool.localhost:3000 — confirmed in
@@ -44,11 +53,13 @@ function stamptoolRewrite(request: NextRequest): URL | null {
   // when a proxy in front rewrites Host.
   const rawHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? ''
   const hostname = rawHost.split(',')[0].trim().split(':')[0].toLowerCase()
-  if (!STAMPTOOL_HOSTS.has(hostname)) return null
+
+  const app = pwaAppForHost(hostname)
+  if (!app) return null
 
   const target =
-    request.nextUrl.pathname === '/'                     ? '/stamptool' :
-    request.nextUrl.pathname === '/manifest.webmanifest' ? '/cashier.webmanifest' :
+    request.nextUrl.pathname === '/'                     ? app.homePath :
+    request.nextUrl.pathname === '/manifest.webmanifest' ? app.manifestPath :
     null
   if (!target) return null
 
@@ -73,10 +84,10 @@ export async function middleware(request: NextRequest) {
   forwardedHeaders.set('x-binperks-path', request.nextUrl.pathname)
   forwardedHeaders.set('x-binperks-query', request.nextUrl.search)
 
-  // Every response below is built by this one function, so the stamptool
+  // Every response below is built by this one function, so the subdomain
   // rewrite survives the cookie refresh in setAll() — which replaces the
   // response object and would otherwise silently drop back to next().
-  const rewriteTo = stamptoolRewrite(request)
+  const rewriteTo = subdomainRewrite(request)
   const continueRequest = () => rewriteTo
     ? NextResponse.rewrite(rewriteTo, { request: { headers: forwardedHeaders } })
     : NextResponse.next({ request: { headers: forwardedHeaders } })
