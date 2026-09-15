@@ -26,6 +26,14 @@
  *     decision is recorded and NEVER recalculated later.
  *   - A matching settlement_ledger entry is created immediately.
  *
+ * GHL (communications only — CLAUDE.md rule 4):
+ *   - VIP upgrade      → GHL_MEMBER_VIP_UPGRADE_WEBHOOK_URL, once per real
+ *                        free→VIP change (see notifyVipUpgrade)
+ *   - VIP cancellation → GHL_MEMBER_VIP_CANCEL_WEBHOOK_URL, when a cancellation
+ *                        is newly scheduled (see isNewlyScheduledCancellation)
+ *   Both fire AFTER the database write and can never fail the event: a GHL
+ *   outage costs a message, not a member's subscription state.
+ *
  * Rules enforced here:
  *   - 30-day grace period on payment failure — do NOT downgrade immediately
  *   - Member keeps ALL stamps during grace period and after downgrade
@@ -36,6 +44,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { postToGhl } from '@/lib/ghl-webhook'
+import { resolveTierName } from '@/lib/tiers'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 const webhookSecret = process.env.STRIPE_MEMBER_WEBHOOK_SECRET
@@ -82,6 +92,151 @@ async function markFailed(supabase: SupabaseAdmin, eventId: string, details: str
     .from('processed_webhook_events')
     .update({ status: 'failed', failure_details: details })
     .eq('event_id', eventId)
+}
+
+// ── GHL notifications ───────────────────────────────────────────────────────
+
+const MEMBER_CONTACT_COLUMNS = 'id, first_name, last_name, phone, email, total_stamps'
+
+interface MemberContact {
+  id: string
+  first_name: string | null
+  last_name: string | null
+  phone: string | null
+  email: string | null
+  total_stamps: number | null
+}
+
+/**
+ * POST to a GHL webhook, and NEVER throw.
+ *
+ * postToGhl already swallows network errors, non-2xx and timeouts. This adds
+ * the "URL not configured" case — logged, so a missing Vercel variable is
+ * visible in the logs rather than silently sending nothing — and one more
+ * try/catch so nothing about building the payload can fail a Stripe event
+ * whose database work has already been committed.
+ */
+async function notifyGhl(envVar: string, payload: Record<string, unknown>, label: string): Promise<void> {
+  const url = process.env[envVar]
+  if (!url) {
+    console.warn(`[member/vip-webhook] ${envVar} not set — ${label} not sent to GHL`)
+    return
+  }
+  try {
+    const delivered = await postToGhl(url, payload, `member/vip-webhook ${label}`)
+    if (delivered) console.log(`[member/vip-webhook] GHL ${label} sent for member ${payload.memberId}`)
+  } catch (err) {
+    console.error(`[member/vip-webhook] GHL ${label} failed for member ${payload.memberId}:`, err)
+  }
+}
+
+/**
+ * Flip a member to VIP, and tell GHL — but only if THIS call made them VIP.
+ *
+ * One upgrade produces several Stripe events (checkout.session.completed,
+ * customer.subscription.created, and a customer.subscription.updated for every
+ * later change — including the one that schedules a cancellation), and each of
+ * them "ensures VIP". Sending the upgrade message on each would text a member
+ * three times at checkout and again every time their subscription changed.
+ *
+ * So the write is conditional on the member not already being VIP, and only a
+ * call that actually changed the row sends. Postgres re-checks the WHERE after
+ * taking the row lock, so two events racing at checkout cannot both win.
+ * Re-subscribing after a lapse is a real free→VIP change again and sends again.
+ *
+ * Members who are already VIP still get the plain update, which keeps
+ * stripe_subscription_id and vip_billing_cycle current as before.
+ */
+async function setVipAndNotify(
+  supabase: SupabaseAdmin,
+  memberId: string,
+  subscriptionId: string | null,
+): Promise<'upgraded' | 'already_vip'> {
+  const fields = {
+    subscription_status:    'vip',
+    vip_billing_cycle:      'monthly',
+    stripe_subscription_id: subscriptionId,
+  }
+
+  const { data: flipped, error } = await supabase
+    .from('members')
+    .update(fields)
+    .eq('id', memberId)
+    .or('subscription_status.is.null,subscription_status.neq.vip')
+    .select(MEMBER_CONTACT_COLUMNS)
+
+  if (error) throw new Error(`members VIP update failed: ${error.message}`)
+
+  if (!flipped || flipped.length === 0) {
+    await supabase.from('members').update(fields).eq('id', memberId)
+    return 'already_vip'
+  }
+
+  const m = flipped[0] as MemberContact
+  await notifyGhl('GHL_MEMBER_VIP_UPGRADE_WEBHOOK_URL', {
+    memberId:           m.id,
+    firstName:          m.first_name ?? '',
+    lastName:           m.last_name ?? '',
+    phone:              m.phone ?? '',
+    email:              m.email ?? '',
+    // Always Bronze/Silver/Gold/Diamond: resolved as VIP, from stamps. Never
+    // stored (CLAUDE.md core rule 3), so computed here at send time.
+    tier:               resolveTierName(m.total_stamps ?? 0, 'vip'),
+    subscriptionStatus: 'vip',
+  }, 'VIP upgrade')
+
+  return 'upgraded'
+}
+
+/** Subscription fields involved in scheduling a cancellation. */
+type CancelFields = { cancel_at_period_end?: boolean | null; cancel_at?: number | null }
+
+function isCancelling(f: CancelFields): boolean {
+  return f.cancel_at_period_end === true || (f.cancel_at !== null && f.cancel_at !== undefined)
+}
+
+/**
+ * True when this customer.subscription.updated event is the one that SCHEDULED
+ * a cancellation — not merely any update to a subscription that is already
+ * pending cancellation.
+ *
+ * Stripe puts the old value of every field that changed in
+ * event.data.previous_attributes; a field absent from it did not change. So the
+ * previous state is "previous_attributes where present, current value
+ * otherwise", and a cancellation was newly scheduled when that previous state
+ * was not cancelling and the current one is.
+ *
+ * Covers every way a cancellation gets scheduled — the member's Cancel VIP
+ * button, account deactivation (which cancels VIP first), and the Stripe
+ * dashboard — because all of them surface as this same update. A member who
+ * resumes and later cancels again is a new cancellation and sends again.
+ */
+function isNewlyScheduledCancellation(sub: Stripe.Subscription, previous: CancelFields | undefined): boolean {
+  if (!previous || !isCancelling(sub)) return false
+  const before: CancelFields = {
+    cancel_at_period_end: 'cancel_at_period_end' in previous ? previous.cancel_at_period_end : sub.cancel_at_period_end,
+    cancel_at:            'cancel_at' in previous ? previous.cancel_at : sub.cancel_at,
+  }
+  return !isCancelling(before)
+}
+
+/**
+ * When the member's VIP actually ends, as ISO 8601 — the same format
+ * /api/member/cancel-vip returns as `cancelsAt`.
+ *
+ * cancel_at is set whenever a cancellation is scheduled. The period-end
+ * fallback reads the subscription ITEM first: event payloads arrive in the
+ * endpoint's API version (2025-05-28.basil), where current_period_end moved
+ * from the subscription onto its items.
+ */
+function cancelsAtIso(sub: Stripe.Subscription): string | null {
+  const item = sub.items?.data?.[0] as (Stripe.SubscriptionItem & { current_period_end?: number }) | undefined
+  const seconds =
+    sub.cancel_at ??
+    item?.current_period_end ??
+    (sub as Stripe.Subscription & { current_period_end?: number }).current_period_end ??
+    null
+  return typeof seconds === 'number' ? new Date(seconds * 1000).toISOString() : null
 }
 
 /**
@@ -138,16 +293,9 @@ export async function POST(req: NextRequest) {
           ? session.subscription
           : session.subscription?.id ?? null
 
-        await supabase
-          .from('members')
-          .update({
-            subscription_status:    'vip',
-            vip_billing_cycle:      'monthly',
-            stripe_subscription_id: subscriptionId,
-          })
-          .eq('id', memberId)
+        const outcome = await setVipAndNotify(supabase, memberId, subscriptionId)
 
-        console.log(`[member/vip-webhook] Member ${memberId} upgraded to VIP via checkout (sub=${subscriptionId})`)
+        console.log(`[member/vip-webhook] Member ${memberId} VIP via checkout: ${outcome} (sub=${subscriptionId})`)
         await markCompleted(supabase, event.id)
       } catch (err) {
         console.error('[member/vip-webhook] checkout.session.completed error:', err)
@@ -178,16 +326,41 @@ export async function POST(req: NextRequest) {
         // status 'active', so the member correctly keeps VIP until the period
         // actually ends — that is the intended behaviour, not a bug. The
         // downgrade happens on customer.subscription.deleted.
-        await supabase
-          .from('members')
-          .update({
-            subscription_status:    'vip',
-            vip_billing_cycle:      'monthly',
-            stripe_subscription_id: subscription.id,
-          })
-          .eq('id', memberId)
+        const outcome = await setVipAndNotify(supabase, memberId, subscription.id)
 
-        console.log(`[member/vip-webhook] Member ${memberId} set to VIP via ${event.type} (sub=${subscription.id})`)
+        console.log(`[member/vip-webhook] Member ${memberId} VIP via ${event.type}: ${outcome} (sub=${subscription.id})`)
+
+        // ── Cancellation newly scheduled → GHL ───────────────────────────────
+        // No members write for this — the member keeps VIP until the period
+        // ends (customer.subscription.deleted does the downgrade) — so the
+        // notification follows the VIP write above.
+        if (
+          event.type === 'customer.subscription.updated' &&
+          isNewlyScheduledCancellation(
+            subscription,
+            event.data.previous_attributes as CancelFields | undefined,
+          )
+        ) {
+          const { data: member } = await supabase
+            .from('members')
+            .select(MEMBER_CONTACT_COLUMNS)
+            .eq('id', memberId)
+            .maybeSingle()
+
+          if (member) {
+            const m = member as MemberContact
+            await notifyGhl('GHL_MEMBER_VIP_CANCEL_WEBHOOK_URL', {
+              memberId:  m.id,
+              firstName: m.first_name ?? '',
+              lastName:  m.last_name ?? '',
+              phone:     m.phone ?? '',
+              email:     m.email ?? '',
+              cancelsAt: cancelsAtIso(subscription),
+            }, 'VIP cancellation')
+          } else {
+            console.warn(`[member/vip-webhook] Cancellation scheduled for unknown member ${memberId} — GHL not sent`)
+          }
+        }
         await markCompleted(supabase, event.id)
       } catch (err) {
         console.error(`[member/vip-webhook] ${event.type} error:`, err)
