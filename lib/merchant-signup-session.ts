@@ -69,40 +69,34 @@ export const merchantSignupResult = {
   set: (v: MerchantSignupResult) => set('bp_msignup_result', v),
 }
 
-// ── Pricing helpers (V3 — locked per brief) ───────────────────────────────
+// ── Pricing helpers ────────────────────────────────────────────────────────
 //
-// Month 1:  $299.99 Implementation & Launch (first location) + $49.99 x additional
-// Month 2+: $99.00  Platform Subscription   (first location) + $49.99 x additional
+// Month 1:  $200.00 setup fee (once) + $99.99 platform + $49.99 x additional
+// Month 2+:                            $99.99 platform + $49.99 x additional
 //
-// The month 1 → month 2 transition is executed by the Stripe Subscription
-// Schedule created in /api/merchant/webhook. These helpers only drive display.
+// These mirror what checkout actually bills — one one-time price plus the
+// recurring prices, all on the subscription from the first invoice (see
+// lib/merchant-checkout) — and Section 7 of the Merchant Agreement. They only
+// drive display; Stripe is the source of truth for what is charged.
+//
+// There is no longer an "Implementation & Launch" price that replaces the first
+// month's platform fee: the setup fee is charged ALONGSIDE month one, not
+// instead of it.
 
-/**
- * The one-time setup fee charged on the first invoice, matching what checkout
- * actually bills (see lib/merchant-checkout) and Section 7.1 of the Merchant
- * Agreement: $200.00 once, plus the recurring monthly price from month one.
- *
- * MERCHANT_IMPLEMENTATION_PRICE below is the OLDER month-one model, where a
- * single $299.99 charge replaced the first month's platform fee. It is kept
- * because the signup landing and plan pages still display it; those pages are
- * not yet updated to the setup-fee model.
- */
-export const MERCHANT_SETUP_FEE = 200.00
-
-export const MERCHANT_IMPLEMENTATION_PRICE = 299.99
-export const MERCHANT_PLATFORM_PRICE       = 99.00
-export const MERCHANT_EXTRA_LOCATION_PRICE = 49.99
+export const MERCHANT_SETUP_FEE             = 200.00
+export const MERCHANT_PLATFORM_PRICE        = 99.99
+export const MERCHANT_EXTRA_LOCATION_PRICE  = 49.99
 
 function extraLocations(locationCount: number): number {
   return Math.max(0, locationCount - 1)
 }
 
-/** Month 1 — Implementation & Launch plus any additional locations. */
+/** Month 1 — the one-time setup fee on top of the ordinary monthly total. */
 export function calculateFirstMonthTotal(locationCount: number): number {
-  return MERCHANT_IMPLEMENTATION_PRICE + extraLocations(locationCount) * MERCHANT_EXTRA_LOCATION_PRICE
+  return MERCHANT_SETUP_FEE + calculateRecurringMonthlyTotal(locationCount)
 }
 
-/** Month 2 onward — Platform Subscription plus any additional locations. */
+/** Month 2 onward — platform subscription plus any additional locations. */
 export function calculateRecurringMonthlyTotal(locationCount: number): number {
   return MERCHANT_PLATFORM_PRICE + extraLocations(locationCount) * MERCHANT_EXTRA_LOCATION_PRICE
 }

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  MERCHANT_IMPLEMENTATION_PRICE,
+  MERCHANT_SETUP_FEE,
   MERCHANT_PLATFORM_PRICE,
   MERCHANT_EXTRA_LOCATION_PRICE,
 } from '@/lib/merchant-signup-session'
@@ -38,7 +38,7 @@ export default function MerchantLandingPage() {
         </button>
 
         <p className="text-[12px] text-white/40 font-medium">
-          ${MERCHANT_IMPLEMENTATION_PRICE} to launch, then ${MERCHANT_PLATFORM_PRICE}/mo · Cancel anytime · Setup handled by BinPerks
+          ${MERCHANT_SETUP_FEE.toFixed(2)} one-time setup fee, then ${MERCHANT_PLATFORM_PRICE}/month · Cancel anytime · Setup handled by BinPerks
         </p>
 
         <Link
@@ -124,15 +124,15 @@ export default function MerchantLandingPage() {
           <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
             <div className="flex items-baseline justify-between">
               <span className="text-[14px] font-bold text-[#1A1A2E]">
-                First month
-                <span className="block text-[11px] font-medium text-[#8E8EA8]">Implementation &amp; Launch — one time</span>
+                One-time setup fee
+                <span className="block text-[11px] font-medium text-[#8E8EA8]">Charged once, on your first invoice</span>
               </span>
-              <span className="font-['Coiny'] text-2xl text-[#4A4B98]">${MERCHANT_IMPLEMENTATION_PRICE}</span>
+              <span className="font-['Coiny'] text-2xl text-[#4A4B98]">${MERCHANT_SETUP_FEE.toFixed(2)}</span>
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-[14px] font-bold text-[#1A1A2E]">
-                Month 2 onward
-                <span className="block text-[11px] font-medium text-[#8E8EA8]">Platform subscription</span>
+                Monthly platform fee
+                <span className="block text-[11px] font-medium text-[#8E8EA8]">Every month, from month 1</span>
               </span>
               <span className="font-['Coiny'] text-2xl text-[#4A4B98]">${MERCHANT_PLATFORM_PRICE}/mo</span>
             </div>
@@ -145,8 +145,8 @@ export default function MerchantLandingPage() {
             </div>
             <div className="border-t border-[#EBEBF2] pt-3 mt-1">
               <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">
-                Example: 3 locations = ${MERCHANT_IMPLEMENTATION_PRICE} + ${MERCHANT_EXTRA_LOCATION_PRICE} + ${MERCHANT_EXTRA_LOCATION_PRICE} = $
-                {(MERCHANT_IMPLEMENTATION_PRICE + 2 * MERCHANT_EXTRA_LOCATION_PRICE).toFixed(2)} the first month,
+                Example: 3 locations = ${MERCHANT_SETUP_FEE.toFixed(2)} setup + ${MERCHANT_PLATFORM_PRICE} + ${MERCHANT_EXTRA_LOCATION_PRICE} + ${MERCHANT_EXTRA_LOCATION_PRICE} = $
+                {(MERCHANT_SETUP_FEE + MERCHANT_PLATFORM_PRICE + 2 * MERCHANT_EXTRA_LOCATION_PRICE).toFixed(2)} the first month,
                 then ${(MERCHANT_PLATFORM_PRICE + 2 * MERCHANT_EXTRA_LOCATION_PRICE).toFixed(2)}/mo after that.
               </p>
             </div>

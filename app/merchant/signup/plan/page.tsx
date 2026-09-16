@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   merchantSignupForm,
   calculateFirstMonthTotal, calculateRecurringMonthlyTotal, formatPrice,
-  MERCHANT_IMPLEMENTATION_PRICE, MERCHANT_PLATFORM_PRICE, MERCHANT_EXTRA_LOCATION_PRICE,
+  MERCHANT_SETUP_FEE, MERCHANT_PLATFORM_PRICE, MERCHANT_EXTRA_LOCATION_PRICE,
   type MerchantSignupForm,
 } from '@/lib/merchant-signup-session'
 
@@ -128,10 +128,19 @@ export default function MerchantPlanPage() {
 
               <div className="flex items-center justify-between">
                 <span className="text-[14px] font-semibold text-[#8E8EA8]">
-                  Implementation &amp; Launch
+                  One-time setup fee
                 </span>
                 <span className="text-[14px] font-bold text-[#1A1A2E]">
-                  {formatPrice(MERCHANT_IMPLEMENTATION_PRICE)}
+                  {formatPrice(MERCHANT_SETUP_FEE)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] font-semibold text-[#8E8EA8]">
+                  Monthly platform fee
+                </span>
+                <span className="text-[14px] font-bold text-[#1A1A2E]">
+                  {formatPrice(MERCHANT_PLATFORM_PRICE)}/mo
                 </span>
               </div>
 
@@ -196,9 +205,9 @@ export default function MerchantPlanPage() {
               </div>
 
               <p className="text-[11px] text-[#8E8EA8] font-medium leading-relaxed">
-                The {formatPrice(MERCHANT_IMPLEMENTATION_PRICE)} Implementation &amp; Launch fee is
-                charged once, for your first billing cycle only. Billing drops to{' '}
-                {formatPrice(recurringTotal)}/mo automatically after that — nothing for you to do.
+                The {formatPrice(MERCHANT_SETUP_FEE)} setup fee is charged once, on your first
+                invoice only. Billing continues at {formatPrice(recurringTotal)}/mo automatically
+                after that — nothing for you to do.
               </p>
             </div>
           </div>
@@ -215,7 +224,6 @@ export default function MerchantPlanPage() {
               'Automated SMS follow-up via BinPerks',
               'Cashier stamp tool (tablet or phone)',
               'Member dashboard for your customers',
-              'Weekly email reports',
               'QR code signage (BinPerks provisions)',
               isMulti ? `Aggregate dashboard across all ${locationCount} locations` : `Add more locations anytime at +$${MERCHANT_EXTRA_LOCATION_PRICE}/mo each`,
             ].map((item, i) => (
