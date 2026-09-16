@@ -59,7 +59,6 @@ export async function GET() {
     { id: 'cashier_pin',       label: 'Cashier PIN created',                             completed: staffCount > 0,                              binPerks: false },
     { id: 'mkt_downloaded',    label: 'Marketing materials downloaded',                  completed: mktDownloaded,                               binPerks: false },
     { id: 'stamp_tested',      label: 'Stamp tool tested',                               completed: stampsTested,                                binPerks: false },
-    { id: 'login_confirmed',   label: 'Merchant dashboard login confirmed',               completed: true,                                        binPerks: false },
     { id: 'cashier_training',  label: 'Cashier training completed',                      completed: trainingConfirmed,                           binPerks: false },
     {
       id: 'bin_photos',

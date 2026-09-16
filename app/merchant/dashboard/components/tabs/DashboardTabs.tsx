@@ -12,18 +12,23 @@ import { validatePin } from '@/lib/pin-strength'
 interface Perk { slot: number; title: string; description: string; isActive: boolean }
 interface StoreRef { id: string; storeName: string; storeKey?: string }
 
-const FREE_PERK_DEFAULTS: Perk[] = [
-  { slot: 1, title: 'Birthday Perk', description: 'Show your ID during your birthday month for 5% off anything from the bins.', isActive: true },
-  { slot: 2, title: 'Behind the Register Discount', description: 'Get 10% off any non-bin items.', isActive: true },
-]
-
-const VIP_PERK_DEFAULTS: Perk[] = [
-  { slot: 1, title: 'VIP Bins', description: 'Shop in your Exclusive VIP bins. All items in these bins have a $50+ retail value.', isActive: true },
-  { slot: 2, title: 'VIP Line', description: 'VIP members get to be the first to shop.', isActive: true },
-  { slot: 3, title: 'VIP Hour', description: 'Shop for 3 hours with fellow VIP members before we open to the public.', isActive: true },
-  { slot: 4, title: 'Behind the Register Discount', description: 'Get 20% off any non-bin items.', isActive: true },
-  { slot: 5, title: 'BOGO $1 Day', description: 'Buy One Get One free on Dollar Day.', isActive: true },
-]
+/**
+ * Empty perk slots — what a merchant starts from.
+ *
+ * NO PRE-FILLED PERKS. These used to be stocked with example perks ("Birthday
+ * Perk", "VIP Bins", …) shown as active, which a merchant could save without
+ * reading: the examples then became that store's real member-facing perks, and
+ * the onboarding checklist ticked itself. Every perk is now written by the
+ * merchant. Ideas still live in the Suggested Perks panel, which copies to the
+ * clipboard rather than filling these in.
+ *
+ * The slots themselves stay (2 free, 5 VIP) — they are the editor, not content.
+ */
+function emptyPerks(count: number): Perk[] {
+  return Array.from({ length: count }, (_, i) => ({
+    slot: i + 1, title: '', description: '', isActive: false,
+  }))
+}
 
 /**
  * One editable perk.
@@ -78,8 +83,8 @@ function PerkCard({
 
 export function PerksTab({ storeId, stores }: { storeId: string | null; stores: StoreRef[] }) {
   const activeStoreId = storeId ?? stores[0]?.id
-  const [freePerks, setFreePerks] = useState<Perk[]>(FREE_PERK_DEFAULTS)
-  const [vipPerks, setVipPerks] = useState<Perk[]>(VIP_PERK_DEFAULTS)
+  const [freePerks, setFreePerks] = useState<Perk[]>(() => emptyPerks(2))
+  const [vipPerks, setVipPerks] = useState<Perk[]>(() => emptyPerks(5))
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -94,8 +99,8 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
       .then(d => {
         const fp: Perk[] = d.freePerks ?? []
         const vp: Perk[] = d.vipPerks ?? []
-        setFreePerks(fp.some((p: Perk) => p.title) ? fp : FREE_PERK_DEFAULTS)
-        setVipPerks(vp.some((p: Perk) => p.title) ? vp : VIP_PERK_DEFAULTS)
+        setFreePerks(fp.length > 0 ? fp : emptyPerks(2))
+        setVipPerks(vp.length > 0 ? vp : emptyPerks(5))
         setLoading(false)
       })
   }, [activeStoreId])
