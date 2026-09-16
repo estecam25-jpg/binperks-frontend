@@ -77,6 +77,18 @@ export const merchantSignupResult = {
 // The month 1 → month 2 transition is executed by the Stripe Subscription
 // Schedule created in /api/merchant/webhook. These helpers only drive display.
 
+/**
+ * The one-time setup fee charged on the first invoice, matching what checkout
+ * actually bills (see lib/merchant-checkout) and Section 7.1 of the Merchant
+ * Agreement: $200.00 once, plus the recurring monthly price from month one.
+ *
+ * MERCHANT_IMPLEMENTATION_PRICE below is the OLDER month-one model, where a
+ * single $299.99 charge replaced the first month's platform fee. It is kept
+ * because the signup landing and plan pages still display it; those pages are
+ * not yet updated to the setup-fee model.
+ */
+export const MERCHANT_SETUP_FEE = 200.00
+
 export const MERCHANT_IMPLEMENTATION_PRICE = 299.99
 export const MERCHANT_PLATFORM_PRICE       = 99.00
 export const MERCHANT_EXTRA_LOCATION_PRICE = 49.99

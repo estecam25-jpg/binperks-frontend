@@ -3,8 +3,8 @@
  *
  * Server component. Reads the Stripe checkout session named by ?session_id so
  * the page shows what the merchant was ACTUALLY charged, rather than a
- * list-price estimate — a FOUNDING100 merchant pays $0 for Implementation &
- * Launch and must not be told they paid $299.99.
+ * list-price estimate — a merchant who applied a promotional discount pays
+ * less than list price and must not be told they paid the full amount.
  *
  * Merchant activation is handled asynchronously by the Stripe webhook at
  * /api/merchant/webhook. Nothing on this page grants access or changes state;

@@ -30,9 +30,9 @@
  *   There is no Subscription Schedule: the recurring price is on the
  *   subscription from the first invoice and simply continues.
  *
- *   Promotion codes (FOUNDING100, BETA2026) are entered on the Stripe checkout
- *   page — allow_promotion_codes below. What each one discounts is set on the
- *   coupon in Stripe, not here.
+ *   Promotion codes are entered on the Stripe checkout page —
+ *   allow_promotion_codes below. Which codes exist, and what each one
+ *   discounts, is configured on the coupon in Stripe, not here.
  *
  * Request body: MerchantSignupForm + { locationCount }
  * Response: { checkoutUrl: string, merchantId: string }

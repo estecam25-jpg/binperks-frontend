@@ -3,10 +3,9 @@
 import { useEffect, useState } from 'react'
 import {
   merchantSignupForm,
-  calculateFirstMonthTotal,
   calculateRecurringMonthlyTotal,
   formatPrice,
-  MERCHANT_IMPLEMENTATION_PRICE,
+  MERCHANT_SETUP_FEE,
 } from '@/lib/merchant-signup-session'
 
 export interface ThankYouContentProps {
@@ -16,7 +15,8 @@ export interface ThankYouContentProps {
   /** locationCount from the Stripe session metadata — survives a different
    *  browser or tab, unlike sessionStorage. Null if unavailable. */
   locationCountFromStripe: number | null
-  /** True when a promotion code (e.g. FOUNDING100) reduced the total. */
+  /** True when a promotion code reduced the total. Which codes exist, and what
+   *  each discounts, is configured in Stripe — never named here. */
   discountApplied: boolean
 }
 
@@ -44,9 +44,11 @@ export default function ThankYouContent({
   // merchant lands here without a readable session (or in a different browser).
   const locationCount = locationCountFromStripe ?? locationCountFromForm ?? 1
 
-  // What Stripe actually charged, falling back to the list-price estimate.
-  const chargedAmount = chargedToday ?? calculateFirstMonthTotal(locationCount)
   const recurringTotal = calculateRecurringMonthlyTotal(locationCount)
+
+  // What Stripe actually charged, falling back to the list-price estimate:
+  // month one is the one-time setup fee on top of the ordinary monthly total.
+  const chargedAmount = chargedToday ?? MERCHANT_SETUP_FEE + recurringTotal
 
   const nextBillingDate = (() => {
     const d = new Date()
@@ -104,13 +106,12 @@ export default function ThankYouContent({
             <p className="text-[11px] text-[#8E8EA8] font-medium leading-relaxed">
               {discountApplied ? (
                 <>
-                  Your promo code was applied — the {formatPrice(MERCHANT_IMPLEMENTATION_PRICE)}{' '}
-                  Implementation &amp; Launch fee is discounted on this first charge.
+                  A promotional discount was applied to this first charge.
                 </>
               ) : (
                 <>
-                  Your first month includes the one-time {formatPrice(MERCHANT_IMPLEMENTATION_PRICE)}{' '}
-                  Implementation &amp; Launch fee.
+                  Your first charge includes the one-time {formatPrice(MERCHANT_SETUP_FEE)}{' '}
+                  setup fee.
                 </>
               )}
               {' '}Billing moves to {formatPrice(recurringTotal)}/mo automatically from{' '}
