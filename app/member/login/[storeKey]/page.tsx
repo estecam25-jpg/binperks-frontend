@@ -17,6 +17,10 @@
  *
  * Interactive two-step flow (phone in, then the 8-digit code we text via GHL)
  * lives in the client LoginForm.
+ *
+ * The value proposition sits between the mark and the form, where someone who
+ * followed a store's link and does not yet know what BinPerks is reads it
+ * before deciding to type their number.
  */
 
 import EntryBrand from '@/components/EntryBrand'
@@ -37,6 +41,22 @@ export default async function MemberLoginPage({
       <EntryBrand />
 
       <main className="flex-1 flex flex-col items-center px-4 py-10 gap-6 max-w-md mx-auto w-full">
+
+        {/* Why sign in at all. Four lines, no card — the form below is the
+            thing to look at, so this stays quiet and out of its way. */}
+        <ul className="flex flex-col gap-1.5 text-center">
+          {[
+            '🎁 Earn rewards every visit',
+            '📱 Track your stamps automatically',
+            '🏆 Unlock VIP perks as you level up',
+            '🛍️ Shop smarter with AI-powered scanning',
+          ].map(line => (
+            <li key={line} className="text-[13px] font-medium text-[#8E8EA8] leading-snug">
+              {line}
+            </li>
+          ))}
+        </ul>
+
         <LoginForm storeKey={storeKey} />
       </main>
     </div>

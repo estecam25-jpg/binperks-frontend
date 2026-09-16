@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import TierBadge from '@/components/stamp/TierBadge'
 import { cashierSession, storeSession, foundMemberSession, stampResultSession, signOutCashier, type StampResult } from '@/lib/stamp-session'
+import { PWA_APPS } from '@/lib/pwa-manifest'
+import { readLastStore, isStoreKeyShape } from '@/lib/stamp-store-url'
 import { resolveTier, cyclePosition, stampsToNextCoupon, TIER_DISPLAY_NAMES } from '@/lib/tiers'
 
 export default function SuccessPage() {
@@ -42,9 +44,30 @@ export default function SuccessPage() {
     router.push('/stamptool/lookup')
   }
 
+  /**
+   * Back to the PIN pad for THIS store, not the store list.
+   *
+   * The next person to pick the tablet up is a cashier at the same store, so
+   * the list was a step they had to undo every shift. The store key comes from
+   * the session set when the store page loaded, falling back to the store
+   * remembered on this device.
+   *
+   * Read before signOutCashier() so it cannot depend on what that clears, and
+   * the list stays the answer when no store is known.
+   */
   function handleReturnToSignIn() {
+    const storeKey = storeSession.get()?.storeKey ?? readLastStore()
     signOutCashier()
-    router.push('/stamptool')
+
+    if (!storeKey) { router.push('/stamptool'); return }
+
+    // The short /<storeKey> form only resolves on the cashier subdomain.
+    const onCashierHost = PWA_APPS.cashier.hosts.has(window.location.hostname)
+    router.push(
+      onCashierHost && isStoreKeyShape(storeKey)
+        ? `/${encodeURIComponent(storeKey)}`
+        : `/stamptool/${encodeURIComponent(storeKey)}`,
+    )
   }
 
   if (!result) {

@@ -16,6 +16,14 @@
  *   - photos are removed when a member deactivates their account
  *   - the Privacy Policy needs updating — flagged for attorney review
  *
+ * EVERY PHOTO IS RE-ENCODED SERVER-SIDE before it is stored. The browser
+ * already re-encodes through a canvas, which drops EXIF (and with it GPS) as a
+ * side effect of how canvas works — but that is the client's behaviour, and a
+ * request to this route does not have to come from that client. sharp reads the
+ * pixels and writes a fresh JPEG with no metadata, so location data cannot
+ * reach the bucket even if the upload was hand-made. Defence in depth, not a
+ * replacement for the client-side downscale.
+ *
  * Never blocks the scan: the client fires this after the result renders and
  * ignores the outcome.
  *
@@ -23,6 +31,7 @@
  * no public policies.
  */
 
+import sharp from 'sharp'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
@@ -30,6 +39,11 @@ import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 /** Matches the bucket's own file_size_limit. Anything larger is a bug in the
  *  client-side downscale, not something to quietly accept. */
 const MAX_BYTES = 1_048_576
+
+/** Longest edge of the stored photo. Above what the client sends (1024px), so
+ *  a normal upload is re-encoded but never upscaled. */
+const MAX_EDGE_PX = 1200
+const JPEG_QUALITY = 85
 
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient()
@@ -82,9 +96,31 @@ export async function POST(req: NextRequest) {
   // can never write outside their own folder.
   const path = `${member.id}/${scanEventId}.jpg`
 
+  // Re-encode from the decoded pixels. No .withMetadata(): that would copy the
+  // EXIF block — including GPS — straight into the stored file, which is the
+  // opposite of the point. .rotate() applies the orientation tag first, so the
+  // picture stays the right way up once that tag is gone.
+  let encoded: Buffer
+  try {
+    encoded = await sharp(bytes)
+      .rotate()
+      .resize(MAX_EDGE_PX, MAX_EDGE_PX, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: JPEG_QUALITY })
+      .toBuffer()
+  } catch (err) {
+    console.error('[member/scan/photo] re-encode failed:', err)
+    return NextResponse.json({ error: 'unreadable_image' }, { status: 400 })
+  }
+
+  // The bucket enforces this too; failing here gives a clearer log line than a
+  // storage rejection would.
+  if (encoded.byteLength > MAX_BYTES) {
+    return NextResponse.json({ error: 'image_too_large' }, { status: 413 })
+  }
+
   const { error: uploadError } = await admin.storage
     .from('scan-photos')
-    .upload(path, bytes, { contentType: 'image/jpeg', upsert: true })
+    .upload(path, encoded, { contentType: 'image/jpeg', upsert: true })
 
   if (uploadError) {
     console.error('[member/scan/photo] upload failed:', uploadError)

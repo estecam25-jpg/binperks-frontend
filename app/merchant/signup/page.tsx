@@ -52,6 +52,26 @@ export default function MerchantLandingPage() {
       {/* ── What your customers earn — tier table as selling point ── */}
       <div className="flex-1 flex flex-col items-center px-4 -mt-10 pb-16 gap-8 max-w-lg mx-auto w-full">
 
+        {/* What the merchant gets — read before the price, which is the order
+            the question actually arrives in. */}
+        <div className="w-full bg-white rounded-2xl shadow-sm px-5 py-5 flex flex-col gap-3">
+          <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Why bin stores join</h2>
+          <div className="flex flex-col gap-2.5">
+            {[
+              'We run the loyalty program — you focus on your store',
+              'Members are motivated to visit more often',
+              'No app to manage, no punch cards to print',
+              'Real-time stamp tracking and coupon management',
+              'Earn revenue share from VIP memberships',
+            ].map(benefit => (
+              <div key={benefit} className="flex items-start gap-2.5">
+                <span className="text-[13px] flex-shrink-0 mt-0.5">✅</span>
+                <p className="text-[13px] font-medium text-[#1A1A2E] leading-relaxed">{benefit}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Tier rewards card — the merchant selling point */}
         <div className="w-full bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="bg-[#4A4B98] px-5 py-4">
