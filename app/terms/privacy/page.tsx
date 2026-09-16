@@ -1,15 +1,15 @@
 'use client'
 
 /**
- * Privacy Policy — Version 3.4A.
+ * Privacy Policy — Version 3.5, effective September 16, 2026.
  *
- * Content mirrors D:\BinPerks\BinPerks_Privacy_Policy_v34A.md. The
+ * Merchant data-access language follows the approved Merchant Agreement V3.5.
+ * The V3.4A source file (D:\BinPerks\BinPerks_Privacy_Policy_v34A.md) predates
+ * this version and has NOT been regenerated — this page is the current text. The
  * "DRAFT FOR ATTORNEY REVIEW — NOT FOR EXECUTION" footer in the source is a
  * document-workflow marker, not policy text, and is deliberately not rendered.
  *
- * The source carries an unfilled "Effective Date: [DATE]". Rather than invent
- * one, the header shows the version and the Last Updated value the document
- * actually states. Fill the real effective date here once it is set.
+ * The effective date is now set: September 16, 2026, shown in the header.
  */
 
 import Link from 'next/link'
@@ -22,7 +22,7 @@ export default function PrivacyPolicyPage() {
       <div className="bg-[#4A4B98] px-6 pt-10 pb-8 flex flex-col items-center gap-1 text-center">
         <Link href="/" className="font-['Coiny'] text-4xl text-white leading-none tracking-wide">BinPerks</Link>
         <h1 className="font-['Coiny'] text-2xl text-white/90 mt-1">Privacy Policy</h1>
-        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.4A · Last updated August 2026 · BinPerks LLC · Tampa, FL</p>
+        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.5 · Effective September 16, 2026 · BinPerks LLC · Tampa, FL</p>
         <a href="mailto:support@binperks.com" className="text-[12px] text-white/70 font-semibold underline mt-0.5">support@binperks.com</a>
       </div>
 
@@ -112,10 +112,10 @@ export default function PrivacyPolicyPage() {
             ]}
           />
           <Sub>6.3 Merchant Access to Member Information</Sub>
-          <P>Participating merchants may access member information only as follows:</P>
+          <P>Participating merchants have <B>no access to the BinPerks member database</B>. BinPerks does not provide merchants with a member list, member records, or any means of browsing, searching, querying, or exporting member records. Merchants may access member information only as follows:</P>
           <Ul items={[
-            'When you initiate a BinPerks transaction at a participating location by providing your phone number, authorized cashier staff may see limited transaction-level information necessary to complete that transaction — your name, membership status and tier, stamp eligibility and status, and available reward information. This access is limited to the active transaction',
-            'Origin Merchant dashboard reporting is aggregate only — total members enrolled, total VIP members, aggregate stamps awarded, aggregate coupons earned, and commission and settlement activity',
+            'Cashier transaction access is member-initiated only. When you choose to provide your phone number at a participating location, authorized cashier staff may see just the information needed to complete that transaction — your name, membership status and tier, stamp eligibility and status, and available reward information. The access is limited to the active transaction and ends with it. It is not a member database, and cashiers cannot browse, search, or export member records',
+            'Origin Merchant dashboard reporting is aggregate only — total members enrolled, total VIP members, aggregate stamps awarded, aggregate coupons earned, and aggregate commission and settlement activity. It contains no individual member names, no member contact information, and no exportable member database',
             'Merchants do not receive an individual member list, individual member-level activity history, member contact information, or exportable member data through dashboard reporting',
             "A Merchant whose location was visited may receive aggregate operational reporting about stamp and coupon activity that occurred at that Merchant's own location",
             "No merchant receives cross-merchant member activity history — reporting never includes a member's activity at other merchants' locations",

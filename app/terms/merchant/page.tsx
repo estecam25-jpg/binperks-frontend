@@ -1,9 +1,11 @@
 'use client'
 
 /**
- * Merchant Participation Agreement — Version 3.4A.
+ * Merchant Participation Agreement — Version 3.5, effective September 16, 2026.
  *
- * Content mirrors D:\BinPerks\BinPerks_Merchant_Agreement_v34A.md. Three parts
+ * Content follows the approved Merchant Agreement V3.5. The V3.4A source file
+ * (D:\BinPerks\BinPerks_Merchant_Agreement_v34A.md) predates this version and
+ * has NOT been regenerated — this page is the current text. Three parts
  * of the source are execution artefacts rather than agreement terms and are
  * handled differently here:
  *
@@ -17,9 +19,7 @@
  *   - The "DRAFT FOR ATTORNEY REVIEW — NOT FOR EXECUTION" footer is a
  *     document-workflow marker and is not rendered.
  *
- * The source carries an unfilled "Effective Date: [DATE]". Rather than invent
- * one, the header shows the version and the Last Updated value the document
- * actually states. Fill the real effective date here once it is set.
+ * The effective date is now set: September 16, 2026, shown in the header.
  */
 
 import Link from 'next/link'
@@ -32,7 +32,7 @@ export default function MerchantTermsPage() {
       <div className="bg-[#4A4B98] px-6 pt-10 pb-8 flex flex-col items-center gap-1 text-center">
         <Link href="/" className="font-['Coiny'] text-4xl text-white leading-none tracking-wide">BinPerks</Link>
         <h1 className="font-['Coiny'] text-2xl text-white/90 mt-1">Merchant Participation Agreement</h1>
-        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.4A · Last updated August 2026 · BinPerks LLC · Tampa, FL</p>
+        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.5 · Effective September 16, 2026 · BinPerks LLC · Tampa, FL</p>
         <a href="mailto:support@binperks.com" className="text-[12px] text-white/70 font-semibold underline mt-0.5">support@binperks.com</a>
       </div>
 
@@ -129,14 +129,15 @@ export default function MerchantTermsPage() {
         </Section>
 
         <Section title="7. Pricing and Billing">
-          <Sub>7.1 Implementation &amp; Launch Fee</Sub>
-          <P>The first billing cycle for the Merchant&apos;s first location is <B>$299.99</B>, covering platform setup, onboarding, and launch support. This fee replaces the first month&apos;s platform subscription fee for the first location.</P>
+          <Sub>7.1 Setup Fee</Sub>
+          <P>The Merchant pays a <B>$200.00 one-time setup fee</B> covering platform setup, onboarding, and launch support. The setup fee is charged once, on the first billing cycle, and does not recur.</P>
           <Sub>7.2 Platform Subscription</Sub>
-          <P>Beginning with the second billing cycle, the Merchant is billed <B>$99.00 per month</B> for the first location.</P>
+          <P>The Merchant is billed <B>$99.99 per month</B> for the first location, beginning with the first billing cycle and recurring each month thereafter.</P>
+          <P>The first billing cycle for a single-location Merchant is therefore <B>$200.00 one-time setup fee plus $99.99 per month recurring</B>, and <B>$99.99 per month</B> for each month after that. Additional locations are billed as described in Section 7.3.</P>
           <Sub>7.3 Additional Locations</Sub>
           <P>Each additional active location is billed at <B>$49.99 per month</B>, beginning with the first billing cycle.</P>
           <Sub>7.4 FOUNDING100 Promotion</Sub>
-          <P>The first 100 activated Merchants may apply the promotional code <B>FOUNDING100</B> to waive the $299.99 Implementation &amp; Launch fee. The promotional code does not apply to platform subscription fees or additional location fees. The promotion expires December 31, 2026.</P>
+          <P>The first 100 activated Merchants may apply the promotional code <B>FOUNDING100</B> to waive the $200.00 one-time setup fee. The promotional code does not apply to platform subscription fees or additional location fees. The promotion expires December 31, 2026.</P>
           <Sub>7.5 Billing Authorization</Sub>
           <P>All fees are billed automatically via Stripe. The Merchant authorizes BinPerks to charge the payment method on file on a recurring monthly basis for platform fees described in this Section 7, and for amounts due under Section 6.6 (Negative Balances) as provided therein.</P>
           <Sub>7.6 Failed Payments</Sub>
@@ -170,6 +171,7 @@ export default function MerchantTermsPage() {
         </Section>
 
         <Section title="10. Data Access and Permissions">
+          <P>The Merchant has <B>zero access to the BinPerks member database</B>. BinPerks does not provide any Merchant with a member list, member records, or any means of browsing, searching, querying, or exporting member records. Individual member records are not viewable by a Merchant outside of the transaction-level cashier access described in Section 10.1.</P>
           <Sub>10.1 Serving Merchant / Cashier Access</Sub>
           <P>When a member voluntarily provides their phone number at a participating location to earn a stamp, redeem a coupon, or otherwise use BinPerks, authorized cashier staff may access only the limited member information necessary to process that specific transaction, including:</P>
           <Ul items={[
@@ -178,7 +180,7 @@ export default function MerchantTermsPage() {
             'Stamp eligibility and status',
             'Available reward information',
           ]} />
-          <P>This access is limited to the active transaction and does not give the Merchant ongoing access to an individual member database.</P>
+          <P>This access is member-initiated: it is available only when the member voluntarily provides their phone number for that transaction. It is limited to the information needed for that transaction, ends with it, and does not give the Merchant ongoing access to an individual member database. Cashier transaction access is not a member database, and cashiers cannot browse, search, or export member records.</P>
           <Sub>10.2 Origin Merchant Reporting Access</Sub>
           <P>The Origin Merchant may access aggregate reporting through the BinPerks merchant dashboard concerning members attributed to the Merchant as their Origin Store, including:</P>
           <Ul items={[
@@ -189,6 +191,7 @@ export default function MerchantTermsPage() {
             'Aggregate coupons earned',
           ]} />
           <P>Coupon settlement credits and debits are also available.</P>
+          <P>Merchant dashboard reporting is <B>aggregate only</B> — total members, total VIP members, aggregate stamps, aggregate coupons, and aggregate commission and settlement activity. It contains no individual member names, no member contact information, and no exportable member database.</P>
           <P>Origin Merchant dashboard reporting does not provide an individual member list or individual member-level activity history. Merchants do not receive member names, phone numbers, email addresses, individual tier records, individual stamp histories, individual join dates, or other personally identifying member information through dashboard reporting.</P>
           <Sub>10.3 Location Operational Reporting</Sub>
           <P>A Merchant whose location was visited may access aggregate operational reporting about stamp and coupon activity that occurred at its own location. This reporting does not include the member&apos;s activity history at other merchants&apos; locations and does not identify individual members.</P>
@@ -217,7 +220,7 @@ export default function MerchantTermsPage() {
           <P><B>12.1</B> Reactivation within 90 days of deactivation: no reactivation fee; recurring platform billing resumes.</P>
           <P><B>12.2</B> Reactivation after 90 days: <B>$200.00 Reactivation &amp; Relaunch fee</B> plus resumption of recurring platform charges.</P>
           <P><B>12.3</B> More than one reactivation within any rolling 12-month period: <B>$200.00 Reactivation &amp; Relaunch fee</B>, regardless of time since last deactivation.</P>
-          <P><B>12.4</B> New owner, new legal entity, transferred business, or materially rebuilt account: full <B>$299.99 Implementation &amp; Launch fee</B>.</P>
+          <P><B>12.4</B> New owner, new legal entity, transferred business, or materially rebuilt account: full <B>$200.00 setup fee</B> plus resumption of recurring platform charges.</P>
           <P><B>12.5</B> Reactivation is subject to BinPerks review and approval, including verification of payment status, Stripe Connect eligibility, compliance information, and platform requirements. Any outstanding negative settlement balance must be resolved before reactivation is approved.</P>
         </Section>
 
@@ -227,6 +230,7 @@ export default function MerchantTermsPage() {
           <P><B>13.3</B> When a member attributed to the Merchant redeems a coupon at a different participating location, the Merchant is charged a coupon debit equal to the face value of the coupon redeemed, as recorded in the BinPerks settlement ledger.</P>
           <P><B>13.4</B> If the Origin Store is inactive, BinPerks funds the coupon liability. The inactive merchant is not charged a coupon debit.</P>
           <P><B>13.5</B> The coupon face values that generate settlement credits and debits are set forth in Exhibit A. The Merchant acknowledges that its participation in the cross-network coupon settlement is based on the current reward economics described in Exhibit A, subject to material change notice as provided in Section 8.</P>
+          <P><B>13.6</B> Required Coupon Benefits are settled within the BinPerks network. Coupon credits and debits are recorded in the BinPerks settlement ledger and offset against the Merchant Share in the Merchant&apos;s Net Monthly Distribution under Section 6.2. BinPerks does not issue a separate cash reimbursement to the Merchant for each coupon redemption.</P>
         </Section>
 
         <Section title="14. Merchant Obligations">
@@ -248,7 +252,9 @@ export default function MerchantTermsPage() {
             'Misrepresent BinPerks membership terms to members or prospective members',
             'Manipulate stamp awards, coupon redemptions, or referral systems',
             'Process fraudulent transactions through the BinPerks platform',
+            'Permit cashiers or other staff to hold a BinPerks member account of any kind, including a free Starter account, at any location operated by the Merchant',
           ]} />
+          <P><B>14.3 Staff Member Accounts.</B> Cashiers and other staff working at any participating location may not hold a BinPerks member account of any kind — including a free Starter account — at any location operated by the same Merchant. This restriction applies to every account type and membership tier. It exists to protect the integrity of stamp awards, coupon issuance, and settlement, because staff control the award of stamps at the point of sale. The Merchant is responsible for ensuring its staff comply, and BinPerks may void stamps, coupons, and any associated Merchant Commission arising from a non-compliant account.</P>
         </Section>
 
         <Section title="15. Intellectual Property and Branding">
@@ -348,6 +354,7 @@ export default function MerchantTermsPage() {
             'Coupon credit: When the Merchant honors a valid BinPerks coupon for a member attributed to a different merchant, the Merchant receives the face value of that coupon as a credit in the monthly settlement ledger.',
             'Coupon debits and credits are based on the actual face value of the valid coupon as recorded in the BinPerks system at the time of redemption.',
             'If the Origin Merchant is inactive at the time of redemption, BinPerks funds the coupon liability and no debit is charged to the inactive merchant.',
+            'All coupon settlement occurs within the BinPerks network. Credits and debits are offset against the Merchant Share in the monthly settlement ledger; BinPerks does not issue a separate cash reimbursement per redemption.',
           ]} />
         </Section>
 

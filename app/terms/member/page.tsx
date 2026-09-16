@@ -1,16 +1,17 @@
 'use client'
 
 /**
- * Member Terms of Service — Version 3.4A.
+ * Member Terms of Service — Version 3.5, effective September 16, 2026.
  *
- * Content mirrors D:\BinPerks\BinPerks_Member_Terms_v34A.md. Two things in the
+ * Coupon settlement and cashier access language follows the approved Merchant
+ * Agreement V3.5. The V3.4A source file
+ * (D:\BinPerks\BinPerks_Member_Terms_v34A.md) predates this version and has NOT
+ * been regenerated — this page is the current text. Two things in the
  * source are document-workflow markers rather than terms and are deliberately
  * not rendered: the "Sections 1–5, 8–14 are unchanged from Version 3.4" review
  * annotation, and the "DRAFT FOR ATTORNEY REVIEW — NOT FOR EXECUTION" footer.
  *
- * The source carries an unfilled "Effective Date: [DATE]". Rather than invent
- * one, the header shows the version and the Last Updated value the document
- * actually states. Fill the real effective date here once it is set.
+ * The effective date is now set: September 16, 2026, shown in the header.
  */
 
 import Link from 'next/link'
@@ -23,7 +24,7 @@ export default function MemberTermsPage() {
       <div className="bg-[#4A4B98] px-6 pt-10 pb-8 flex flex-col items-center gap-1 text-center">
         <Link href="/" className="font-['Coiny'] text-4xl text-white leading-none tracking-wide">BinPerks</Link>
         <h1 className="font-['Coiny'] text-2xl text-white/90 mt-1">Member Terms of Service</h1>
-        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.4A · Last updated August 2026 · BinPerks LLC · Tampa, FL</p>
+        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.5 · Effective September 16, 2026 · BinPerks LLC · Tampa, FL</p>
         <a href="mailto:support@binperks.com" className="text-[12px] text-white/70 font-semibold underline mt-0.5">support@binperks.com</a>
       </div>
 
@@ -80,6 +81,7 @@ export default function MemberTermsPage() {
           <P><B>5.5</B> Coupons are valid at any participating BinPerks location, not just your Origin Store.</P>
           <P><B>5.6</B> Coupons have no cash value and cannot be exchanged for cash.</P>
           <P><B>5.7</B> BinPerks reserves the right to void coupons or stamps obtained through fraud, manipulation, or abuse of the platform.</P>
+          <P><B>5.8</B> Coupon values are settled within the BinPerks network and are offset against the participating merchant&apos;s revenue share. You redeem your coupon in store at a participating location; BinPerks does not make a cash payment directly to you for a coupon.</P>
         </Section>
 
         <Section title="6. VIP Membership — Billing and Cancellation">
@@ -144,6 +146,7 @@ export default function MemberTermsPage() {
           <P><B>10.2</B> BinPerks shares relevant membership activity with participating merchants only as described in the BinPerks Privacy Policy. Merchants do not receive your phone number, email address, or the ability to export your membership data.</P>
           <P><B>10.3</B> BinPerks may use aggregated, anonymized data for network intelligence and platform improvement.</P>
           <P><B>10.4</B> You may request access to, correction of, or deletion of your personal information by contacting support@binperks.com. Deletion requests are subject to legitimate legal retention requirements. Additional rights may exist under applicable state privacy laws.</P>
+          <P><B>10.5</B> When you provide your phone number at a participating location, the cashier can see your name, membership tier, stamp eligibility, and available rewards — for that transaction only. Cashiers cannot browse, search, or export member records, and merchants have no access to the BinPerks member database.</P>
           <P className="mt-1">Please review our <Link href="/terms/privacy" className="text-[#4A4B98] font-semibold underline">Privacy Policy</Link> for full details.</P>
         </Section>
 
