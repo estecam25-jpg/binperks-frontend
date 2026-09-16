@@ -136,8 +136,8 @@ export default function MerchantTermsPage() {
           <P>The first billing cycle for a single-location Merchant is therefore <B>$200.00 one-time setup fee plus $99.99 per month recurring</B>, and <B>$99.99 per month</B> for each month after that. Additional locations are billed as described in Section 7.3.</P>
           <Sub>7.3 Additional Locations</Sub>
           <P>Each additional active location is billed at <B>$49.99 per month</B>, beginning with the first billing cycle.</P>
-          <Sub>7.4 FOUNDING100 Promotion</Sub>
-          <P>The first 100 activated Merchants may apply the promotional code <B>FOUNDING100</B> to waive the $200.00 one-time setup fee. The promotional code does not apply to platform subscription fees or additional location fees. The promotion expires December 31, 2026.</P>
+          <Sub>7.4 Promotional Fee Waivers</Sub>
+          <P>Promotional fee waivers, if offered, apply only as stated in the applicable Order Form and do not affect the Merchant Share or other obligations under this Agreement.</P>
           <Sub>7.5 Billing Authorization</Sub>
           <P>All fees are billed automatically via Stripe. The Merchant authorizes BinPerks to charge the payment method on file on a recurring monthly basis for platform fees described in this Section 7, and for amounts due under Section 6.6 (Negative Balances) as provided therein.</P>
           <Sub>7.6 Failed Payments</Sub>
