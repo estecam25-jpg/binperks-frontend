@@ -97,6 +97,26 @@ export const PWA_APPS: Record<PwaAppId, PwaApp> = {
   },
 }
 
+/** The member app and everything not claimed by a subdomain app below. */
+export const MEMBER_APP_ORIGIN = 'https://app.binperks.com'
+
+/**
+ * Which app a path belongs to, by its first segment — 'member' meaning the main
+ * app.binperks.com site. null for paths every host shares: /api, /terms, the
+ * manifests, static files, and the cashier store keys (/FL-Tampa-EstaBins).
+ *
+ * Exact-match or followed by "/" so sibling routes are not swallowed:
+ * "/merchant.webmanifest" is not "/merchant/…" and must keep resolving.
+ */
+export function appForPath(pathname: string): PwaAppId | 'member' | null {
+  const owns = (prefix: string) => pathname === prefix || pathname.startsWith(prefix + '/')
+  if (owns('/stamptool')) return 'cashier'
+  if (owns('/merchant'))  return 'merchant'
+  if (owns('/admin'))     return 'admin'
+  if (owns('/member'))    return 'member'
+  return null
+}
+
 /** The subdomain app a hostname belongs to, or null (e.g. app.binperks.com). */
 export function pwaAppForHost(hostname: string): PwaApp | null {
   const h = hostname.toLowerCase()
