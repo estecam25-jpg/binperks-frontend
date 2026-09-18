@@ -157,8 +157,7 @@ export default function MemberRewardsPage() {
               <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
                 <p className="text-[15px] font-extrabold text-[#1A1A2E]">👥 Invite a Friend</p>
                 <p className="text-[13px] font-medium text-[#8E8EA8] leading-relaxed">
-                  Earn +5 stamps when a referred friend joins BinPerks and earns their
-                  first stamp.
+                  Earn +2 stamps when your referred friend earns their first visit stamp.
                 </p>
 
                 {member.referralUrl ? (
