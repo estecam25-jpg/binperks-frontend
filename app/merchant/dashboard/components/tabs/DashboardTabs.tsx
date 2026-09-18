@@ -464,21 +464,34 @@ const LETTER_H = 1056
  *
  * The table tent and window cling are small by nature; blowing them up to fill
  * 8.5x11 would just distort the artwork. Centring them on a real Letter sheet
- * is what makes them print correctly, and the dashed guide shows where to cut.
+ * is what makes them print correctly, and the guide shows where to cut.
+ *
+ * BOTH THE GUIDE STYLE AND THE LABEL ARE OPTIONAL, because the two materials
+ * want different sheets. The window cling keeps the dashed guide and the
+ * caption that tells you to cut along it. The table tent is printed as a clean
+ * sheet: a solid rule and no caption, so nothing is left printed on the card
+ * once it is cut out.
  */
-function LetterSheet({ children, cutLabel }: { children: React.ReactNode; cutLabel: string }) {
+function LetterSheet({ children, cutLabel, guide = 'dashed' }: {
+  children:  React.ReactNode
+  /** Omitted renders no caption at all, not an empty line. */
+  cutLabel?: string
+  guide?:    'dashed' | 'solid'
+}) {
   return (
     <div style={{
       width: LETTER_W, height: LETTER_H, background: 'white',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', gap: 18, fontFamily: 'Montserrat, sans-serif',
     }}>
-      <div style={{ border: '2px dashed #D1D1DC', padding: 10, display: 'flex' }}>
+      <div style={{ border: `2px ${guide} #D1D1DC`, padding: 10, display: 'flex' }}>
         {children}
       </div>
-      <p style={{ fontSize: 12, fontWeight: 600, color: '#8E8EA8', margin: 0 }}>
-        {cutLabel}
-      </p>
+      {cutLabel && (
+        <p style={{ fontSize: 12, fontWeight: 600, color: '#8E8EA8', margin: 0 }}>
+          {cutLabel}
+        </p>
+      )}
     </div>
   )
 }
@@ -801,7 +814,7 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
           <PosterTemplate {...materialProps} />
         </div>
         <div ref={tentRef} style={{ width: LETTER_W, height: LETTER_H }}>
-          <LetterSheet cutLabel="Cut along the dashed line, then fold in half">
+          <LetterSheet guide="solid">
             <TableTentTemplate {...tentProps} />
           </LetterSheet>
         </div>
@@ -831,7 +844,7 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
       >
         {/* tentProps, matching the off-screen copy above — the preview has to
             show the same code that downloading actually produces. */}
-        <LetterSheet cutLabel="Cut along the dashed line, then fold in half">
+        <LetterSheet guide="solid">
           <TableTentTemplate {...tentProps} />
         </LetterSheet>
       </MaterialCard>
