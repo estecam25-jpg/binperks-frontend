@@ -683,6 +683,20 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
 
   const materialProps = { brandColor, brandName, logoUrl, joinUrl }
 
+  /**
+   * The table tent is the one printed material that stands ON the counter, so
+   * its code is the register code — scanning it awards the new member their
+   * visit stamp for that day. Everything else keeps the plain join URL: the
+   * social graphic is posted online, and the poster and window cling go on a
+   * wall or a door where someone may be reading them on the way past rather
+   * than standing at the till.
+   *
+   * Spread over materialProps rather than given its own prop, so the template
+   * itself stays unaware of which URL it was handed and there is exactly one
+   * place this substitution happens.
+   */
+  const tentProps = { ...materialProps, joinUrl: registerUrl }
+
   return (
     <div className="flex flex-col gap-4 p-4 pb-12">
 
@@ -788,7 +802,7 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         </div>
         <div ref={tentRef} style={{ width: LETTER_W, height: LETTER_H }}>
           <LetterSheet cutLabel="Cut along the dashed line, then fold in half">
-            <TableTentTemplate {...materialProps} />
+            <TableTentTemplate {...tentProps} />
           </LetterSheet>
         </div>
         <div ref={clingRef} style={{ width: LETTER_W, height: LETTER_H }}>
@@ -801,7 +815,28 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         </div>
       </div>
 
-      {/* Material 1 — QR Code Poster */}
+      {/* Material 1 — Table Tent.
+          First of the printed materials because it is the counter piece, and
+          the only one carrying the register code. */}
+      <MaterialCard
+        title="Table Tent Card"
+        description="8.5×11 sheet — print, cut and fold to stand on your counter"
+        previewScale={0.31}
+        previewWidth={LETTER_W}
+        previewHeight={LETTER_H}
+        onDownload={() => handleDownload('tent', tentRef, `binperks-tabletent-${safeName}.png`)}
+        downloading={downloading === 'tent-png'}
+        onDownloadPdf={() => handleDownloadPdf('tent-pdf', tentRef, `binperks-tabletent-${safeName}.pdf`, 8.5, 11)}
+        downloadingPdf={downloading === 'tent-pdf'}
+      >
+        {/* tentProps, matching the off-screen copy above — the preview has to
+            show the same code that downloading actually produces. */}
+        <LetterSheet cutLabel="Cut along the dashed line, then fold in half">
+          <TableTentTemplate {...tentProps} />
+        </LetterSheet>
+      </MaterialCard>
+
+      {/* Material 2 — QR Code Poster */}
       <MaterialCard
         title="QR Code Poster"
         description="8.5×11 — print and hang at your register or entrance"
@@ -814,23 +849,6 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         downloadingPdf={downloading === 'poster-pdf'}
       >
         <PosterTemplate {...materialProps} />
-      </MaterialCard>
-
-      {/* Material 2 — Table Tent */}
-      <MaterialCard
-        title="Table Tent Card"
-        description="8.5×11 sheet — print, cut and fold to stand on your counter"
-        previewScale={0.31}
-        previewWidth={LETTER_W}
-        previewHeight={LETTER_H}
-        onDownload={() => handleDownload('tent', tentRef, `binperks-tabletent-${safeName}.png`)}
-        downloading={downloading === 'tent-png'}
-        onDownloadPdf={() => handleDownloadPdf('tent-pdf', tentRef, `binperks-tabletent-${safeName}.pdf`, 8.5, 11)}
-        downloadingPdf={downloading === 'tent-pdf'}
-      >
-        <LetterSheet cutLabel="Cut along the dashed line, then fold in half">
-          <TableTentTemplate {...materialProps} />
-        </LetterSheet>
       </MaterialCard>
 
       {/* Material 3 — Window Cling */}
