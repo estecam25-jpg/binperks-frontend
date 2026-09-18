@@ -6,6 +6,7 @@ import BinPhotosCard from '../BinPhotosCard'
 import StoreAddressCard from '../StoreAddressCard'
 import SuggestedPerks from '../SuggestedPerks'
 import { validatePin } from '@/lib/pin-strength'
+import { JOIN_SOURCE_REGISTER } from '@/lib/join-source'
 
 // --- PerksTab ---
 
@@ -210,6 +211,104 @@ function QrImg({ url, size }: { url: string; size: number }) {
   const src = `https://api.qrserver.com/v1/create-qr-code/?size=${size * 2}x${size * 2}&data=${encodeURIComponent(url)}&format=png&margin=1`
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={src} width={size} height={size} alt="QR" crossOrigin="anonymous" style={{ display: 'block' }} />
+}
+
+/**
+ * Downloads a QR as a PNG file.
+ *
+ * FETCH TO A BLOB rather than the window.open this button used to do. Opening
+ * the image in a tab is not a download — it is blocked by popup blockers, and
+ * on a phone it leaves the merchant to long-press and "save image" from a bare
+ * tab. api.qrserver.com sends Access-Control-Allow-Origin: *, so the bytes can
+ * be read and handed to a real download. The old behaviour is kept as the
+ * fallback so a CORS or network failure still gets them their code.
+ *
+ * 1000px because these are printed and stuck to a counter, not viewed on
+ * screen. The extra margin is quiet zone — a QR printed flush to a cut edge
+ * gets harder for a phone to find.
+ */
+async function downloadQrPng(url: string, filename: string) {
+  const src = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(url)}&format=png&margin=2`
+  try {
+    const res = await fetch(src)
+    if (!res.ok) throw new Error(`qr ${res.status}`)
+    const href = URL.createObjectURL(await res.blob())
+    const a = document.createElement('a')
+    a.href = href
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(href)
+  } catch {
+    window.open(src, '_blank')
+  }
+}
+
+/**
+ * One downloadable QR code.
+ *
+ * TWO OF THESE ARE RENDERED, and the difference between them is the whole
+ * point: the social code opens the ordinary join funnel, and the register code
+ * opens the same funnel through the in-store source, which awards the new
+ * member their visit stamp for that day. Same store, same signup — different
+ * URL, so the codes must never be mixed up. The wording on each card is what
+ * keeps a merchant from putting the wrong one on the counter.
+ *
+ * The preview is the REAL code, not the placeholder tile that used to sit here.
+ * With two of them on screen, a merchant needs to be able to tell at a glance
+ * which is which, and two identical emoji tiles cannot do that.
+ */
+function QrCodeCard({ heading, description, url, filename }: {
+  heading: string
+  description: string
+  /** Empty until the store is provisioned — the card renders disabled. */
+  url: string
+  filename: string
+}) {
+  const [busy, setBusy] = useState(false)
+
+  async function handleDownload() {
+    if (!url) return
+    setBusy(true)
+    try { await downloadQrPng(url, filename) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl px-5 py-6 shadow-sm flex flex-col items-center gap-4">
+      <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] self-start">{heading}</h2>
+
+      <div className="w-40 h-40 bg-white rounded-2xl flex items-center justify-center border-2 border-[#EBEBF2] overflow-hidden">
+        {url ? (
+          <QrImg url={url} size={144} />
+        ) : (
+          <div className="text-center">
+            <span className="text-4xl">📱</span>
+            <p className="text-[10px] text-[#8E8EA8] font-bold mt-1">QR Code</p>
+          </div>
+        )}
+      </div>
+
+      <p className="text-[11px] text-[#8E8EA8] font-medium text-center leading-relaxed">
+        {description}
+      </p>
+
+      {/* The URL itself, so a merchant can see which code they are about to
+          print rather than trusting the label. Two codes that look identical
+          need something to tell them apart. */}
+      <p className="text-[10px] text-[#B0B0C8] font-semibold text-center break-all">
+        {url || 'Not provisioned yet'}
+      </p>
+
+      <button
+        onClick={handleDownload}
+        disabled={!url || busy}
+        className="w-full py-3.5 rounded-xl font-bold text-[14px] text-[#4A4B98] font-['Montserrat'] border-2 border-[#4A4B98] disabled:opacity-50 active:bg-indigo-50 transition-colors"
+      >
+        {busy ? 'Preparing…' : 'Download QR Code'}
+      </button>
+    </div>
+  )
 }
 
 /* ── off-screen material templates ──────────────────────────────── */
@@ -499,6 +598,18 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   const joinUrl = activeStore?.storeKey
     ? `https://app.binperks.com/join/${activeStore.storeKey}`
     : ''
+
+  // The at-the-register code. Built from JOIN_SOURCE_REGISTER rather than the
+  // string typed out again: this URL is what /api/join/create matches on to
+  // award the signup stamp, and it ends up printed on a sticker that cannot be
+  // corrected once it is on a counter. One constant means the code on the
+  // counter and the route that honours it can never drift apart.
+  const registerUrl = activeStore?.storeKey
+    ? `${joinUrl}/${JOIN_SOURCE_REGISTER}`
+    : ''
+
+  const safeName = (activeStore?.storeName ?? 'store').replace(/\s+/g, '-').toLowerCase()
+
   const brandName = activeStore?.storeName ?? 'BinPerks'
 
   const activeStoreId = storeId ?? stores[0]?.id
@@ -522,10 +633,6 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
     await navigator.clipboard.writeText(joinUrl).catch(() => {})
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
-  }
-
-  async function handleDownloadQR() {
-    window.open(`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(joinUrl)}&format=png`, '_blank')
   }
 
   async function handleStoreMessageSave() {
@@ -574,34 +681,30 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
     }
   }
 
-  const safeName = (activeStore?.storeName ?? 'store').replace(/\s+/g, '-').toLowerCase()
-
   const materialProps = { brandColor, brandName, logoUrl, joinUrl }
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-12">
 
-      {/* QR Code */}
-      <div className="bg-white rounded-2xl px-5 py-6 shadow-sm flex flex-col items-center gap-4">
-        <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] self-start">QR code</h2>
-        <div className="w-40 h-40 bg-[#F5F5F8] rounded-2xl flex items-center justify-center border-2 border-[#EBEBF2]">
-          <div className="text-center">
-            <span className="text-4xl">📱</span>
-            <p className="text-[10px] text-[#8E8EA8] font-bold mt-1">QR Code</p>
-          </div>
-        </div>
-        <p className="text-[11px] text-[#8E8EA8] font-medium text-center">
-          Members scan this to join your rewards program.
-          Print and display at your register.
-        </p>
-        <button
-          onClick={handleDownloadQR}
-          disabled={!joinUrl}
-          className="w-full py-3.5 rounded-xl font-bold text-[14px] text-[#4A4B98] font-['Montserrat'] border-2 border-[#4A4B98] disabled:opacity-50 active:bg-indigo-50 transition-colors"
-        >
-          Download QR Code
-        </button>
-      </div>
+      {/* ── The two QR codes ──
+          The register one is listed first: it is the one that awards a stamp,
+          so it is the one a merchant should be setting up on day one. The old
+          single card's copy said "print and display at your register", which
+          is now exactly what the OTHER code is for — leaving it would have had
+          both cards claiming the counter. */}
+      <QrCodeCard
+        heading="At the Register QR Code"
+        description="Print and place this QR code at your register. New members who scan this will receive 1 stamp on signup."
+        url={registerUrl}
+        filename={`binperks-qr-register-${safeName}.png`}
+      />
+
+      <QrCodeCard
+        heading="Social Media QR Code"
+        description="Share this link or QR code on social media to invite new members."
+        url={joinUrl}
+        filename={`binperks-qr-social-${safeName}.png`}
+      />
 
       {/* Join link */}
       <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
