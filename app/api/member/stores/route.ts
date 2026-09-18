@@ -23,7 +23,7 @@
  *
  * Responses:
  *   200 { lastStampedStoreId, stores: [{ id, canonicalKey, displayName, brandName, city, state,
- *                     brandColor, todayPrice, restocksToday, isOriginStore }] }
+ *                     brandColor, todayPrice, restocksToday, storeMessage, isOriginStore }] }
  *        todayPrice is resolved in each STORE's own timezone, and is null when
  *        that merchant has published no price for today.
  *   401 { error: 'not_authenticated' }
@@ -58,6 +58,15 @@ interface StoreRow {
   google_maps_url: string | null
   /** Drives which day "today" is — see lib/store-pricing. */
   timezone: string | null
+  /**
+   * The merchant's own note to members.
+   *
+   * Selected HERE rather than left to the per-store perks route, because the
+   * card shows it in the header before anything is tapped and that route only
+   * runs on expand. It is one more short text column on a query already
+   * reading fifteen.
+   */
+  store_message: string | null
 }
 
 export async function GET(req: NextRequest) {
@@ -106,7 +115,7 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from('stores')
-    .select('id, canonical_key, display_name, brand_name, city, state, brand_color, pricing_schedule, restock_days, special_events, timezone, address, address_line2, zip, google_maps_url')
+    .select('id, canonical_key, display_name, brand_name, city, state, brand_color, pricing_schedule, restock_days, special_events, timezone, address, address_line2, zip, google_maps_url, store_message')
     .eq('is_active', true)
     .eq('network_visible', true)
 
@@ -182,9 +191,13 @@ export async function GET(req: NextRequest) {
       city:          s.city ?? '',
       state:         s.state ?? '',
       brandColor:    s.brand_color ?? '#4A4B98',
-      // Drives the "See what's in the bins" link on the card. False for most
-      // stores, and the card renders nothing at all in that case.
+      // Drives the "What's in the Bins" button on the card. False for most
+      // stores, where the button is shown inert rather than opening onto an
+      // empty panel.
       hasBinPhotos:  storesWithPhotos.has(s.id),
+      // Shown in the card header. Null for a store that has not written one,
+      // and the card omits the line entirely.
+      storeMessage:  s.store_message ?? null,
       // Resolved per store, in that store's timezone. null means the merchant
       // has published no price for today — which is NOT the same as $0, so
       // the UI shows "—" rather than "free".

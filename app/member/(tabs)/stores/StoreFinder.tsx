@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import StoreCard from '@/components/member/StoreCard'
+import StoreCard, { type StorePanel } from '@/components/member/StoreCard'
 import BinPhotoStrip from '@/components/member/BinPhotoStrip'
 import type { TodayPrice } from '@/lib/store-pricing'
 import Link from 'next/link'
@@ -17,8 +17,14 @@ import Link from 'next/link'
  * network is a distinct errand from checking your stamps, and it pushed
  * everything below it off the first screen.
  *
- * Perks load lazily when a store is expanded, and are cached per store for
- * the life of the page — reopening a card does not re-fetch.
+ * Perks load lazily when a store's perks panel is opened, and are cached per
+ * store for the life of the page — reopening a card does not re-fetch. Bin
+ * photos are fetched by BinPhotoStrip on the same terms.
+ *
+ * ONE PANEL OPEN ACROSS THE WHOLE LIST. Each card offers two sections and the
+ * two are mutually exclusive; opening either on any card closes whatever was
+ * open before, so scrolling the list never means scrolling past someone else's
+ * expanded photos.
  */
 
 const BINPERKS_BLUE = '#4A4B98'
@@ -52,8 +58,10 @@ interface Store {
   googleMapsUrl: string | null
   address: string | null
   isOriginStore: boolean
-  /** Set by /api/member/stores. Drives the "See what's in the bins" link. */
+  /** Set by /api/member/stores. Drives the "What's in the Bins" button. */
   hasBinPhotos: boolean
+  /** The merchant's note, shown in the card header. Null when unwritten. */
+  storeMessage: string | null
 }
 
 interface Perk {
@@ -66,9 +74,12 @@ interface Perk {
 interface PerkData {
   freePerks: Perk[]
   vipPerks: Perk[]
-  /** Store-authored note. Null when the store hasn't written one, in which
-   *  case the whole Store Message section is omitted. */
-  storeMessage: string | null
+}
+
+/** Which card, and which of its two sections, is showing. */
+interface OpenPanel {
+  storeId: string
+  panel:   StorePanel
 }
 
 export default function StoreFinder({ isFree }: { isFree: boolean }) {
@@ -128,7 +139,7 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
     }
   }
 
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [open, setOpen]             = useState<OpenPanel | null>(null)
   const [perks, setPerks]           = useState<Record<string, PerkData>>({})
   const [perksLoading, setPerksLoading] = useState<string | null>(null)
   const [perksError, setPerksError]     = useState<string | null>(null)
@@ -164,13 +175,25 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
     ? stores.filter(s => favorites.has(s.id))
     : stores
 
-  async function toggleStore(store: Store) {
-    if (expandedId === store.id) { setExpandedId(null); return }
+  /**
+   * Open a section, or close it if it is the one already showing.
+   *
+   * Setting `open` outright is what makes the sections mutually exclusive:
+   * there is one slot, so opening anything closes whatever held it, whether
+   * that was the other button on this card or a section on another card.
+   *
+   * Only the perks panel fetches. Bin photos are BinPhotoStrip's own request,
+   * and it is not mounted until its panel is the open one.
+   */
+  async function togglePanel(store: Store, panel: StorePanel) {
+    const alreadyOpen = open?.storeId === store.id && open.panel === panel
+    if (alreadyOpen) { setOpen(null); return }
 
-    setExpandedId(store.id)
+    setOpen({ storeId: store.id, panel })
+    if (panel !== 'perks') return
+
     setPerksError(null)
-
-    if (perks[store.id]) return   // cached from a previous expand
+    if (perks[store.id]) return   // cached from a previous open
 
     setPerksLoading(store.id)
     try {
@@ -180,9 +203,8 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
       setPerks(prev => ({
         ...prev,
         [store.id]: {
-          freePerks:    data.freePerks ?? [],
-          vipPerks:     data.vipPerks ?? [],
-          storeMessage: data.storeMessage ?? null,
+          freePerks: data.freePerks ?? [],
+          vipPerks:  data.vipPerks ?? [],
         },
       }))
     } catch {
@@ -290,45 +312,44 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
       )}
 
       {!loading && !error && visibleStores.map(store => {
-        const isExpanded = expandedId === store.id
+        const openPanel = open?.storeId === store.id ? open.panel : null
         const data = perks[store.id]
 
         return (
           <StoreCard
             key={store.id}
             store={store}
-            expanded={isExpanded}
-            onToggle={() => toggleStore(store)}
+            openPanel={openPanel}
+            onTogglePanel={panel => togglePanel(store, panel)}
             favorited={favorites.has(store.id)}
             onToggleFavorite={() => toggleFavorite(store.id)}
           >
             <>
-                {/* What's In The Bins — above the perks, because it is the
-                    reason someone taps through. Renders nothing when the store
-                    has no photos, so it never pushes the perks down for the
-                    stores that have not posted any. */}
-                {isExpanded && <BinPhotoStrip storeId={store.id} />}
+                {/* What's In The Bins — its own section now, reached by its own
+                    button. Mounted only while that panel is the open one, which
+                    is also what defers its fetch. */}
+                {openPanel === 'bins' && <BinPhotoStrip storeId={store.id} />}
 
-                {perksLoading === store.id && (
+                {openPanel === 'perks' && perksLoading === store.id && (
                   <div className="py-5 flex items-center justify-center">
                     <span className="w-5 h-5 border-[3px] border-[#EBEBF2] border-t-[#4A4B98] rounded-full animate-spin" />
                   </div>
                 )}
 
-                {perksError === store.id && (
+                {openPanel === 'perks' && perksError === store.id && (
                   <p className="text-[13px] font-semibold text-[#DA1212] py-3">
                     Couldn&apos;t load this store&apos;s details.
                   </p>
                 )}
 
-                {data && data.freePerks.length === 0 && data.vipPerks.length === 0 && !data.storeMessage && (
+                {openPanel === 'perks' && data && data.freePerks.length === 0 && data.vipPerks.length === 0 && (
                   <p className="text-[13px] text-[#8E8EA8] font-medium py-3">
                     This store hasn&apos;t published its perks yet.
                   </p>
                 )}
 
                 {/* ── Starter Member Perks ── */}
-                {data && data.freePerks.length > 0 && (
+                {openPanel === 'perks' && data && data.freePerks.length > 0 && (
                   <section className="pt-3 flex flex-col gap-2.5">
                     <h3 className="text-[22px] font-bold tracking-[0.01em] uppercase text-black leading-tight">
                       Starter <span style={{ color: BINPERKS_BLUE }}>Free</span> Member Perks
@@ -349,7 +370,7 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
                 {/* ── VIP Member Perks ──
                     Shown to Starter members too, greyed — they're the reason
                     to upgrade, so hiding them would defeat the point. */}
-                {data && data.vipPerks.length > 0 && (
+                {openPanel === 'perks' && data && data.vipPerks.length > 0 && (
                   <section className="pt-3 flex flex-col gap-2.5">
                     <h3 className="text-[22px] font-bold tracking-[0.01em] uppercase text-black leading-tight">
                       VIP <span style={{ color: BINPERKS_BLUE }}>Paid</span> Member Perks
@@ -383,18 +404,10 @@ export default function StoreFinder({ isFree }: { isFree: boolean }) {
                   </section>
                 )}
 
-                {/* ── Store Message ── Omitted entirely when the store hasn't
-                    written one. */}
-                {data?.storeMessage && (
-                  <section className="pt-3 flex flex-col gap-1.5">
-                    <h3 className="text-[22px] font-bold tracking-[0.01em] uppercase text-black leading-tight">
-                      Store Message
-                    </h3>
-                    <p className="text-[13px] font-medium text-[#1A1A2E] leading-relaxed">
-                      {data.storeMessage}
-                    </p>
-                  </section>
-                )}
+                {/* The Store Message used to live here. It is in the card
+                    header now, where it is read without opening anything —
+                    and it comes from the store list rather than this panel's
+                    fetch, so it no longer waits on a tap to appear. */}
             </>
           </StoreCard>
         )

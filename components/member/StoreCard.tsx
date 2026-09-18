@@ -6,15 +6,28 @@
  * Each PHYSICAL LOCATION is its own card — locations are never grouped under a
  * merchant brand, because a member visits a location, not a company.
  *
+ * LAYOUT, top to bottom:
+ *   name → key → city, state → the store's own message
+ *   [ Directions ] [ Today's bin price ]
+ *   [ What's in the Bins ] [ View Store Perks ]
+ *   the open panel, if either button is on
+ *
+ * ONE PANEL AT A TIME. The two buttons are a pair, not two independent
+ * toggles: opening one closes the other, and pressing the open one closes it.
+ * A card that could show photos and perks stacked together would push the next
+ * store most of a screen away.
+ *
  * Today's bin price is real as of Phase 2A — resolved server-side in the
  * STORE's timezone, so a member in another zone still sees what they will
- * actually be charged. Distance is still a placeholder: no coordinates are
- * stored and there is no GPS yet.
+ * actually be charged.
  */
 
 import { formatPrice, type TodayPrice } from '@/lib/store-pricing'
 
 const BINPERKS_BLUE = '#4A4B98'
+
+/** Which expandable section is showing. */
+export type StorePanel = 'bins' | 'perks'
 
 export interface StoreCardStore {
   id: string
@@ -33,23 +46,35 @@ export interface StoreCardStore {
    *  no longer labelled on the card. */
   isOriginStore: boolean
   /** True when the merchant has posted photos of current stock. Most stores
-   *  have none, and the card shows nothing rather than an empty promise. */
+   *  have none, and the button is offered but inert rather than opening onto
+   *  nothing. */
   hasBinPhotos?: boolean
+  /**
+   * The merchant's own note to members.
+   *
+   * Comes from the store LIST now, not the perks fetch. It sits in the card
+   * header where it is read before anything is tapped, and the perks request
+   * only happens on expand — so leaving it on that response would have meant a
+   * message that only appeared after opening the panel it is no longer in.
+   */
+  storeMessage?: string | null
 }
 
 export default function StoreCard({
-  store, expanded, onToggle, children, favorited, onToggleFavorite,
+  store, openPanel, onTogglePanel, children, favorited, onToggleFavorite,
 }: {
   store: StoreCardStore
-  expanded: boolean
-  onToggle: () => void
-  /** Store detail (perks, message), rendered when expanded. */
+  /** The section currently showing on this card, or null for collapsed. */
+  openPanel: StorePanel | null
+  onTogglePanel: (panel: StorePanel) => void
+  /** The open panel's content, rendered by the caller. */
   children?: React.ReactNode
   /** Omitted where favouriting is not offered. */
   favorited?: boolean
   onToggleFavorite?: () => void
 }) {
   const location = [store.city, store.state].filter(Boolean).join(', ')
+  const message  = store.storeMessage?.trim()
 
   // The merchant's own Google Maps link is authoritative — they pasted the pin
   // for their exact unit. Falling back to a search by address, then by name and
@@ -59,6 +84,23 @@ export default function StoreCard({
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
         [store.address, store.displayName, store.city, store.state].filter(Boolean).join(' '),
       )}`
+
+  // Three states, and they read differently on purpose:
+  //   CLOSED   the merchant said so
+  //   "—"      no price published yet — never "$0", which is a legitimate
+  //            free-bin day
+  //   a price  open
+  const priceText = store.todayPrice.closed
+    ? 'Closed today'
+    : store.todayPrice.price !== null ? formatPrice(store.todayPrice.price) : '—'
+
+  const priceColor = store.todayPrice.closed
+    ? '#8E8EA8'
+    : store.todayPrice.price !== null ? BINPERKS_BLUE : '#B0B0C8'
+
+  const priceBg = store.todayPrice.closed
+    ? '#EBEBF2'
+    : store.todayPrice.price !== null ? `${BINPERKS_BLUE}12` : '#F5F5F8'
 
   return (
     <div className="w-full bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -83,10 +125,20 @@ export default function StoreCard({
           {location && (
             <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5">{location}</p>
           )}
+
+          {/* The store's own words, set in italic so they read as a quote from
+              the merchant rather than another field. Nothing at all when
+              unwritten — an empty line here would read as a store with
+              nothing to say. */}
+          {message && (
+            <p className="text-[12px] italic text-[#8E8EA8] font-medium mt-1.5 leading-relaxed">
+              {message}
+            </p>
+          )}
         </div>
 
-        {/* Favourite. Its own button, not part of the card's expand target —
-            tapping the heart must never also open the perks panel. */}
+        {/* Favourite. Its own button, not part of any panel toggle — tapping
+            the heart must never also open a section. */}
         {onToggleFavorite && (
           <button
             onClick={onToggleFavorite}
@@ -101,47 +153,10 @@ export default function StoreCard({
         )}
       </div>
 
-      {/* Distance is still MOCK — no coordinates in the schema. Price is real. */}
-      <div className="grid grid-cols-2 gap-2 px-4 pt-3">
-        <div className="rounded-xl bg-[#F5F5F8] px-3 py-2">
-          <p className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">Distance</p>
-          <p className="text-[12px] font-bold text-[#B0B0C8] mt-0.5">Coming soon</p>
-        </div>
-        {/* Three states, and they read differently on purpose:
-              CLOSED       the merchant said so
-              "—"          no price published yet — never "$0", which is a
-                           legitimate free-bin day
-              a price      open */}
-        <div
-          className="rounded-xl px-3 py-2"
-          style={{
-            backgroundColor: store.todayPrice.closed
-              ? '#EBEBF2'
-              : store.todayPrice.price !== null ? `${BINPERKS_BLUE}12` : '#F5F5F8',
-          }}
-        >
-          <p className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
-            Today&apos;s bin price
-          </p>
-          <p
-            className="text-[12px] font-bold mt-0.5"
-            style={{
-              color: store.todayPrice.closed
-                ? '#8E8EA8'
-                : store.todayPrice.price !== null ? BINPERKS_BLUE : '#B0B0C8',
-            }}
-          >
-            {store.todayPrice.closed
-              ? 'Closed today'
-              : store.todayPrice.price !== null ? formatPrice(store.todayPrice.price) : '—'}
-          </p>
-        </div>
-      </div>
-
       {/* A special event today gets its name AND price, prominently — it is
-          the reason to come in, so it outranks the price tile above. */}
+          the reason to come in, so it outranks the price tile below. */}
       {store.todayPrice.isEvent && store.todayPrice.label && (
-        <div className="px-4 pt-2">
+        <div className="px-4 pt-2.5">
           <span
             className="inline-block text-[12px] font-extrabold px-2.5 py-1 rounded-full"
             style={{ backgroundColor: '#DA121215', color: '#DA1212' }}
@@ -152,43 +167,94 @@ export default function StoreCard({
         </div>
       )}
 
-      <div className="flex gap-2 px-4 py-3">
+      {/* Row 1 — getting there, and what it costs today.
+          The price sits in the button row but is NOT a button: it has nothing
+          to do when pressed, and a control that does nothing is worse than a
+          tile that never claimed to be one. It only matches the row's shape. */}
+      <div className="grid grid-cols-2 gap-2 px-4 pt-3 items-stretch">
         <a
           href={directionsHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex-1 py-2.5 rounded-xl text-[13px] font-bold text-center border-2 border-[#EBEBF2] text-[#1A1A2E] active:border-[#1A1A2E] transition-colors"
+          className="py-2.5 px-3 rounded-xl text-[13px] font-bold text-center border-2 border-[#EBEBF2] text-[#1A1A2E] active:border-[#1A1A2E] transition-colors flex items-center justify-center"
         >
           Directions
         </a>
-        <button
-          onClick={onToggle}
-          aria-expanded={expanded}
-          className="flex-1 py-2.5 rounded-xl text-[13px] font-bold text-white active:opacity-80 transition-opacity"
-          style={{ backgroundColor: BINPERKS_BLUE }}
+
+        <div
+          className="py-1.5 px-3 rounded-xl flex flex-col items-center justify-center text-center"
+          style={{ backgroundColor: priceBg }}
         >
-          {expanded ? 'Hide Perks' : 'View Perks'}
-        </button>
+          <p className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8] leading-tight">
+            Today&apos;s bin price
+          </p>
+          <p className="text-[13px] font-bold leading-tight mt-0.5" style={{ color: priceColor }}>
+            {priceText}
+          </p>
+        </div>
       </div>
 
-      {/* Offered only when there is something to see. Expanding the card is
-          what reveals the photos, so this is the same action as View Perks —
-          worded for the member who came for the stock, not the perks. */}
-      {store.hasBinPhotos && !expanded && (
-        <button
-          onClick={onToggle}
-          className="w-full px-4 pb-3 -mt-1 text-left text-[13px] font-bold active:opacity-70 transition-opacity"
-          style={{ color: BINPERKS_BLUE }}
-        >
-          📷 See what&apos;s in the bins
-        </button>
-      )}
+      {/* Row 2 — the two expandable sections. */}
+      <div className="grid grid-cols-2 gap-2 px-4 pt-2 pb-3 items-stretch">
+        <PanelButton
+          label="What's in the Bins"
+          active={openPanel === 'bins'}
+          // Offered but inert when the merchant has posted nothing: the row
+          // keeps its shape across every card, and pressing it cannot open an
+          // empty panel. BinPhotoStrip renders null with no photos, so an
+          // enabled button here would just appear to do nothing.
+          disabled={!store.hasBinPhotos}
+          disabledHint="No photos posted yet"
+          onClick={() => onTogglePanel('bins')}
+        />
+        <PanelButton
+          label="View Store Perks"
+          active={openPanel === 'perks'}
+          onClick={() => onTogglePanel('perks')}
+        />
+      </div>
 
-      {expanded && children && (
+      {openPanel && children && (
         <div className="px-4 pb-4 pt-1 border-t border-[#F0F0F5] flex flex-col gap-2.5">
           {children}
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * One of the two section toggles.
+ *
+ * Filled while its section is showing, outlined when it is not — with two
+ * buttons side by side the fill is what says which one you are looking at, so
+ * the label stays put instead of flipping to "Hide".
+ */
+function PanelButton({
+  label, active, onClick, disabled = false, disabledHint,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+  disabled?: boolean
+  disabledHint?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-expanded={active}
+      title={disabled ? disabledHint : undefined}
+      className={`py-2.5 px-2 rounded-xl text-[13px] font-bold text-center transition-colors leading-tight ${
+        disabled
+          ? 'border-2 border-[#EBEBF2] text-[#D1D1DC] cursor-not-allowed'
+          : active
+            ? 'text-white active:opacity-80'
+            : 'border-2 border-[#EBEBF2] text-[#1A1A2E] active:border-[#1A1A2E]'
+      }`}
+      style={active && !disabled ? { backgroundColor: BINPERKS_BLUE } : undefined}
+    >
+      {label}
+    </button>
   )
 }
