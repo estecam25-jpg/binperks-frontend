@@ -34,9 +34,15 @@ interface MemberData {
  *
  *  No prices: the VIP cost belongs on the upgrade page, not in a rewards
  *  reference table. */
-const LEVELS: { name: TierName; value: number; multiplier: number }[] = [
-  { name: 'Free', value: STARTER_TIER.couponValue, multiplier: STARTER_TIER.multiplier },
-  ...TIERS.map(t => ({ name: t.name, value: t.couponValue, multiplier: t.multiplier })),
+const LEVELS: { name: TierName; value: number; multiplier: number; minStamps: number }[] = [
+  { name: 'Free', value: STARTER_TIER.couponValue, multiplier: STARTER_TIER.multiplier, minStamps: 0 },
+  ...TIERS.map(t => ({
+    name: t.name, value: t.couponValue, multiplier: t.multiplier,
+    // Read from the locked table, not retyped: Bronze 0, Silver 200, Gold 750,
+    // Diamond 2,000. A level at 0 has no threshold to show — Starter and Bronze
+    // are where you begin, not somewhere you climb to.
+    minStamps: t.minStamps,
+  })),
 ]
 
 /** "FREE STARTER MEMBERSHIP" / "Bronze VIP MEMBERSHIP". */
@@ -130,6 +136,11 @@ export default function MemberRewardsPage() {
                             </span>
                           )}
                         </p>
+                        {level.minStamps > 0 && (
+                          <p className="text-[11px] font-medium text-[#B0B0C8] mt-0.5 leading-snug">
+                            ({level.minStamps.toLocaleString()}+ lifetime stamps)
+                          </p>
+                        )}
                         <p className="text-[12px] font-medium text-[#8E8EA8] mt-0.5">
                           Every 20 stamps → ${level.value}
                         </p>
