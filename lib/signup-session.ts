@@ -6,6 +6,7 @@
  * Keys:
  *   bp_signup_store    — store branding resolved from [storeKey]
  *   bp_signup_ref      — referral code from URL (?ref=xxx)
+ *   bp_signup_source   — how the member arrived (the register QR, or nothing)
  *   bp_signup_form     — form data from Page 2 (preserved if user navigates back)
  *   bp_signup_member   — created member record (set after Page 2 submit)
  */
@@ -54,6 +55,29 @@ export interface SignupMember {
   referralCode: string
   referralUrl: string
   subscriptionStatus: 'free' | 'vip'
+  /**
+   * Whether the register-QR signup stamp actually landed, as reported by
+   * /api/join/create.
+   *
+   * DELIBERATELY NOT "did they come through the register QR". The thank-you
+   * page congratulates the member on a stamp, and a stamp write can fail
+   * without failing the signup — so what is carried here is the outcome, not
+   * the intent. Absent on members created before this shipped.
+   */
+  stampAwarded?: boolean
+}
+
+/**
+ * How the member reached the funnel, carried from the landing page to the
+ * signup step so it can tell /api/join/create to award the stamp.
+ *
+ * SESSION STORAGE, like every other step of this funnel: the value is set on
+ * the landing page and read one navigation later. It is also mirrored in the
+ * signup URL, which is what survives a member whose storage is blocked.
+ */
+export interface SignupSource {
+  /** A value from lib/join-source — never free text. */
+  source: string
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -84,6 +108,12 @@ export const signupRef = {
   get: () => get<SignupRef>('bp_signup_ref'),
   set: (v: SignupRef) => set('bp_signup_ref', v),
   clear: () => { if (isBrowser()) sessionStorage.removeItem('bp_signup_ref') },
+}
+
+export const signupSource = {
+  get: () => get<SignupSource>('bp_signup_source'),
+  set: (v: SignupSource) => set('bp_signup_source', v),
+  clear: () => { if (isBrowser()) sessionStorage.removeItem('bp_signup_source') },
 }
 
 export const signupForm = {

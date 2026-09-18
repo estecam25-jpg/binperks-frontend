@@ -14,6 +14,13 @@
  * THE REFERRAL LINK is the short /join/XXXXXX form. If what came back is not
  * that shape the block is hidden rather than showing the old long URL, which
  * is a link the member would then share.
+ *
+ * THE FIRST-STAMP NOTICE appears only for a member who signed up at a register
+ * QR AND whose stamp was actually written — /api/join/create reports that back
+ * as stampAwarded and this page repeats it, rather than inferring it from the
+ * URL they came through. Congratulating someone on a stamp they do not have
+ * is worse than staying quiet: the dashboard they are one tap away from would
+ * immediately contradict it.
  */
 
 import { useEffect, useState } from 'react'
@@ -176,6 +183,17 @@ export default function ThankYouPage() {
             }
           </p>
         </div>
+
+        {/* ── First stamp, already earned ──
+            Only for a register-QR signup whose stamp landed. */}
+        {member.stampAwarded && (
+          <div className="w-full rounded-2xl px-5 py-4 flex items-start gap-3 bg-green-50 border-2 border-green-200">
+            <span className="text-xl flex-shrink-0 leading-none mt-0.5">🎉</span>
+            <p className="text-[13px] font-semibold text-[#2A7D34] leading-relaxed">
+              Welcome! You&apos;ve already earned your first stamp for today&apos;s visit.
+            </p>
+          </div>
+        )}
 
         {/* Sign-in code entry — the code was sent when the account was created. */}
         <div className="w-full bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">

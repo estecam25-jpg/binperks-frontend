@@ -21,6 +21,24 @@ const nextConfig: NextConfig = {
         destination: '/member/join/:storeKey/thankyou',
         permanent: false,
       },
+      // QR codes that name how they were reached:
+      //   /join/FL-Tampa-EstaBins/in-store_at-the_register
+      // The source is the last segment and /member/join/[storeKey]/[source]
+      // resolves it — see lib/join-source. Signing up through the register QR
+      // awards that day's visit stamp, so these URLs are printed on a sticker
+      // at a counter and have to keep resolving for as long as the sticker is
+      // there.
+      //
+      // ORDER MATTERS: this comes AFTER the three rules above, which is what
+      // keeps '/join/:storeKey/signup' going to the funnel step rather than
+      // being read as a source named "signup". Next takes the first rule that
+      // matches.
+      {
+        source: '/join/:storeKey/:source',
+        destination: '/member/join/:storeKey/:source',
+        permanent: false,
+      },
+
       // NOTE: there is deliberately NO bare '/join/:storeKey' rule here.
       // /join/XXXXXX is now the short member referral link, and a redirect at
       // this level fired before the route could ever run — every short code

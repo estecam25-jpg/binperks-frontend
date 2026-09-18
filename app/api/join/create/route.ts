@@ -11,17 +11,20 @@
  *   4. Insert members row with home_store_id, merchant_id, referral fields, and the
  *      permanent V3 Origin Store attribution (origin_store_id / origin_merchant_id)
  *   5. If referred: create referrals row (status: 'pending')
+ *   5a. If they signed up at the register QR: award that day's visit stamp
  *   6. Notify GHL of the new member (fire-and-forget welcome comms)
  *   7. Issue an 8-digit sign-in code by SMS so the member lands on the dashboard
  *
  * Request body:
  *   { storeId?, merchantId?, zipCode, firstName, lastName, phone (digits), email,
- *     smsOptIn, referrerMemberId? }
+ *     smsOptIn, referrerMemberId?, inStoreRegister? }
  *
  * Responses:
- *   200 { memberId, referralCode, referralUrl, otpSent }
+ *   200 { memberId, referralCode, referralUrl, otpSent, stampAwarded }
  *       otpSent false means the account exists but the code could not be sent —
  *       the caller should send the member to the login page to request one.
+ *       stampAwarded is whether the register-QR stamp actually landed; false
+ *       whenever one was not asked for.
  *   409 { error: 'phone_exists' }   — phone already registered anywhere on the network
  *   409 { error: 'email_exists' }   — email already has a Supabase auth identity
  *   400 { error: string }
@@ -49,6 +52,124 @@ interface CreateMemberRequest {
   email: string
   smsOptIn: boolean
   referrerMemberId?: string
+  /**
+   * The member scanned the QR at a store's register, so they are standing in
+   * that store right now and their visit stamp for today is awarded as part of
+   * signing up. Set by the signup step from the URL it was reached through —
+   * see lib/join-source.
+   */
+  inStoreRegister?: boolean
+}
+
+/**
+ * Awards the single visit stamp that comes with signing up at the register.
+ *
+ * Writes the same two rows a cashier's stamp writes — the visits row that
+ * enforces one stamp per member per store per day, and the activity_events row
+ * that IS the stamp — so this is indistinguishable from any other stamp to
+ * every reader, every dashboard and the settlement ledger.
+ *
+ * NOT stamp_events. That table was frozen at the dual-write cutover: since then
+ * activity_events has been the sole source of truth and nothing writes to
+ * stamp_events, which is kept only as the historical record. A row added there
+ * now would be read by nothing while breaking the one property that record has.
+ * Its event_type CHECK ('visit' | 'referral_bonus' | 'promotion' | 'reversal')
+ * would reject a signup value in any case, and there is no source column on it
+ * to put one in. The QR is recorded in activity_data instead, which is where a
+ * live row can carry it.
+ *
+ * ALWAYS EXACTLY 1 STAMP. A member is subscription_status 'free' the instant
+ * they are created, and a free member earns 1x per visit (Core Rule #12). Tier
+ * multipliers cannot apply to someone who has not upgraded yet, so there is no
+ * multiplier to compute and none to get wrong.
+ *
+ * NO COUPON CHECK. One stamp against a 20-stamp cycle cannot earn a reward, and
+ * a brand new member has no prior coupon to redeem.
+ *
+ * Returns whether the stamp actually landed. Never throws: the member already
+ * exists by the time this runs.
+ */
+async function awardRegisterSignupStamp(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  { memberId, storeId, merchantId }: {
+    memberId: string; storeId: string; merchantId: string
+  },
+): Promise<boolean> {
+  const now   = new Date()
+  const today = now.toISOString().split('T')[0]
+
+  // The once-per-day guard goes in FIRST, in the same order /api/stamp uses:
+  // the unique index on (member_id, store_id, date) is what makes "this counts
+  // as today's visit" true, and taking it before the stamp itself means a
+  // cashier stamping the same member a minute later is rejected by the
+  // database rather than by a check that could race it.
+  const { error: visitError } = await admin.from('visits').insert({
+    member_id:  memberId,
+    store_id:   storeId,
+    // No cashier: the member scanned the QR themselves. The column is nullable
+    // and a null here is the honest record of that.
+    cashier_id: null,
+    date:       today,
+    awarded_at: now.toISOString(),
+    source:     'register_signup',
+  })
+
+  if (visitError) {
+    console.error('[/api/join/create] register stamp: visit insert failed:', visitError)
+    return false
+  }
+
+  const { error: activityError } = await admin.from('activity_events').insert({
+    member_id:          memberId,
+    store_id:           storeId,
+    merchant_id:        merchantId,
+    // The store they are standing in IS their Origin Store — this stamp only
+    // happens at the moment of enrollment, so the two cannot differ.
+    origin_store_id:    storeId,
+    origin_merchant_id: merchantId,
+    participant_type:   'bin_store',
+    activity_type:      'store_visit',
+    // 'store_visit' is what every reader counts, so the type cannot say
+    // "register signup" without the stamp vanishing from the dashboards.
+    // activity_data is where that distinction lives instead.
+    activity_data:      { source: 'register_signup' },
+    stamps_awarded:     1,
+    multiplier_applied: 1,
+    effective_stamps:   1,
+    occurred_at:        now.toISOString(),
+    cashier_id:         null,
+    migrated_from:      null,   // null = live event, not backfill
+    source_record_id:   null,
+  })
+
+  if (activityError) {
+    console.error('[/api/join/create] register stamp: activity insert failed:', activityError)
+    // Roll the visit back. Left behind, it blocks the member from being
+    // stamped at this store for the rest of the day over a stamp they never
+    // received — the same repair /api/stamp makes in this situation.
+    await admin.from('visits').delete()
+      .eq('member_id', memberId)
+      .eq('store_id', storeId)
+      .eq('date', today)
+    return false
+  }
+
+  // Straight to 1 rather than an increment: the member was inserted with
+  // total_stamps 0 moments ago and nothing else can have stamped them, so there
+  // is no read-modify-write here to lose a race on.
+  const { error: totalError } = await admin
+    .from('members')
+    .update({ total_stamps: 1 })
+    .eq('id', memberId)
+
+  if (totalError) {
+    // The stamp IS recorded; only the denormalised counter is behind, and it
+    // can be recomputed from activity_events. Reporting failure here would hide
+    // a real stamp from the member.
+    console.error('[/api/join/create] register stamp: total_stamps update failed:', totalError)
+  }
+
+  return true
 }
 
 function generateReferralCode(): string {
@@ -253,6 +374,35 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // 5a. Register QR signup — award today's visit stamp on the spot.
+    //
+    //     FIRST-TIME SIGNUPS ONLY, and that is structural rather than a flag
+    //     anyone has to remember: a returning member is turned away by the
+    //     phone_exists check at the top of this route, long before here. There
+    //     is no second path into this block for someone who already has an
+    //     account.
+    //
+    //     NOT FOR A BINPERKS-DIRECT JOIN. A register QR only exists on a
+    //     participating store's counter, so a request claiming one with no
+    //     store in the URL is not a visit to anywhere and earns no stamp.
+    //
+    //     NEVER FATAL. The member, their auth identity and their referral row
+    //     are already written, and a sign-in code is about to go out. Failing
+    //     the whole signup because a bonus stamp did not land would cost
+    //     someone their account over an extra. What comes back is what actually
+    //     happened, so the thank-you page can only congratulate a member on a
+    //     stamp they really have.
+    let stampAwarded = false
+    if (body.inStoreRegister === true && !binperksOrigin) {
+      stampAwarded = await awardRegisterSignupStamp(admin, {
+        memberId,
+        storeId,
+        // The store record, not the client-supplied merchantId — the same
+        // authority the Origin Store attribution above is written from.
+        merchantId: store.merchant_id,
+      })
+    }
+
     // 6. Notify GHL. Awaited — a fire-and-forget fetch is killed when the
     //    handler returns on Vercel, so the welcome SMS was being dropped at
     //    random. postToGhl never throws, so a GHL outage cannot fail a signup
@@ -314,6 +464,7 @@ export async function POST(req: NextRequest) {
       referralCode,
       referralUrl: finalReferralUrl,
       otpSent: issued.ok,
+      stampAwarded,
     })
 
   } catch (err) {

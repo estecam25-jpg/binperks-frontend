@@ -14,15 +14,22 @@
  * member saw the generic "Something went wrong" panel — the field was added to
  * the home-page signup when zip_code shipped and this second entry point was
  * missed.
+ *
+ * THE JOIN SOURCE rides through here untouched. Someone who scanned the QR at
+ * a register is standing in the store, so their signup awards that day's visit
+ * stamp — this page's only part in that is telling /api/join/create which kind
+ * of link brought them, and carrying the answer to the thank-you page. The
+ * decision, the stamp and the rules around it all live server-side.
  */
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import EntryBrand from '@/components/EntryBrand'
 import {
-  signupStore, signupRef, signupForm, signupMember,
+  signupStore, signupRef, signupSource, signupForm, signupMember,
   type SignupStore, type SignupRef, type SignupFormData
 } from '@/lib/signup-session'
+import { resolveJoinSource, awardsSignupStamp, type JoinSource } from '@/lib/join-source'
 
 // ── Phone formatting ──────────────────────────────────────────────────────
 
@@ -70,6 +77,7 @@ export default function JoinSignupPage() {
 
   const [store, setStore] = useState<SignupStore | null>(null)
   const [ref, setRef] = useState<SignupRef | null>(null)
+  const [joinSource, setJoinSource] = useState<JoinSource | null>(null)
 
   const [firstName, setFirstName]   = useState('')
   const [lastName, setLastName]     = useState('')
@@ -105,6 +113,16 @@ export default function JoinSignupPage() {
     } else if (cached) {
       setRef(cached)
     }
+
+    // The join source, same two ways and the same order of preference: ?src=
+    // survives blocked sessionStorage and a member who opens this step
+    // directly. Either way it is re-resolved against the registry rather than
+    // trusted — this value decides whether a stamp is requested, and it
+    // arrives from a URL anyone can type.
+    setJoinSource(
+      resolveJoinSource(new URLSearchParams(window.location.search).get('src'))
+      ?? resolveJoinSource(signupSource.get()?.source)
+    )
 
     // Restore form if user navigated back
     const saved = signupForm.get()
@@ -156,6 +174,10 @@ export default function JoinSignupPage() {
         zipCode:           zip.trim(),
         smsOptIn,
         referrerMemberId:  ref?.referrerMemberId ?? null,
+        // Scanned at the register: award this member's visit stamp for today
+        // as part of creating them. The API re-checks everything that matters
+        // and is the only thing that can actually award it.
+        inStoreRegister:   awardsSignupStamp(joinSource),
       }),
     })
 
@@ -175,7 +197,15 @@ export default function JoinSignupPage() {
       referralCode:       data.referralCode,
       referralUrl:        data.referralUrl,
       subscriptionStatus: 'free',
+      // What the API actually did, not what was asked of it. The thank-you
+      // page congratulates the member on this stamp, so a write that quietly
+      // failed must not be announced as a win.
+      stampAwarded:       data.stampAwarded === true,
     })
+
+    // The source has done its job. Leaving it set would hand a second stamp to
+    // anyone who reuses this tab for another signup from a plain link.
+    signupSource.clear()
 
     router.push(`/member/join/${storeKey}/vip`)
   }

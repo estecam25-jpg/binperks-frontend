@@ -21,7 +21,8 @@
 import { useEffect } from 'react'
 
 import { useRouter } from 'next/navigation'
-import { signupStore, signupRef, type SignupRef } from '@/lib/signup-session'
+import { signupStore, signupRef, signupSource, type SignupRef } from '@/lib/signup-session'
+import type { JoinSource } from '@/lib/join-source'
 import { useStampFill } from '@/lib/use-stamp-fill'
 
 /** The only brand color on this page. */
@@ -41,6 +42,12 @@ interface Props {
     referrerMemberId:  string
     referrerFirstName: string
   } | null
+  /**
+   * The QR code this member arrived through, if the URL named one. Nothing on
+   * this page looks different for it — it is carried to the signup step, which
+   * is where it turns into a stamp. See lib/join-source.
+   */
+  joinSource: JoinSource | null
 }
 
 export default function JoinLanding({
@@ -48,6 +55,7 @@ export default function JoinLanding({
   storeId,
   merchantId,
   referrer,
+  joinSource,
 }: Props) {
   const router = useRouter()
   // The full 20 — this card is a demo of what a completed card looks like, not
@@ -62,6 +70,17 @@ export default function JoinLanding({
     signupStore.set({ id: storeId, storeKey, merchantId })
     if (referrer) {
       signupRef.set(referrer as SignupRef)
+    }
+
+    // CLEARED, not just skipped, when there is no source. Someone who scans the
+    // register QR, wanders off without finishing, then opens a plain join link
+    // in the same tab would otherwise still be carrying "at the register" — and
+    // would be handed a stamp for a visit they are no longer making. The
+    // landing page they actually used is the only honest answer.
+    if (joinSource) {
+      signupSource.set({ source: joinSource })
+    } else {
+      signupSource.clear()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -87,13 +106,16 @@ export default function JoinLanding({
   const textOpacity  = 'rgba(255,255,255,0.75)'
 
   function handleJoin() {
-    // The referrer rides in the URL rather than relying on the sessionStorage
-    // the layout primes: a member who lands here with private storage blocked,
-    // or who opens the signup step directly, still gets credited.
-    const qs = referrer
-      ? `?referrer=${encodeURIComponent(referrer.referrerMemberId)}`
-      : ''
-    router.push(`/member/join/${storeKey}/signup${qs}`)
+    // The referrer and the source both ride in the URL rather than relying on
+    // the sessionStorage the layout primes: a member who lands here with
+    // private storage blocked, or who opens the signup step directly, still
+    // gets credited and still gets their register stamp.
+    const qs = new URLSearchParams()
+    if (referrer)   qs.set('referrer', referrer.referrerMemberId)
+    if (joinSource) qs.set('src', joinSource)
+    const query  = qs.toString()
+    const suffix = query ? `?${query}` : ''
+    router.push(`/member/join/${storeKey}/signup${suffix}`)
   }
 
   return (
