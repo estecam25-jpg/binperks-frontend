@@ -7,10 +7,22 @@
  * merchant brand, because a member visits a location, not a company.
  *
  * LAYOUT, top to bottom:
- *   name → key → city, state → the store's own message
- *   [ Directions ] [ Today's bin price ]
+ *   name → key → city, state                    (never covered)
+ *   the store's logo over its message, 250px    (the reveal)
+ *   [ Directions ] [ Today's bin price ]        (never covered)
  *   [ What's in the Bins ] [ View Store Perks ]
  *   the open panel, if either button is on
+ *
+ * THE LOGO SITS OVER THE MESSAGE, in the same fixed 250px box the Beyond the
+ * Bins cards use, revealed by the same hover-or-hold gesture — RevealBox is
+ * imported from those cards rather than reimplemented, so the two cannot
+ * drift apart. The box is always rendered, which is what keeps every card the
+ * same height whatever the message length.
+ *
+ * NO INITIALS TILE. The card used to lead with the store's first letter on its
+ * brand colour, as a stand-in until logo_url reached members. It has, so the
+ * stand-in is gone — and a store with no logo now shows nothing rather than a
+ * placeholder pretending to be a mark.
  *
  * ONE PANEL AT A TIME. The two buttons are a pair, not two independent
  * toggles: opening one closes the other, and pressing the open one closes it.
@@ -23,11 +35,25 @@
  */
 
 import { formatPrice, type TodayPrice } from '@/lib/store-pricing'
+import { RevealBox, CoverImage } from './FeedCards'
 
 const BINPERKS_BLUE = '#4A4B98'
 
 /** Which expandable section is showing. */
 export type StorePanel = 'bins' | 'perks'
+
+/** The store's own words, filling the reveal box. Italic, as a quote from the
+ *  merchant rather than another field of the card. Scrolls rather than
+ *  stretching the box — the fixed height is the point. */
+function StoreMessage({ text }: { text: string }) {
+  return (
+    <div className="h-full w-full overflow-y-auto px-4 py-4 flex items-center">
+      <p className="text-[13px] italic text-[#4A4A5C] font-medium leading-relaxed">
+        {text}
+      </p>
+    </div>
+  )
+}
 
 export interface StoreCardStore {
   id: string
@@ -58,6 +84,15 @@ export interface StoreCardStore {
    * message that only appeared after opening the panel it is no longer in.
    */
   storeMessage?: string | null
+  /**
+   * The store's own logo, as a public URL.
+   *
+   * store-logos is a public bucket and the merchant dashboard saves
+   * getPublicUrl output straight into logo_url, so there is nothing to sign.
+   * Null for a store that has not uploaded one, and the card shows no mark at
+   * all in that case.
+   */
+  logoUrl?: string | null
 }
 
 export default function StoreCard({
@@ -75,6 +110,7 @@ export default function StoreCard({
 }) {
   const location = [store.city, store.state].filter(Boolean).join(', ')
   const message  = store.storeMessage?.trim()
+  const logo     = store.logoUrl?.trim()
 
   // The merchant's own Google Maps link is authoritative — they pasted the pin
   // for their exact unit. Falling back to a search by address, then by name and
@@ -105,16 +141,6 @@ export default function StoreCard({
   return (
     <div className="w-full bg-white rounded-2xl shadow-sm overflow-hidden">
       <div className="flex items-start gap-3.5 px-4 pt-4">
-        {/* Brand mark — the store's own colour, initial as a logo stand-in
-            until logo_url is exposed to members. */}
-        <div
-          className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center font-['Coiny'] text-lg text-white"
-          style={{ backgroundColor: store.brandColor }}
-          aria-hidden="true"
-        >
-          {(store.brandName || store.displayName).charAt(0)}
-        </div>
-
         <div className="flex-1 min-w-0">
           <p className="text-[15px] font-extrabold text-[#1A1A2E] leading-tight">
             {store.displayName}
@@ -124,16 +150,6 @@ export default function StoreCard({
           </p>
           {location && (
             <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5">{location}</p>
-          )}
-
-          {/* The store's own words, set in italic so they read as a quote from
-              the merchant rather than another field. Nothing at all when
-              unwritten — an empty line here would read as a store with
-              nothing to say. */}
-          {message && (
-            <p className="text-[12px] italic text-[#8E8EA8] font-medium mt-1.5 leading-relaxed">
-              {message}
-            </p>
           )}
         </div>
 
@@ -150,6 +166,28 @@ export default function StoreCard({
           >
             <span className="text-[19px] leading-none">{favorited ? '❤️' : '♡'}</span>
           </button>
+        )}
+      </div>
+
+      {/* ── Logo over message, 250px ──
+          Four cases, and each one is deliberate:
+            logo + message   the logo covers the words until hover or hold
+            logo only        the logo, with no gesture to discover
+            message only     the words, uncovered
+            neither          an empty box, so the card is still the same height
+          The box is ALWAYS here. Sizing it to its contents would make a card
+          with a long message tower over its neighbours in the list. */}
+      <div className="px-4 pt-3">
+        {logo && message ? (
+          <RevealBox cover={<CoverImage src={logo} alt={`${store.displayName} logo`} />}>
+            <StoreMessage text={message} />
+          </RevealBox>
+        ) : (
+          <div className="relative h-[250px] w-full rounded-xl overflow-hidden bg-white">
+            {logo
+              ? <CoverImage src={logo} alt={`${store.displayName} logo`} />
+              : message ? <StoreMessage text={message} /> : null}
+          </div>
         )}
       </div>
 

@@ -60,8 +60,11 @@ interface Store {
   isOriginStore: boolean
   /** Set by /api/member/stores. Drives the "What's in the Bins" button. */
   hasBinPhotos: boolean
-  /** The merchant's note, shown in the card header. Null when unwritten. */
+  /** The merchant's note. Shown in the card's 250px box, under the logo. */
   storeMessage: string | null
+  /** Public URL from /api/member/stores. Null when the store has no logo, and
+   *  the card then shows no mark at all. */
+  logoUrl: string | null
 }
 
 interface Perk {
