@@ -213,104 +213,6 @@ function QrImg({ url, size }: { url: string; size: number }) {
   return <img src={src} width={size} height={size} alt="QR" crossOrigin="anonymous" style={{ display: 'block' }} />
 }
 
-/**
- * Downloads a QR as a PNG file.
- *
- * FETCH TO A BLOB rather than the window.open this button used to do. Opening
- * the image in a tab is not a download — it is blocked by popup blockers, and
- * on a phone it leaves the merchant to long-press and "save image" from a bare
- * tab. api.qrserver.com sends Access-Control-Allow-Origin: *, so the bytes can
- * be read and handed to a real download. The old behaviour is kept as the
- * fallback so a CORS or network failure still gets them their code.
- *
- * 1000px because these are printed and stuck to a counter, not viewed on
- * screen. The extra margin is quiet zone — a QR printed flush to a cut edge
- * gets harder for a phone to find.
- */
-async function downloadQrPng(url: string, filename: string) {
-  const src = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(url)}&format=png&margin=2`
-  try {
-    const res = await fetch(src)
-    if (!res.ok) throw new Error(`qr ${res.status}`)
-    const href = URL.createObjectURL(await res.blob())
-    const a = document.createElement('a')
-    a.href = href
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(href)
-  } catch {
-    window.open(src, '_blank')
-  }
-}
-
-/**
- * One downloadable QR code.
- *
- * TWO OF THESE ARE RENDERED, and the difference between them is the whole
- * point: the social code opens the ordinary join funnel, and the register code
- * opens the same funnel through the in-store source, which awards the new
- * member their visit stamp for that day. Same store, same signup — different
- * URL, so the codes must never be mixed up. The wording on each card is what
- * keeps a merchant from putting the wrong one on the counter.
- *
- * The preview is the REAL code, not the placeholder tile that used to sit here.
- * With two of them on screen, a merchant needs to be able to tell at a glance
- * which is which, and two identical emoji tiles cannot do that.
- */
-function QrCodeCard({ heading, description, url, filename }: {
-  heading: string
-  description: string
-  /** Empty until the store is provisioned — the card renders disabled. */
-  url: string
-  filename: string
-}) {
-  const [busy, setBusy] = useState(false)
-
-  async function handleDownload() {
-    if (!url) return
-    setBusy(true)
-    try { await downloadQrPng(url, filename) } finally { setBusy(false) }
-  }
-
-  return (
-    <div className="bg-white rounded-2xl px-5 py-6 shadow-sm flex flex-col items-center gap-4">
-      <h2 className="font-['Coiny'] text-xl text-[#1A1A2E] self-start">{heading}</h2>
-
-      <div className="w-40 h-40 bg-white rounded-2xl flex items-center justify-center border-2 border-[#EBEBF2] overflow-hidden">
-        {url ? (
-          <QrImg url={url} size={144} />
-        ) : (
-          <div className="text-center">
-            <span className="text-4xl">📱</span>
-            <p className="text-[10px] text-[#8E8EA8] font-bold mt-1">QR Code</p>
-          </div>
-        )}
-      </div>
-
-      <p className="text-[11px] text-[#8E8EA8] font-medium text-center leading-relaxed">
-        {description}
-      </p>
-
-      {/* The URL itself, so a merchant can see which code they are about to
-          print rather than trusting the label. Two codes that look identical
-          need something to tell them apart. */}
-      <p className="text-[10px] text-[#B0B0C8] font-semibold text-center break-all">
-        {url || 'Not provisioned yet'}
-      </p>
-
-      <button
-        onClick={handleDownload}
-        disabled={!url || busy}
-        className="w-full py-3.5 rounded-xl font-bold text-[14px] text-[#4A4B98] font-['Montserrat'] border-2 border-[#4A4B98] disabled:opacity-50 active:bg-indigo-50 transition-colors"
-      >
-        {busy ? 'Preparing…' : 'Download QR Code'}
-      </button>
-    </div>
-  )
-}
-
 /* ── off-screen material templates ──────────────────────────────── */
 
 function PosterTemplate({ brandColor, brandName, logoUrl, joinUrl }: {
@@ -413,36 +315,6 @@ function WindowClingTemplate({ brandColor, brandName, joinUrl }: {
       </div>
       <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(142,142,168,0.6)', letterSpacing: 0.5 }}>
         POWERED BY BINPERKS
-      </div>
-    </div>
-  )
-}
-
-function SocialTemplate({ brandColor, brandName, joinUrl }: {
-  brandColor: string; brandName: string; joinUrl: string
-}) {
-  return (
-    <div style={{
-      width: 1080, height: 1080, background: brandColor,
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 36, fontFamily: 'Montserrat, sans-serif', padding: '80px 100px',
-    }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontFamily: 'Coiny, cursive', fontSize: 80, color: 'white', lineHeight: 1.1 }}>
-          Join our BinPerks
-        </div>
-        <div style={{ fontFamily: 'Coiny, cursive', fontSize: 80, color: 'rgba(255,255,255,0.85)', lineHeight: 1 }}>
-          Rewards Program!
-        </div>
-      </div>
-      <div style={{ fontSize: 30, fontWeight: 800, color: 'rgba(255,255,255,0.9)' }}>{brandName}</div>
-      <div style={{ background: 'white', padding: 28, borderRadius: 28 }}>
-        <QrImg url={joinUrl} size={320} />
-      </div>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 26, fontWeight: 800, color: 'white' }}>Free to join · No app needed</div>
-        <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.65)', marginTop: 8, fontWeight: 600 }}>Earn rewards every visit you shop</div>
       </div>
     </div>
   )
@@ -592,6 +464,140 @@ function MaterialCard({
   )
 }
 
+/**
+ * The square images for the social post, in the order they are shown.
+ *
+ * DROP-IN SLOTS. Esteban supplies the four finished graphics; until they are
+ * in the repo each entry is null and renders a numbered placeholder, so the
+ * section ships and looks right with the copy that is ready now.
+ *
+ * TO ADD THEM: put the files in `public/marketing/social/` and set each `src`
+ * to its path, e.g. '/marketing/social/1.jpg'. Nothing else changes — the
+ * strip, the alt text and the layout are already sized for 1:1 squares. Keep
+ * them square and keep them small enough to load on a phone.
+ */
+const SOCIAL_POST_IMAGES: { src: string | null; alt: string }[] = [
+  { src: null, alt: 'BinPerks social post graphic 1' },
+  { src: null, alt: 'BinPerks social post graphic 2' },
+  { src: null, alt: 'BinPerks social post graphic 3' },
+  { src: null, alt: 'BinPerks social post graphic 4' },
+]
+
+/**
+ * The caption a merchant posts alongside the graphic.
+ *
+ * The join link is interpolated rather than left as a placeholder for someone
+ * to fill in: a caption pasted with "[your link here]" still in it is the
+ * failure this button exists to prevent. It is the store's own join URL, the
+ * same one the rest of this tab hands out.
+ *
+ * Built as an array of lines so the blank lines between paragraphs are
+ * explicit — they matter on Instagram, where a wall of text collapses.
+ */
+function socialCaption(joinUrl: string): string {
+  return [
+    "\uD83C\uDF89 We're officially a BinPerks participating merchant!",
+    '',
+    'Sign up today and start earning stamps when you shop with us. Unlock rewards, enjoy member perks, and discover even more participating bin stores.',
+    '',
+    `\uD83D\uDC49 Join BinPerks here: ${joinUrl}`,
+    '',
+    'More Bins. More Wins!\u00AE',
+    '',
+    '#BinPerks #BinStore #DiscountStores #BargainShopping #FleaMarket #ThriftStore',
+  ].join('\n')
+}
+
+/**
+ * Ready-made social post — artwork to attach, and the words to go with it.
+ *
+ * Replaces the generated 1080×1080 graphic. That asset was branded correctly
+ * but still left the merchant to write their own caption, which is the part
+ * most of them will not do.
+ */
+function SocialPostSection({ joinUrl }: { joinUrl: string }) {
+  const [copied, setCopied] = useState(false)
+  const caption = socialCaption(joinUrl || 'https://app.binperks.com')
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(caption)
+    } catch {
+      // Clipboard is blocked in some in-app browsers. The caption is on screen
+      // to select by hand, and a textarea copy still works where it is not.
+      const el = document.createElement('textarea')
+      el.value = caption
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      el.remove()
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
+
+  return (
+    <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-4">
+      <div>
+        <h3 className="font-['Coiny'] text-lg text-[#1A1A2E]">Social Media Post</h3>
+        <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
+          Pick a square, copy the caption, post it on Instagram, Facebook or TikTok.
+        </p>
+      </div>
+
+      {/* Scrolls sideways inside its own box; the tab never scrolls sideways.
+          The negative margin lets the strip bleed to the card edge while the
+          padding keeps the first square aligned with the text above it. */}
+      <div className="overflow-x-auto -mx-5 px-5">
+        <div className="flex gap-2.5 w-max pb-1">
+          {SOCIAL_POST_IMAGES.map((img, i) => (
+            <div key={i} className="w-40 h-40 flex-shrink-0 rounded-xl overflow-hidden">
+              {img.src ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={img.src}
+                  alt={img.alt}
+                  className="w-40 h-40 object-cover bg-[#F5F5F8] border border-[#EBEBF2] rounded-xl"
+                />
+              ) : (
+                <div className="w-40 h-40 rounded-xl border-2 border-dashed border-[#D1D1DC] bg-[#F5F5F8] flex flex-col items-center justify-center gap-1">
+                  <span className="text-[22px] leading-none">{'\u{1F5BC}\uFE0F'}</span>
+                  <p className="text-[10px] font-bold text-[#B0B0C8]">Image {i + 1}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Said once, plainly, rather than on each tile — four identical
+          "coming soon" labels would be four apologies. */}
+      {SOCIAL_POST_IMAGES.every(img => !img.src) && (
+        <p className="text-[11px] font-medium text-[#B0B0C8] -mt-2">
+          Post graphics are on the way. The caption below is ready to use now.
+        </p>
+      )}
+
+      {/* whitespace-pre-wrap: the blank lines between paragraphs are the
+          layout, and collapsing them would show the merchant something other
+          than what the button copies. */}
+      <div className="rounded-xl bg-[#F5F5F8] px-4 py-3.5">
+        <p className="text-[12px] font-medium text-[#1A1A2E] leading-relaxed whitespace-pre-wrap break-words">
+          {caption}
+        </p>
+      </div>
+
+      <button
+        onClick={handleCopy}
+        className="w-full py-3.5 rounded-xl font-bold text-[14px] text-white font-['Montserrat'] active:opacity-80 transition-all"
+        style={{ backgroundColor: copied ? '#2A7D34' : '#4A4B98' }}
+      >
+        {copied ? '\u2713 Caption copied' : 'Copy Text'}
+      </button>
+    </div>
+  )
+}
+
 export function MarketingTab({ storeId, stores }: { storeId: string | null; stores: { id: string; storeName: string; storeKey?: string; city: string; state: string }[] }) {
   const activeStore = storeId ? stores.find(s => s.id === storeId) : stores[0]
   const [copied, setCopied] = useState(false)
@@ -606,7 +612,6 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   const posterRef = useRef<HTMLDivElement>(null)
   const tentRef   = useRef<HTMLDivElement>(null)
   const clingRef  = useRef<HTMLDivElement>(null)
-  const socialRef = useRef<HTMLDivElement>(null)
 
   const joinUrl = activeStore?.storeKey
     ? `https://app.binperks.com/join/${activeStore.storeKey}`
@@ -713,25 +718,12 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   return (
     <div className="flex flex-col gap-4 p-4 pb-12">
 
-      {/* ── The two QR codes ──
-          The register one is listed first: it is the one that awards a stamp,
-          so it is the one a merchant should be setting up on day one. The old
-          single card's copy said "print and display at your register", which
-          is now exactly what the OTHER code is for — leaving it would have had
-          both cards claiming the counter. */}
-      <QrCodeCard
-        heading="At the Register QR Code"
-        description="Print and place this QR code at your register. New members who scan this will receive 1 stamp on signup."
-        url={registerUrl}
-        filename={`binperks-qr-register-${safeName}.png`}
-      />
-
-      <QrCodeCard
-        heading="Social Media QR Code"
-        description="Share this link or QR code on social media to invite new members."
-        url={joinUrl}
-        filename={`binperks-qr-social-${safeName}.png`}
-      />
+      {/* The two standalone QR cards used to sit here. They were removed as
+          redundant: every printed material below already carries the right
+          code for where it goes — the table tent the register one, the poster
+          and window cling the plain join link — so a bare code on its own was
+          a fourth copy with no instructions attached to it. registerUrl is
+          still built below; the table tent is what uses it now. */}
 
       {/* Join link */}
       <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
@@ -823,9 +815,6 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
             <WindowClingTemplate {...materialProps} />
           </LetterSheet>
         </div>
-        <div ref={socialRef} style={{ width: 1080, height: 1080 }}>
-          <SocialTemplate {...materialProps} />
-        </div>
       </div>
 
       {/* Material 1 — Table Tent.
@@ -881,20 +870,10 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         </LetterSheet>
       </MaterialCard>
 
-      {/* Material 4 — Social Media Graphic */}
-      <MaterialCard
-        title="Social Media Graphic"
-        description="1080×1080 — share on Instagram, Facebook, or TikTok"
-        previewScale={0.27}
-        previewWidth={1080}
-        previewHeight={1080}
-        onDownload={() => handleDownload('social', socialRef, `binperks-social-${safeName}.png`)}
-        downloading={downloading === 'social-png'}
-        onDownloadPdf={() => handleDownloadPdf('social-pdf', socialRef, `binperks-social-${safeName}.pdf`, 6, 6)}
-        downloadingPdf={downloading === 'social-pdf'}
-      >
-        <SocialTemplate {...materialProps} />
-      </MaterialCard>
+      {/* Material 4 — the ready-made social post, replacing the generated
+          1080×1080 graphic. Artwork plus the caption to go with it: the
+          graphic alone still left every merchant writing their own words. */}
+      <SocialPostSection joinUrl={joinUrl} />
 
     </div>
   )
