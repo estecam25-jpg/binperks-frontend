@@ -75,7 +75,7 @@ function StoreCard({ store }: { store: Store }) {
           </div>
         </RevealBox>
       ) : (
-        <div className="relative h-[250px] w-full rounded-xl overflow-hidden">{mark}</div>
+        <div className="relative aspect-square w-full rounded-xl overflow-hidden">{mark}</div>
       )}
 
       <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">

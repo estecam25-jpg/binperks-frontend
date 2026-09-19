@@ -26,15 +26,17 @@ const BINPERKS_BLUE = '#4A4B98'
 const HOLD_MS = 350
 
 /**
- * Every reveal box is exactly this tall.
+ * Every reveal box is a square.
  *
- * FIXED, NOT min-height. Cards in a track stretch to the tallest, so a box
- * that grew with its description made one long paragraph set the height of
- * every card beside it. At a fixed height the artwork is always the same
- * shape and the row is even whatever the copy does; a description too long
- * for the box scrolls inside it.
+ * DERIVED FROM THE WIDTH, not a fixed height. It was 250px, which held the
+ * row even but meant the box was a different shape on every surface — a
+ * 248px carousel tile gave a portrait box, a full-width store card a
+ * landscape one, and artwork cropped differently in each. An aspect ratio is
+ * the same shape everywhere and still cannot grow with its copy, which is
+ * what the fixed height was there for: a description too long for the box
+ * scrolls inside it rather than pushing the card taller than its neighbours.
  */
-const REVEAL_H = 'h-[250px]'
+const REVEAL_SHAPE = 'aspect-square'
 
 /** Section wrapper — heading plus an optional "for you" subtitle. */
 export function FeedSection({
@@ -102,7 +104,7 @@ export function RevealBox({
 
   return (
     <div
-      className={`relative ${REVEAL_H} w-full rounded-xl overflow-hidden select-none`}
+      className={`relative ${REVEAL_SHAPE} w-full rounded-xl overflow-hidden select-none`}
       style={{ WebkitTouchCallout: 'none' }}
       onPointerEnter={e => { if (e.pointerType === 'mouse') setRevealed(true) }}
       onPointerLeave={hide}

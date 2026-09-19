@@ -8,16 +8,17 @@
  *
  * LAYOUT, top to bottom:
  *   name → key → city, state                    (never covered)
- *   the store's logo over its message, 250px    (the reveal)
+ *   the store's logo over its message, square   (the reveal)
  *   [ Directions ] [ Today's bin price ]        (never covered)
  *   [ What's in the Bins ] [ View Store Perks ]
  *   the open panel, if either button is on
  *
- * THE LOGO SITS OVER THE MESSAGE, in the same fixed 250px box the Beyond the
- * Bins cards use, revealed by the same hover-or-hold gesture — RevealBox is
+ * THE LOGO SITS OVER THE MESSAGE, in the same square box the Beyond the Bins
+ * cards use, revealed by the same hover-or-hold gesture — RevealBox is
  * imported from those cards rather than reimplemented, so the two cannot
- * drift apart. The box is always rendered, which is what keeps every card the
- * same height whatever the message length.
+ * drift apart. The box is always rendered and its height comes from its own
+ * width, which is what keeps every card the same height whatever the message
+ * length.
  *
  * NO INITIALS TILE. The card used to lead with the store's first letter on its
  * brand colour, as a stand-in until logo_url reached members. It has, so the
@@ -169,7 +170,7 @@ export default function StoreCard({
         )}
       </div>
 
-      {/* ── Logo over message, 250px ──
+      {/* ── Logo over message, square ──
           Four cases, and each one is deliberate:
             logo + message   the logo covers the words until hover or hold
             logo only        the logo, with no gesture to discover
@@ -183,7 +184,7 @@ export default function StoreCard({
             <StoreMessage text={message} />
           </RevealBox>
         ) : (
-          <div className="relative h-[250px] w-full rounded-xl overflow-hidden bg-white">
+          <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-white">
             {logo
               ? <CoverImage src={logo} alt={`${store.displayName} logo`} />
               : message ? <StoreMessage text={message} /> : null}
