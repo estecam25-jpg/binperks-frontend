@@ -42,3 +42,6 @@ next-env.d.ts
 
 # claude code (launch.json, scratch files)
 .claude/
+
+# Local previews written by scripts/generate-marketing-artwork.mjs
+.artwork-preview/

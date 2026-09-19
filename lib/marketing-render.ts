@@ -27,9 +27,14 @@ import {
   type MaterialSpec, type QrTarget, PT_PER_INCH,
 } from '@/lib/marketing-materials'
 
-/** Rendered at 200dpi. Enough for a home or office printer without producing a
- *  PDF too large to email. */
-const DPI = 200
+/**
+ * The 4x6 photo prints are written at this density.
+ *
+ * 300, not 200: the artwork for those two is authored at 300dpi (1200x1800),
+ * so anything lower would resample a print file down for no reason. Photo labs
+ * want 300.
+ */
+const DPI = 300
 
 /** How much of the placeholder box the replacement covers, as a fraction of the
  *  box, leaving the design's own border visible. */
@@ -57,7 +62,7 @@ export function joinUrlFor(target: QrTarget, storeKey: string): string {
 export async function fetchQr(url: string, px: number): Promise<Buffer> {
   const size = Math.max(200, Math.min(1000, Math.round(px)))
   const src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}`
-    + `&data=${encodeURIComponent(url)}&format=png&margin=1`
+    + `&data=${encodeURIComponent(url)}&format=png&margin=2`
   const res = await fetch(src)
   if (!res.ok) throw new Error(`qr fetch ${res.status}`)
   return Buffer.from(await res.arrayBuffer())
@@ -222,11 +227,17 @@ export async function renderUnit(opts: {
   })
 
   // 3. The QR itself, square and centred in its box.
-  const qrPng = await sharp(opts.qr).resize(qrSide, qrSide, { fit: 'fill' }).png().toBuffer()
+  //
+  // INSET AGAIN, to 88%. Drawn edge to edge it had no quiet zone on its short
+  // axis, and the table tent and window cling — whose boxes are drawn with a
+  // black and a blue stroke right up against it — would not decode at all. A
+  // QR needs clear white around it, not just behind it.
+  const qrDrawn = Math.floor(qrSide * 0.88)
+  const qrPng = await sharp(opts.qr).resize(qrDrawn, qrDrawn, { fit: 'fill' }).png().toBuffer()
   layers.push({
     input: qrPng,
-    left: qrIn.left + Math.round((qrIn.width - qrSide) / 2),
-    top: qrIn.top + Math.round((qrIn.height - qrSide) / 2),
+    left: qrIn.left + Math.round((qrIn.width - qrDrawn) / 2),
+    top: qrIn.top + Math.round((qrIn.height - qrDrawn) / 2),
   })
 
   // 4. The name, only for outputs that cannot draw text later.
