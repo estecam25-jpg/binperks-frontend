@@ -17,6 +17,7 @@ import GreetingCard from '@/components/member/GreetingCard'
 import AddToHomeScreen from '@/components/member/AddToHomeScreen'
 import MembershipStampCard from '@/components/member/MembershipStampCard'
 import BeyondSections, { PromosSection } from '@/components/member/BeyondSections'
+import BinStoresSection from '@/components/member/BinStoresSection'
 
 interface MemberData {
   firstName: string
@@ -84,6 +85,12 @@ export default function MemberHomePage() {
             Beyond the Bins groups partner content; a promo is BinPerks
             speaking for itself. Home only; the MORE tab has no promos. */}
         <PromosSection />
+
+        {/* ── Bin Stores Near Me ──
+            Above Beyond the Bins on purpose: these are the places a member can
+            actually walk into and earn a stamp, which outranks partner
+            content. Reads the store table directly — nothing to curate. */}
+        <BinStoresSection />
 
         {/* ── Beyond the Bins ──
             PINNED items only. A section with nothing pinned is hidden

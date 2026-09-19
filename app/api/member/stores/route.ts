@@ -23,7 +23,7 @@
  *
  * Responses:
  *   200 { lastStampedStoreId, stores: [{ id, canonicalKey, displayName, brandName, city, state,
- *                     brandColor, todayPrice, restocksToday, storeMessage, isOriginStore }] }
+ *                     brandColor, logoUrl, todayPrice, restocksToday, storeMessage, isOriginStore }] }
  *        todayPrice is resolved in each STORE's own timezone, and is null when
  *        that merchant has published no price for today.
  *   401 { error: 'not_authenticated' }
@@ -49,6 +49,9 @@ interface StoreRow {
   /** Display only — lets the member store card show the store's own colour
    *  instead of a generic swatch. */
   brand_color: string | null
+  /** A PUBLIC url — store-logos is a public bucket and the merchant dashboard
+   *  stores getPublicUrl output here, so there is nothing to sign. */
+  logo_url: string | null
   pricing_schedule: PricingSchedule | null
   restock_days: unknown
   special_events: unknown
@@ -115,7 +118,7 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from('stores')
-    .select('id, canonical_key, display_name, brand_name, city, state, brand_color, pricing_schedule, restock_days, special_events, timezone, address, address_line2, zip, google_maps_url, store_message')
+    .select('id, canonical_key, display_name, brand_name, city, state, brand_color, logo_url, pricing_schedule, restock_days, special_events, timezone, address, address_line2, zip, google_maps_url, store_message')
     .eq('is_active', true)
     .eq('network_visible', true)
 
@@ -191,6 +194,9 @@ export async function GET(req: NextRequest) {
       city:          s.city ?? '',
       state:         s.state ?? '',
       brandColor:    s.brand_color ?? '#4A4B98',
+      // Shown by the Bin Stores Near Me strip on Home. Null falls back to the
+      // store's initials on a brand-coloured tile.
+      logoUrl:       s.logo_url ?? null,
       // Drives the "What's in the Bins" button on the card. False for most
       // stores, where the button is shown inert rather than opening onto an
       // empty panel.

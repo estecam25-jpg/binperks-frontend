@@ -25,6 +25,17 @@ const BINPERKS_BLUE = '#4A4B98'
  *  it. */
 const HOLD_MS = 350
 
+/**
+ * Every reveal box is exactly this tall.
+ *
+ * FIXED, NOT min-height. Cards in a track stretch to the tallest, so a box
+ * that grew with its description made one long paragraph set the height of
+ * every card beside it. At a fixed height the artwork is always the same
+ * shape and the row is even whatever the copy does; a description too long
+ * for the box scrolls inside it.
+ */
+const REVEAL_H = 'h-[250px]'
+
 /** Section wrapper — heading plus an optional "for you" subtitle. */
 export function FeedSection({
   title, subtitle, children,
@@ -66,11 +77,12 @@ export function FeedSection({
  * and the long-press callout is suppressed — holding to read a description
  * should not offer to save the picture.
  */
-function ImageReveal({
-  src, alt, children,
+export function RevealBox({
+  cover, children,
 }: {
-  src: string
-  alt: string
+  /** What sits on top until the member asks to see through it — an image on a
+   *  feed card, a logo or an initials tile on a store card. */
+  cover: React.ReactNode
   children: React.ReactNode
 }) {
   const [revealed, setRevealed] = useState(false)
@@ -84,34 +96,52 @@ function ImageReveal({
   // would set state on a component that is gone.
   useEffect(() => clearHold, [])
 
-  function cover() { clearHold(); setRevealed(false) }
+  /** Put the cover back. Named for what it does, not what it is — `cover`
+   *  is the prop holding the thing being put back. */
+  function hide() { clearHold(); setRevealed(false) }
 
   return (
     <div
-      className="relative min-h-[6.5rem] select-none"
+      className={`relative ${REVEAL_H} w-full rounded-xl overflow-hidden select-none`}
       style={{ WebkitTouchCallout: 'none' }}
       onPointerEnter={e => { if (e.pointerType === 'mouse') setRevealed(true) }}
-      onPointerLeave={cover}
+      onPointerLeave={hide}
       onPointerDown={e => {
         if (e.pointerType === 'mouse') return
         clearHold()
         holdTimer.current = setTimeout(() => setRevealed(true), HOLD_MS)
       }}
-      onPointerUp={cover}
-      onPointerCancel={cover}
+      onPointerUp={hide}
+      onPointerCancel={hide}
       onContextMenu={e => e.preventDefault()}
     >
-      {children}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt={alt}
-        draggable={false}
+      {/* The revealed side, filling the box. It scrolls rather than pushing
+          the box taller — the fixed height is the whole point. */}
+      <div className="absolute inset-0 overflow-y-auto bg-white">
+        {children}
+      </div>
+
+      <div
         aria-hidden={revealed}
-        className="absolute inset-0 w-full h-full object-cover rounded-xl pointer-events-none transition-opacity duration-300 ease-out"
+        className="absolute inset-0 pointer-events-none transition-opacity duration-300 ease-out"
         style={{ opacity: revealed ? 0 : 1 }}
-      />
+      >
+        {cover}
+      </div>
     </div>
+  )
+}
+
+/** The cover an image makes: fills the box, cropped rather than squashed. */
+export function CoverImage({ src, alt }: { src: string; alt: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      draggable={false}
+      className="w-full h-full object-cover"
+    />
   )
 }
 
@@ -119,7 +149,9 @@ function ImageReveal({
  *  untouched when it does not — so a card with no image keeps exactly the
  *  markup it had before images existed. */
 export function withReveal(image: string | null | undefined, alt: string, body: React.ReactNode) {
-  return image ? <ImageReveal src={image} alt={alt}>{body}</ImageReveal> : body
+  return image
+    ? <RevealBox cover={<CoverImage src={image} alt={alt} />}>{body}</RevealBox>
+    : body
 }
 
 // ── Horizontal carousel ──────────────────────────────────────────────────────

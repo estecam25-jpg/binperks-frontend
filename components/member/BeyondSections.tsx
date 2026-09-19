@@ -181,15 +181,18 @@ export default function BeyondSections({
           <div className="h-28 rounded-2xl bg-white animate-pulse" />
         ) : (
           <>
-            {section('Shop From Home', shop.length, (
-              <FeedCarousel>
-                {shop.map(s => <OnlineStoreCard key={s.id} store={s} />)}
-              </FeedCarousel>
-            ))}
-
+            {/* Deals first: somewhere to go this weekend beats somewhere to
+                browse online, and this order is the same on Home and MORE
+                because both render this component. */}
             {section('Deals Near You', deals.length, (
               <FeedCarousel>
                 {deals.map(d => <DealCard key={d.id} deal={d} />)}
+              </FeedCarousel>
+            ))}
+
+            {section('Shop From Home', shop.length, (
+              <FeedCarousel>
+                {shop.map(s => <OnlineStoreCard key={s.id} store={s} />)}
               </FeedCarousel>
             ))}
 
