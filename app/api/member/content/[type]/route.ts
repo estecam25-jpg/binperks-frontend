@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { contentTypeBySlug, columnsFor, applyFeedOrder } from '@/lib/admin-content'
+import { attachImageUrls } from '@/lib/content-images'
 
 /** Feed types only. */
 const MEMBER_VISIBLE = new Set(['promos', 'shop-from-home', 'beyond-the-bins', 'deals-near-you'])
@@ -66,5 +67,9 @@ export async function GET(
     return NextResponse.json({ items: [] })
   }
 
-  return NextResponse.json({ items: data ?? [] })
+  // Signed here, never stored. The card renders image_url; image_path never
+  // leaves the server in a usable form.
+  const items = await attachImageUrls(admin, type, (data ?? []) as unknown as Record<string, unknown>[])
+
+  return NextResponse.json({ items })
 }

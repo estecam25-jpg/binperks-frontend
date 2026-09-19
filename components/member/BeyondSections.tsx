@@ -22,7 +22,8 @@
 
 import { useEffect, useState } from 'react'
 import {
-  FeedSection, FeedCarousel, PromoCarousel, OnlineStoreCard, DealCard, CtaButton, CARD_W,
+  FeedSection, FeedCarousel, PromoCarousel, OnlineStoreCard, DealCard, CtaButton,
+  CARD_W, withReveal,
 } from './FeedCards'
 import type { PromoCard, OnlineStore, Deal } from '@/lib/member-mock-data'
 
@@ -37,6 +38,8 @@ interface Partner {
   description: string
   cta_label: string | null
   cta_url: string | null
+  /** Signed URL for the card's 1:1 artwork, or null. */
+  image: string | null
 }
 
 interface Content {
@@ -69,10 +72,12 @@ async function load(slug: string, pinnedOnly: boolean): Promise<Row[]> {
 function PartnerCard({ p }: { p: Partner }) {
   return (
     <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
-      <div className="min-w-0">
-        <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{p.partner_name}</p>
-        <p className="text-[12px] font-medium text-[#8E8EA8] mt-1 leading-snug">{p.description}</p>
-      </div>
+      {withReveal(p.image, p.partner_name, (
+        <div className="min-w-0">
+          <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{p.partner_name}</p>
+          <p className="text-[12px] font-medium text-[#8E8EA8] mt-1 leading-snug">{p.description}</p>
+        </div>
+      ))}
       <CtaButton href={p.cta_url} label={p.cta_label} />
     </article>
   )
@@ -93,11 +98,21 @@ function ComingSoon() {
 export default function BeyondSections({
   pinnedOnly,
   showEmptySections,
+  showGroupHeader = true,
 }: {
   /** Home passes true; the MORE tab passes false. */
   pinnedOnly: boolean
   /** Home hides empty sections; MORE shows "Check back soon." instead. */
   showEmptySections: boolean
+  /**
+   * The "Beyond the Bins" heading over the three subsections.
+   *
+   * Home needs it — these sections sit among others there. The MORE tab is
+   * already titled "Beyond the Bins" in its own page header, so rendering it
+   * again put the same words twice on one screen, directly above Shop From
+   * Home. That tab passes false.
+   */
+  showGroupHeader?: boolean
 }) {
   const [content, setContent] = useState<Content>(EMPTY)
   // Derived, so nothing calls setState in the effect body.
@@ -118,18 +133,22 @@ export default function BeyondSections({
           subtitle: str(r.subtitle),
           description: str(r.description_text) || null,
           href: str(r.cta_url) || null,
+          // Signed by /api/member/content; image_path itself never reaches here.
+          image: str(r.image_url) || null,
         })),
         deals: deals.map(r => ({
           id: str(r.id), name: str(r.event_name),
           location: [str(r.event_type), str(r.location)].filter(Boolean).join(' · '),
           description: str(r.description) || null,
           href: str(r.cta_url) || null,
+          image: str(r.image_url) || null,
         })),
         partners: partners.map(r => ({
           id: str(r.id), partner_name: str(r.partner_name),
           description: str(r.description),
           cta_label: str(r.cta_label) || null,
           cta_url: str(r.cta_url) || null,
+          image: str(r.image_url) || null,
         })),
       })
       setLoaded(true)
@@ -156,9 +175,8 @@ export default function BeyondSections({
     )
   }
 
-  return (
-    <FeedSection title="Beyond the Bins">
-      <div className="w-full flex flex-col gap-3">
+  const body = (
+    <div className="w-full flex flex-col gap-3">
         {!loaded ? (
           <div className="h-28 rounded-2xl bg-white animate-pulse" />
         ) : (
@@ -182,9 +200,14 @@ export default function BeyondSections({
             ))}
           </>
         )}
-      </div>
-    </FeedSection>
+    </div>
   )
+
+  return showGroupHeader
+    ? <FeedSection title="Beyond the Bins">{body}</FeedSection>
+    // Without the heading the sections still need the section element's
+    // spacing, or they butt against whatever the page put above them.
+    : <section className="w-full flex flex-col gap-2.5">{body}</section>
 }
 
 /**

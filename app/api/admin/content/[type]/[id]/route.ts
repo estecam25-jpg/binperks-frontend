@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { verifyAdmin } from '@/lib/admin-auth'
 import { contentTypeBySlug, columnsFor, writableColumnsFor } from '@/lib/admin-content'
+import { attachImageUrls, typeHasImage, removeContentImage } from '@/lib/content-images'
 
 export async function PATCH(
   req: NextRequest,
@@ -45,6 +46,18 @@ export async function PATCH(
   }
 
   const admin = createAdminSupabaseClient()
+
+  // The image the row points at BEFORE this write. If the update swaps it for
+  // a different one — or clears it — the old object is removed afterwards, so
+  // the bucket does not keep a copy per edit. Read first, delete last: a failed
+  // update must not take the live picture with it.
+  let previousImage: string | null = null
+  if (typeHasImage(type) && updates.image_path !== undefined) {
+    const { data: before } = await admin
+      .from(type.table).select('image_path').eq('id', id).maybeSingle()
+    previousImage = (before?.image_path as string | null) ?? null
+  }
+
   const { data, error } = await admin
     .from(type.table)
     .update(updates)
@@ -57,7 +70,13 @@ export async function PATCH(
     return NextResponse.json({ error: 'update_failed' }, { status: 500 })
   }
 
-  return NextResponse.json({ item: data })
+  if (previousImage && previousImage !== updates.image_path) {
+    await removeContentImage(admin, previousImage)
+  }
+
+  const [item] = await attachImageUrls(admin, type, [data as unknown as Record<string, unknown>])
+
+  return NextResponse.json({ item })
 }
 
 export async function DELETE(
@@ -72,12 +91,24 @@ export async function DELETE(
   if (!type) return NextResponse.json({ error: 'unknown_type' }, { status: 404 })
 
   const admin = createAdminSupabaseClient()
+
+  // Read the path before the row goes, so the object can go with it. A soft
+  // orphan here would be a file nothing points at and nobody can find.
+  let imagePath: string | null = null
+  if (typeHasImage(type)) {
+    const { data: before } = await admin
+      .from(type.table).select('image_path').eq('id', id).maybeSingle()
+    imagePath = (before?.image_path as string | null) ?? null
+  }
+
   const { error } = await admin.from(type.table).delete().eq('id', id)
 
   if (error) {
     console.error(`[admin/content/${slug}] DELETE failed:`, error)
     return NextResponse.json({ error: 'delete_failed' }, { status: 500 })
   }
+
+  await removeContentImage(admin, imagePath)
 
   return NextResponse.json({ ok: true })
 }

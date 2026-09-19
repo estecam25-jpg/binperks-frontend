@@ -28,12 +28,21 @@ export default function MemberMorePage() {
           <p className="text-[13px] text-[#8E8EA8] font-medium mt-1">
             Exclusive perks and deals from our partners
           </p>
+          {/* The cards carry artwork over their text now, and nothing on a
+              card says so — a picture that hides a description is only a
+              feature if you know it will move. */}
+          <p className="text-[12px] text-[#B0B0C8] font-medium mt-0.5">
+            hover mouse or long-hold to learn more
+          </p>
         </div>
 
         {/* Everything active, and an empty section says so rather than
             vanishing — on a tab whose whole purpose is the full list, a missing
             heading reads as a bug. */}
-        <BeyondSections pinnedOnly={false} showEmptySections />
+        {/* showGroupHeader=false: this page's own h1 already says
+            "Beyond the Bins", and the section heading repeated it directly
+            above Shop From Home. */}
+        <BeyondSections pinnedOnly={false} showEmptySections showGroupHeader={false} />
 
         {/* Clears the fixed bottom nav — see the other tab screens. */}
         <div style={{ height: 'calc(80px + env(safe-area-inset-bottom))' }} aria-hidden="true" />

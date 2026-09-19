@@ -11,7 +11,16 @@
  * tables keep their snake_case names.
  */
 
-export type FieldKind = 'text' | 'textarea' | 'url' | 'date' | 'color' | 'number' | 'boolean'
+export type FieldKind =
+  | 'text' | 'textarea' | 'url' | 'date' | 'color' | 'number' | 'boolean'
+  /**
+   * Optional 1:1 artwork. The column stores a STORAGE PATH, not a URL; the
+   * routes sign it into `image_url` on the way out. See lib/content-images.
+   *
+   * At most one per type — typeHasImage and attachImageUrls both assume the
+   * column is called image_path.
+   */
+  | 'image'
 
 export interface ContentField {
   /** Column name, exactly as in Postgres. */
@@ -87,6 +96,7 @@ export const CONTENT_TYPES: ContentType[] = [
       { name: 'subtitle',         label: 'Subtitle',    kind: 'text', required: true, placeholder: 'HiBid' },
       { name: 'description_text', label: 'Description', kind: 'textarea', maxLength: 300, placeholder: 'What they sell (up to 300 characters)' },
       { name: 'cta_url',          label: 'CTA URL',     kind: 'url',  required: true, placeholder: 'https://…' },
+      { name: 'image_path',       label: 'Image',       kind: 'image' },
     ],
   },
   {
@@ -104,6 +114,7 @@ export const CONTENT_TYPES: ContentType[] = [
       { name: 'description',  label: 'Description',  kind: 'textarea', required: true },
       { name: 'cta_label',    label: 'CTA label',    kind: 'text',     placeholder: 'Learn more' },
       { name: 'cta_url',      label: 'CTA URL',      kind: 'url',      placeholder: 'https://…' },
+      { name: 'image_path',   label: 'Image',        kind: 'image' },
     ],
   },
   {
@@ -122,6 +133,7 @@ export const CONTENT_TYPES: ContentType[] = [
       // keeps whatever it holds; it is simply no longer read or written.
       { name: 'description', label: 'Description', kind: 'textarea', maxLength: 300, placeholder: 'What is on offer (up to 300 characters)' },
       { name: 'cta_url',     label: 'CTA URL',     kind: 'url',      placeholder: 'https://…' },
+      { name: 'image_path',  label: 'Image',       kind: 'image' },
     ],
   },
 ]

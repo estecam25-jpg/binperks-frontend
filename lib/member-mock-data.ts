@@ -34,6 +34,9 @@ export interface OnlineStore {
   /** Up to 300 characters on what they sell. */
   description: string | null
   href?: string | null
+  /** Signed URL for the card's 1:1 artwork, or null. Optional throughout — a
+   *  card without one renders as it always did. See lib/content-images. */
+  image?: string | null
 }
 
 /** A "Deals Near You" card — a flea market, estate sale or garage sale.
@@ -46,6 +49,8 @@ export interface Deal {
   description: string | null
   /** Set only for admin-managed rows that carry a link. */
   href?: string | null
+  /** Signed URL for the card's 1:1 artwork, or null. */
+  image?: string | null
 }
 
 export interface BeyondBinsPartner {

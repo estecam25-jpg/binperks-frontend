@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { verifyAdmin } from '@/lib/admin-auth'
 import { contentTypeBySlug, columnsFor, writableColumnsFor, applyFeedOrder } from '@/lib/admin-content'
+import { attachImageUrls } from '@/lib/content-images'
 
 export async function GET(
   _req: NextRequest,
@@ -40,7 +41,11 @@ export async function GET(
     return NextResponse.json({ error: 'query_failed' }, { status: 500 })
   }
 
-  return NextResponse.json({ items: data ?? [] })
+  // image_path is a storage path; the client needs something it can render.
+  // A type without artwork passes straight through.
+  const items = await attachImageUrls(admin, type, (data ?? []) as unknown as Record<string, unknown>[])
+
+  return NextResponse.json({ items })
 }
 
 export async function POST(
@@ -82,5 +87,7 @@ export async function POST(
     return NextResponse.json({ error: 'insert_failed' }, { status: 500 })
   }
 
-  return NextResponse.json({ item: data }, { status: 201 })
+  const [item] = await attachImageUrls(admin, type, [data as unknown as Record<string, unknown>])
+
+  return NextResponse.json({ item }, { status: 201 })
 }

@@ -15,7 +15,7 @@
  * fixed in the merchant Perks tab (8b422a3) and is not being reintroduced.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ContentType, ContentField } from '@/lib/admin-content'
 
 const BLUE = '#4A4B98'
@@ -43,6 +43,114 @@ function CharCount({ length, max }: { length: number; max: number }) {
     >
       {length} / {max}
     </span>
+  )
+}
+
+/**
+ * Optional 1:1 artwork for a card.
+ *
+ * UPLOADS IMMEDIATELY, before the row is saved. The file goes to storage on
+ * pick and the form field holds the returned PATH; the preview uses the signed
+ * URL that came back with it. Deferring the upload to Save would mean holding
+ * the bytes in component state and a second failure mode on a button that
+ * already has one.
+ *
+ * `value` is the path currently in the draft and `initialUrl` is the signed URL
+ * for the image the row already had, so editing a card shows its picture
+ * without re-fetching. Removing clears the path; the old object is deleted
+ * server-side when the row is saved, not here — cancelling an edit must not
+ * destroy the live image.
+ */
+function ImageField({
+  slug, field, value, initialUrl, onChange,
+}: {
+  slug: string
+  field: ContentField
+  value: string
+  initialUrl?: string | null
+  onChange: (v: string) => void
+}) {
+  const [preview, setPreview] = useState<string | null>(initialUrl ?? null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const input = useRef<HTMLInputElement>(null)
+
+  async function pick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    // Cleared at once so picking the same file twice still fires a change.
+    e.target.value = ''
+    if (!file) return
+
+    setBusy(true)
+    setErr('')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      // The path being replaced, so the server can bin the old object once the
+      // new one is safely up.
+      if (value) form.append('replaces', value)
+
+      const res = await fetch(`/api/admin/content/${slug}/image`, { method: 'POST', body: form })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setErr(
+          d.error === 'file_too_large'   ? 'That file is too large.' :
+          d.error === 'unreadable_image' ? 'That file could not be read as an image.' :
+          'Upload failed. Try again.',
+        )
+        return
+      }
+      onChange(d.path ?? '')
+      setPreview(d.url ?? null)
+    } catch {
+      setErr('Upload failed. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <div className="w-16 h-16 rounded-xl overflow-hidden bg-[#F5F5F8] border border-[#EBEBF2] flex items-center justify-center flex-shrink-0">
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-[10px] font-bold text-[#B0B0C8]">None</span>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <input ref={input} type="file" accept="image/*" onChange={pick} className="hidden" />
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            disabled={busy}
+            className="px-3 py-1.5 rounded-lg text-[12px] font-bold text-white disabled:opacity-50"
+            style={{ backgroundColor: BLUE }}
+          >
+            {busy ? 'Uploading…' : preview ? 'Replace' : 'Upload image'}
+          </button>
+          {preview && !busy && (
+            <button
+              type="button"
+              onClick={() => { onChange(''); setPreview(null) }}
+              className="text-[11px] font-bold text-[#8E8EA8] self-start"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+
+      <p className="text-[10px] text-[#B0B0C8] font-medium">
+        Optional. Squares work best — uploads are cropped to 1:1. Members see it
+        covering the description until they hover or hold.
+      </p>
+      {err && <p className="text-[11px] font-semibold" style={{ color: '#DA1212' }}>{err}</p>}
+      <span className="sr-only">{field.label}</span>
+    </div>
   )
 }
 
@@ -109,7 +217,7 @@ function FieldInput({
 }
 
 function ItemForm({
-  type, draft, setDraft, onSave, onCancel, saving, error,
+  type, draft, setDraft, onSave, onCancel, saving, error, imageUrl,
 }: {
   type: ContentType
   draft: Record<string, string>
@@ -118,6 +226,8 @@ function ItemForm({
   onCancel: () => void
   saving: boolean
   error: string
+  /** Signed URL of the image the row being edited already has, if any. */
+  imageUrl?: string | null
 }) {
   const set = (k: string, v: string) => setDraft({ ...draft, [k]: v })
 
@@ -129,7 +239,17 @@ function ItemForm({
             {f.label}
             {f.required && <span style={{ color: '#DA1212' }}> *</span>}
           </label>
-          <FieldInput field={f} value={draft[f.name] ?? ''} onChange={v => set(f.name, v)} />
+          {f.kind === 'image' ? (
+            <ImageField
+              slug={type.slug}
+              field={f}
+              value={draft[f.name] ?? ''}
+              initialUrl={imageUrl}
+              onChange={v => set(f.name, v)}
+            />
+          ) : (
+            <FieldInput field={f} value={draft[f.name] ?? ''} onChange={v => set(f.name, v)} />
+          )}
         </div>
       ))}
 
@@ -198,6 +318,8 @@ export default function ContentTab({ type }: { type: ContentType }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [adding, setAdding]   = useState(false)
   const [draft, setDraft]     = useState<Record<string, string>>({})
+  /** Signed URL for the row being edited, so its image previews immediately. */
+  const [draftImageUrl, setDraftImageUrl] = useState<string | null>(null)
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -233,6 +355,7 @@ export default function ContentTab({ type }: { type: ContentType }) {
     setError('')
     setEditingId(null)
     setAdding(true)
+    setDraftImageUrl(null)
     setDraft({ active: 'true', display_order: String(items.length), pinned: 'false' })
   }
 
@@ -247,10 +370,11 @@ export default function ContentTab({ type }: { type: ContentType }) {
     }
     for (const f of type.fields) d[f.name] = str(item[f.name])
     setDraft(d)
+    setDraftImageUrl(str(item.image_url) || null)
   }
 
   function cancel() {
-    setAdding(false); setEditingId(null); setDraft({}); setError('')
+    setAdding(false); setEditingId(null); setDraft({}); setError(''); setDraftImageUrl(null)
   }
 
   /** Strings from the form back into the column types Postgres expects. */
@@ -348,6 +472,7 @@ export default function ContentTab({ type }: { type: ContentType }) {
           onCancel={cancel}
           saving={saving}
           error={error}
+          imageUrl={draftImageUrl}
         />
       )}
 
@@ -363,6 +488,16 @@ export default function ContentTab({ type }: { type: ContentType }) {
         <div className="flex flex-col gap-2">
           {items.map(item => (
             <div key={item.id} className="bg-white rounded-2xl px-4 py-3 shadow-sm flex items-start gap-3">
+              {/* Only when the row actually has artwork — an empty square on
+                  every text-only card would be a column of nothing. */}
+              {str(item.image_url) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={str(item.image_url)}
+                  alt=""
+                  className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-[#EBEBF2]"
+                />
+              )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <p className="text-[14px] font-bold text-[#1A1A2E]">{str(item[type.titleField])}</p>

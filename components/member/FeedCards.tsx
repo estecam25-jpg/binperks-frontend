@@ -12,12 +12,18 @@
  * files would spread that idiom out for no benefit.
  */
 
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import type {
   PromoCard, OnlineStore, Deal, BeyondBinsPartner,
 } from '@/lib/member-mock-data'
 
 const BINPERKS_BLUE = '#4A4B98'
+
+/** How long a touch has to be held before the card gives up its text. Short
+ *  enough not to feel broken, long enough that a scroll flick does not fire
+ *  it. */
+const HOLD_MS = 350
 
 /** Section wrapper — heading plus an optional "for you" subtitle. */
 export function FeedSection({
@@ -40,16 +46,80 @@ export function FeedSection({
   )
 }
 
-/** Square placeholder standing in for imagery Phase 2 will supply. */
-function ImagePlaceholder({ label, size = 'w-16 h-16' }: { label: string; size?: string }) {
+/**
+ * A card's artwork, sitting over its text until the member asks to see it.
+ *
+ * HOVER on a mouse, PRESS AND HOLD on a touch screen — both routed through
+ * pointer events, which report which kind of input they came from, so one
+ * handler set covers both without sniffing the user agent. A phone fires
+ * pointerenter on tap too, which is why the reveal is gated on pointerType
+ * rather than taken from enter alone.
+ *
+ * The hold timer is what keeps a scroll flick from stripping the image off
+ * every card it passes under.
+ *
+ * RENDERS ITS CHILDREN EITHER WAY. Callers wrap the text block in this only
+ * when a row has an image; the text is always in the DOM, so a screen reader
+ * reads it whether or not the picture is currently over it.
+ *
+ * The image is pointer-events-none so the wrapper keeps receiving the gesture,
+ * and the long-press callout is suppressed — holding to read a description
+ * should not offer to save the picture.
+ */
+function ImageReveal({
+  src, alt, children,
+}: {
+  src: string
+  alt: string
+  children: React.ReactNode
+}) {
+  const [revealed, setRevealed] = useState(false)
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function clearHold() {
+    if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null }
+  }
+
+  // A card can unmount mid-hold when the feed reloads; a timer left running
+  // would set state on a component that is gone.
+  useEffect(() => clearHold, [])
+
+  function cover() { clearHold(); setRevealed(false) }
+
   return (
     <div
-      className={`${size} rounded-xl bg-[#F5F5F8] border border-[#EBEBF2] flex items-center justify-center flex-shrink-0`}
-      aria-hidden="true"
+      className="relative min-h-[6.5rem] select-none"
+      style={{ WebkitTouchCallout: 'none' }}
+      onPointerEnter={e => { if (e.pointerType === 'mouse') setRevealed(true) }}
+      onPointerLeave={cover}
+      onPointerDown={e => {
+        if (e.pointerType === 'mouse') return
+        clearHold()
+        holdTimer.current = setTimeout(() => setRevealed(true), HOLD_MS)
+      }}
+      onPointerUp={cover}
+      onPointerCancel={cover}
+      onContextMenu={e => e.preventDefault()}
     >
-      <span className="text-[18px] opacity-40">{label}</span>
+      {children}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        draggable={false}
+        aria-hidden={revealed}
+        className="absolute inset-0 w-full h-full object-cover rounded-xl pointer-events-none transition-opacity duration-300 ease-out"
+        style={{ opacity: revealed ? 0 : 1 }}
+      />
     </div>
   )
+}
+
+/** Wraps `body` in the reveal when the row has artwork, and returns it
+ *  untouched when it does not — so a card with no image keeps exactly the
+ *  markup it had before images existed. */
+export function withReveal(image: string | null | undefined, alt: string, body: React.ReactNode) {
+  return image ? <ImageReveal src={image} alt={alt}>{body}</ImageReveal> : body
 }
 
 // ── Horizontal carousel ──────────────────────────────────────────────────────
@@ -166,16 +236,19 @@ export function PromoCarousel({ promos }: { promos: PromoCard[] }) {
 export function OnlineStoreCard({ store }: { store: OnlineStore }) {
   return (
     <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
-      <ImagePlaceholder label="🛍️" size="w-12 h-12" />
-      <div className="min-w-0">
-        <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] truncate">
-          {store.storeName}
-        </p>
-        <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{store.subtitle}</p>
-        {store.description && (
-          <p className="text-[12px] font-medium text-[#8E8EA8] mt-1 leading-snug">{store.description}</p>
-        )}
-      </div>
+      {/* No icon tile. The artwork is the picture now, and a card without one
+          leads with its text rather than a generic emoji square. */}
+      {withReveal(store.image, store.storeName, (
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8] truncate">
+            {store.storeName}
+          </p>
+          <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{store.subtitle}</p>
+          {store.description && (
+            <p className="text-[12px] font-medium text-[#8E8EA8] mt-1 leading-snug">{store.description}</p>
+          )}
+        </div>
+      ))}
       <CtaButton href={store.href} />
     </article>
   )
@@ -189,19 +262,15 @@ export function OnlineStoreCard({ store }: { store: OnlineStore }) {
 export function DealCard({ deal }: { deal: Deal }) {
   return (
     <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
-      <div
-        className="w-12 h-12 rounded-xl bg-[#FFB21725] flex items-center justify-center flex-shrink-0"
-        aria-hidden="true"
-      >
-        <span className="text-[20px]">📍</span>
-      </div>
-      <div className="min-w-0">
-        <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{deal.name}</p>
-        <p className="text-[12px] font-medium text-[#8E8EA8] mt-0.5">{deal.location}</p>
-        {deal.description && (
-          <p className="text-[12px] font-medium text-[#8E8EA8] mt-1 leading-snug">{deal.description}</p>
-        )}
-      </div>
+      {withReveal(deal.image, deal.name, (
+        <div className="min-w-0">
+          <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{deal.name}</p>
+          <p className="text-[12px] font-medium text-[#8E8EA8] mt-0.5">{deal.location}</p>
+          {deal.description && (
+            <p className="text-[12px] font-medium text-[#8E8EA8] mt-1 leading-snug">{deal.description}</p>
+          )}
+        </div>
+      ))}
       <CtaButton href={deal.href} />
     </article>
   )
@@ -215,7 +284,6 @@ export function BeyondBinsCard({ partner }: { partner: BeyondBinsPartner }) {
       href={partner.href}
       className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}
     >
-      <ImagePlaceholder label="🤝" size="w-12 h-12" />
       <div className="flex-1 min-w-0">
         <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{partner.partner}</p>
         <p className="text-[12px] font-medium text-[#8E8EA8] mt-0.5 leading-snug">{partner.description}</p>
