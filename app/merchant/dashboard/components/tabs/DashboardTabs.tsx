@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import PricingScheduleCard from '../PricingScheduleCard'
 import BinPhotosCard from '../BinPhotosCard'
 import StoreAddressCard from '../StoreAddressCard'
 import SuggestedPerks from '../SuggestedPerks'
 import { validatePin } from '@/lib/pin-strength'
 import { personalizeCaption } from '@/lib/social-caption'
-import { JOIN_SOURCE_REGISTER } from '@/lib/join-source'
+import {
+  SECTIONS, materialsInSection, type MaterialSpec,
+} from '@/lib/marketing-materials'
 
 // --- PerksTab ---
 
@@ -201,270 +203,6 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
 
 // --- MarketingTab ---
 
-import type { RefObject } from 'react'
-
-function initials(name: string) {
-  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
-}
-
-function QrImg({ url, size }: { url: string; size: number }) {
-  if (!url) return <div style={{ width: size, height: size, background: '#eee' }} />
-  const src = `https://api.qrserver.com/v1/create-qr-code/?size=${size * 2}x${size * 2}&data=${encodeURIComponent(url)}&format=png&margin=1`
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} width={size} height={size} alt="QR" crossOrigin="anonymous" style={{ display: 'block' }} />
-}
-
-/* ── off-screen material templates ──────────────────────────────── */
-
-function PosterTemplate({ brandColor, brandName, logoUrl, joinUrl }: {
-  brandColor: string; brandName: string; logoUrl: string | null; joinUrl: string
-}) {
-  return (
-    <div style={{
-      width: 816, height: 1056, background: brandColor,
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', gap: 28, fontFamily: 'Montserrat, sans-serif',
-      padding: '60px 48px',
-    }}>
-      {/* Logo / initials */}
-      <div style={{
-        width: 120, height: 120, borderRadius: '50%', background: 'white',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        overflow: 'hidden', flexShrink: 0,
-      }}>
-        {logoUrl
-          // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={logoUrl} alt="" width={120} height={120} style={{ objectFit: 'cover', width: '100%', height: '100%' }} crossOrigin="anonymous" />
-          : <span style={{ fontFamily: 'Coiny, cursive', fontSize: 44, color: brandColor, lineHeight: 1 }}>{initials(brandName)}</span>
-        }
-      </div>
-      {/* Store name */}
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontFamily: 'Coiny, cursive', fontSize: 72, color: 'white', lineHeight: 1.1 }}>{brandName}</div>
-        <div style={{ fontSize: 26, color: 'rgba(255,255,255,0.8)', fontWeight: 700, marginTop: 8, letterSpacing: 2 }}>REWARDS PROGRAM</div>
-      </div>
-      {/* QR */}
-      <div style={{ background: 'white', padding: 20, borderRadius: 24 }}>
-        <QrImg url={joinUrl} size={280} />
-      </div>
-      {/* CTA */}
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 28, color: 'white', fontWeight: 800 }}>Scan to join &amp; earn rewards</div>
-        <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.65)', marginTop: 8 }}>Free to join · No app needed</div>
-      </div>
-      {/* Footer */}
-      <div style={{ position: 'absolute', bottom: 32, fontSize: 14, color: 'rgba(255,255,255,0.5)', fontWeight: 600, letterSpacing: 1 }}>
-        POWERED BY BINPERKS
-      </div>
-    </div>
-  )
-}
-
-function TableTentTemplate({ brandColor, brandName, joinUrl }: {
-  brandColor: string; brandName: string; joinUrl: string
-}) {
-  return (
-    <div style={{
-      width: 384, height: 576, background: 'white',
-      display: 'flex', flexDirection: 'column',
-      fontFamily: 'Montserrat, sans-serif', overflow: 'hidden',
-    }}>
-      {/* Color bar top */}
-      <div style={{ height: 12, background: brandColor, flexShrink: 0 }} />
-      {/* Content */}
-      <div style={{
-        flex: 1, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', gap: 20, padding: '32px 28px',
-      }}>
-        <div style={{ fontFamily: 'Coiny, cursive', fontSize: 42, color: '#1A1A2E', textAlign: 'center', lineHeight: 1.1 }}>
-          {brandName}
-        </div>
-        <div style={{ background: '#F5F5F8', padding: 16, borderRadius: 16 }}>
-          <QrImg url={joinUrl} size={180} />
-        </div>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: brandColor }}>Scan to join BinPerks</div>
-          <div style={{ fontSize: 13, color: '#8E8EA8', fontWeight: 600, marginTop: 4 }}>Earn rewards every visit</div>
-        </div>
-      </div>
-      {/* Color bar bottom */}
-      <div style={{ height: 12, background: brandColor, flexShrink: 0 }} />
-    </div>
-  )
-}
-
-function WindowClingTemplate({ brandColor, brandName, joinUrl }: {
-  brandColor: string; brandName: string; joinUrl: string
-}) {
-  return (
-    <div style={{
-      width: 400, height: 400, background: 'white',
-      border: `6px solid ${brandColor}`, borderRadius: 24,
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 16, fontFamily: 'Montserrat, sans-serif', padding: 28,
-    }}>
-      <div style={{ fontFamily: 'Coiny, cursive', fontSize: 34, color: brandColor, textAlign: 'center', lineHeight: 1.1 }}>
-        We&apos;re on BinPerks!
-      </div>
-      <div style={{ fontSize: 16, fontWeight: 800, color: '#1A1A2E', textAlign: 'center' }}>{brandName}</div>
-      <div style={{ background: '#F5F5F8', padding: 12, borderRadius: 14 }}>
-        <QrImg url={joinUrl} size={160} />
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#8E8EA8', textAlign: 'center' }}>
-        Scan to earn loyalty rewards
-      </div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(142,142,168,0.6)', letterSpacing: 0.5 }}>
-        POWERED BY BINPERKS
-      </div>
-    </div>
-  )
-}
-
-/**
- * US Letter at 96 DPI. Every PRINTED material is laid out on this exact page,
- * so it comes out of a home or office printer at true size with no scaling and
- * no cropping.
- *
- * The social graphic is deliberately NOT on a Letter sheet — it is a 1080x1080
- * Instagram asset that is never printed.
- */
-const LETTER_W = 816
-const LETTER_H = 1056
-
-/**
- * Centres a smaller design on a white Letter page.
- *
- * The table tent and window cling are small by nature; blowing them up to fill
- * 8.5x11 would just distort the artwork. Centring them on a real Letter sheet
- * is what makes them print correctly, and the guide shows where to cut.
- *
- * BOTH THE GUIDE STYLE AND THE LABEL ARE OPTIONAL, because the two materials
- * want different sheets. The window cling keeps the dashed guide and the
- * caption that tells you to cut along it. The table tent is printed as a clean
- * sheet: a solid rule and no caption, so nothing is left printed on the card
- * once it is cut out.
- */
-function LetterSheet({ children, cutLabel, guide = 'dashed' }: {
-  children:  React.ReactNode
-  /** Omitted renders no caption at all, not an empty line. */
-  cutLabel?: string
-  guide?:    'dashed' | 'solid'
-}) {
-  return (
-    <div style={{
-      width: LETTER_W, height: LETTER_H, background: 'white',
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', gap: 18, fontFamily: 'Montserrat, sans-serif',
-    }}>
-      <div style={{ border: `2px ${guide} #D1D1DC`, padding: 10, display: 'flex' }}>
-        {children}
-      </div>
-      {cutLabel && (
-        <p style={{ fontSize: 12, fontWeight: 600, color: '#8E8EA8', margin: 0 }}>
-          {cutLabel}
-        </p>
-      )}
-    </div>
-  )
-}
-
-/* ── download helper ─────────────────────────────────────────────── */
-
-async function downloadMaterial(ref: RefObject<HTMLDivElement | null>, filename: string) {
-  if (!ref.current) return
-  const html2canvas = (await import('html2canvas')).default
-  const canvas = await html2canvas(ref.current, {
-    useCORS: true,
-    allowTaint: false,
-    scale: 1,
-    logging: false,
-    // Pinned to the element's own box rather than left to html2canvas to infer
-    // from the surrounding layout — inference is what produced the white bar.
-    width: ref.current.offsetWidth,
-    height: ref.current.offsetHeight,
-    windowWidth: ref.current.offsetWidth,
-    windowHeight: ref.current.offsetHeight,
-  })
-  const link = document.createElement('a')
-  link.download = filename
-  link.href = canvas.toDataURL('image/png')
-  link.click()
-}
-
-async function downloadMaterialAsPdf(
-  ref: RefObject<HTMLDivElement | null>,
-  filename: string,
-  widthIn: number,
-  heightIn: number,
-) {
-  if (!ref.current) return
-  const html2canvas = (await import('html2canvas')).default
-  const { jsPDF } = await import('jspdf')
-  const canvas = await html2canvas(ref.current, {
-    useCORS: true,
-    allowTaint: false,
-    scale: 1,
-    logging: false,
-    width: ref.current.offsetWidth,
-    height: ref.current.offsetHeight,
-    windowWidth: ref.current.offsetWidth,
-    windowHeight: ref.current.offsetHeight,
-  })
-  const orientation = widthIn >= heightIn ? 'landscape' : 'portrait'
-  const doc = new jsPDF({ orientation, unit: 'in', format: [widthIn, heightIn] })
-  doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, widthIn, heightIn)
-  doc.save(filename)
-}
-
-/* ── MaterialCard ────────────────────────────────────────────────── */
-
-function MaterialCard({
-  title, description, previewScale, previewWidth, previewHeight, children,
-  onDownload, downloading, onDownloadPdf, downloadingPdf,
-}: {
-  title: string; description: string
-  previewScale: number; previewWidth: number; previewHeight: number
-  children: React.ReactNode
-  onDownload: () => void; downloading: boolean
-  onDownloadPdf: () => void; downloadingPdf: boolean
-}) {
-  const scaledW = Math.round(previewWidth * previewScale)
-  const scaledH = Math.round(previewHeight * previewScale)
-  return (
-    <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-4">
-      <div>
-        <h3 className="font-['Coiny'] text-lg text-[#1A1A2E]">{title}</h3>
-        <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">{description}</p>
-      </div>
-      {/* Scaled preview */}
-      <div className="flex justify-center">
-        <div style={{ width: scaledW, height: scaledH, overflow: 'hidden', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
-          <div style={{ transform: `scale(${previewScale})`, transformOrigin: 'top left', width: previewWidth, height: previewHeight }}>
-            {children}
-          </div>
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <button
-          onClick={onDownload}
-          disabled={downloading || downloadingPdf}
-          className="flex-1 py-3.5 rounded-xl font-bold text-[14px] text-[#4A4B98] font-['Montserrat'] border-2 border-[#4A4B98] disabled:opacity-50 active:bg-indigo-50 transition-colors"
-        >
-          {downloading ? 'Generating…' : '⬇ PNG'}
-        </button>
-        <button
-          onClick={onDownloadPdf}
-          disabled={downloading || downloadingPdf}
-          className="flex-1 py-3.5 rounded-xl font-bold text-[14px] text-white font-['Montserrat'] bg-[#4A4B98] disabled:opacity-50 active:opacity-80 transition-opacity"
-        >
-          {downloadingPdf ? 'Generating…' : '⬇ PDF'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 /**
  * Ready-made social post — BinPerks artwork, and the caption to go with it.
  *
@@ -582,6 +320,133 @@ function SocialPostSection({ joinUrl }: { joinUrl: string }) {
   )
 }
 
+
+/**
+ * One material, as a card in a horizontal strip.
+ *
+ * THE FILE IS BUILT WHEN IT IS ASKED FOR. There is nothing to preview from
+ * storage and nothing cached: the route composes the BinPerks artwork with
+ * this store's name and QR on the way out, so a download is a request rather
+ * than a link. The button therefore has to show its own progress.
+ *
+ * A material whose artwork admin has not uploaded is shown, disabled, saying
+ * so \u2014 rather than hidden, which would leave a merchant wondering whether
+ * they had missed something.
+ */
+function MaterialCard({
+  spec, storeId, available,
+}: {
+  spec: MaterialSpec
+  storeId: string | null
+  available: boolean
+}) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function download() {
+    if (!available || !storeId) return
+    setBusy(true); setErr('')
+    try {
+      const res = await fetch(`/api/merchant/marketing/${spec.slug}?storeId=${encodeURIComponent(storeId)}`)
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setErr(d.error === 'artwork_missing' ? 'Artwork not ready yet.' : 'Could not build that file.')
+        return
+      }
+      // Blob, not a plain link: the route answers with an attachment and this
+      // keeps the merchant on the page rather than navigating away from it.
+      const blob = await res.blob()
+      const name = res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]
+        ?? `${spec.fileStem}.${spec.output}`
+      const href = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = href; a.download = name
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(href)
+    } catch {
+      setErr('Could not build that file.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <article className="w-[260px] flex-shrink-0 bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2.5">
+      <div className="min-h-[3.5rem]">
+        <h3 className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{spec.label}</h3>
+        <p className="text-[11px] text-[#8E8EA8] font-medium mt-1 leading-snug">{spec.description}</p>
+      </div>
+
+      {err && <p className="text-[11px] font-semibold text-[#DA1212]">{err}</p>}
+
+      <button
+        onClick={download}
+        disabled={!available || busy || !storeId}
+        title={available ? undefined : 'BinPerks has not published this artwork yet'}
+        className="w-full mt-auto py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed active:opacity-80 transition-opacity"
+        style={{ backgroundColor: '#4A4B98' }}
+      >
+        {busy ? 'Preparing\u2026'
+          : !available ? 'Coming soon'
+          : `Download ${spec.output.toUpperCase()}`}
+      </button>
+    </article>
+  )
+}
+
+/** One titled, horizontally scrolling strip of materials. */
+function MaterialSection({
+  section, storeId,
+}: {
+  section: { id: 'register' | 'signage'; title: string; subtitle: string }
+  storeId: string | null
+}) {
+  const [availability, setAvailability] = useState<Record<string, boolean>>({})
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/merchant/marketing')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (cancelled || !d) return
+        const map: Record<string, boolean> = {}
+        for (const m of d.materials ?? []) map[m.slug] = !!m.available
+        setAvailability(map)
+      })
+      .catch(() => { /* everything shows as not-ready; nothing breaks */ })
+      .finally(() => { if (!cancelled) setLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  const items = materialsInSection(section.id)
+
+  return (
+    <section className="flex flex-col gap-2.5">
+      <div className="px-1">
+        <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">{section.title}</h2>
+        <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5">{section.subtitle}</p>
+      </div>
+
+      {/* Scrolls sideways inside its own box; the tab never scrolls sideways.
+          The negative margin lets the cards bleed to the edge while the padding
+          keeps the first one aligned with the heading. */}
+      <div className="overflow-x-auto -mx-4 px-4 pb-1">
+        <div className="flex gap-3 w-max items-stretch">
+          {items.map(spec => (
+            <MaterialCard
+              key={spec.slug}
+              spec={spec}
+              storeId={storeId}
+              available={loaded ? (availability[spec.slug] ?? false) : false}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export function MarketingTab({ storeId, stores }: { storeId: string | null; stores: { id: string; storeName: string; storeKey?: string; city: string; state: string }[] }) {
   const activeStore = storeId ? stores.find(s => s.id === storeId) : stores[0]
   const [copied, setCopied] = useState(false)
@@ -589,30 +454,10 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   const [messageSaving, setMessageSaving] = useState(false)
   const [messageSaved, setMessageSaved] = useState(false)
   const [messageLoading, setMessageLoading] = useState(true)
-  const [brandColor, setBrandColor] = useState('#4A4B98')
-  const [logoUrl, setLogoUrl] = useState<string | null>(null)
-  const [downloading, setDownloading] = useState<string | null>(null)
-
-  const posterRef = useRef<HTMLDivElement>(null)
-  const tentRef   = useRef<HTMLDivElement>(null)
-  const clingRef  = useRef<HTMLDivElement>(null)
 
   const joinUrl = activeStore?.storeKey
     ? `https://app.binperks.com/join/${activeStore.storeKey}`
     : ''
-
-  // The at-the-register code. Built from JOIN_SOURCE_REGISTER rather than the
-  // string typed out again: this URL is what /api/join/create matches on to
-  // award the signup stamp, and it ends up printed on a sticker that cannot be
-  // corrected once it is on a counter. One constant means the code on the
-  // counter and the route that honours it can never drift apart.
-  const registerUrl = activeStore?.storeKey
-    ? `${joinUrl}/${JOIN_SOURCE_REGISTER}`
-    : ''
-
-  const safeName = (activeStore?.storeName ?? 'store').replace(/\s+/g, '-').toLowerCase()
-
-  const brandName = activeStore?.storeName ?? 'BinPerks'
 
   const activeStoreId = storeId ?? stores[0]?.id
 
@@ -622,11 +467,7 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
     fetch(`/api/merchant/store?storeId=${activeStoreId}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d) {
-          setStoreMessage(d.storeMessage ?? '')
-          setBrandColor(d.brandColor ?? '#4A4B98')
-          setLogoUrl(d.logoUrl ?? null)
-        }
+        if (d) setStoreMessage(d.storeMessage ?? '')
         setMessageLoading(false)
       })
   }, [activeStoreId])
@@ -649,65 +490,22 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
     if (res.ok) { setMessageSaved(true); setTimeout(() => setMessageSaved(false), 3000) }
   }
 
-  async function handleDownload(key: string, ref: RefObject<HTMLDivElement | null>, filename: string) {
-    if (!joinUrl) return
-    setDownloading(key)
-    try {
-      await downloadMaterial(ref, filename)
-      if (activeStoreId) {
-        fetch('/api/merchant/store', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId: activeStoreId, marketingDownloaded: true }) }).catch(() => {})
-      }
-    } finally {
-      setDownloading(null)
-    }
-  }
-
-  async function handleDownloadPdf(
-    key: string,
-    ref: RefObject<HTMLDivElement | null>,
-    filename: string,
-    widthIn: number,
-    heightIn: number,
-  ) {
-    if (!joinUrl) return
-    setDownloading(key)
-    try {
-      await downloadMaterialAsPdf(ref, filename, widthIn, heightIn)
-      if (activeStoreId) {
-        fetch('/api/merchant/store', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId: activeStoreId, marketingDownloaded: true }) }).catch(() => {})
-      }
-    } finally {
-      setDownloading(null)
-    }
-  }
-
-  const materialProps = { brandColor, brandName, logoUrl, joinUrl }
-
-  /**
-   * The table tent is the one printed material that stands ON the counter, so
-   * its code is the register code — scanning it awards the new member their
-   * visit stamp for that day. Everything else keeps the plain join URL: the
-   * social graphic is posted online, and the poster and window cling go on a
-   * wall or a door where someone may be reading them on the way past rather
-   * than standing at the till.
-   *
-   * Spread over materialProps rather than given its own prop, so the template
-   * itself stays unaware of which URL it was handed and there is exactly one
-   * place this substitution happens.
-   */
-  const tentProps = { ...materialProps, joinUrl: registerUrl }
-
   return (
-    <div className="flex flex-col gap-4 p-4 pb-12">
+    <div className="flex flex-col gap-5 p-4 pb-12">
 
-      {/* The two standalone QR cards used to sit here. They were removed as
-          redundant: every printed material below already carries the right
-          code for where it goes — the table tent the register one, the poster
-          and window cling the plain join link — so a bare code on its own was
-          a fourth copy with no instructions attached to it. registerUrl is
-          still built below; the table tent is what uses it now. */}
+      {/* The two material sections. Everything in them is built server-side
+          from the BinPerks artwork admin uploads \u2014 see lib/marketing-render. */}
+      {SECTIONS.map(section => (
+        <MaterialSection
+          key={section.id}
+          section={section}
+          storeId={activeStoreId ?? null}
+        />
+      ))}
+
+      {/* Social post kit \u2014 admin-written artwork and caption, personalised
+          with this store's join link. Not one of the printed materials. */}
+      <SocialPostSection joinUrl={joinUrl} />
 
       {/* Store Message */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -739,112 +537,19 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
                 onClick={handleStoreMessageSave}
                 disabled={messageSaving || messageSaved}
                 className="w-full py-3.5 rounded-xl font-bold text-[14px] font-['Montserrat'] transition-all disabled:opacity-70"
-                style={{
-                  backgroundColor: messageSaved ? '#2A7D34' : '#4A4B98',
-                  color: 'white',
-                }}
+                style={{ backgroundColor: messageSaved ? '#2A7D34' : '#4A4B98', color: 'white' }}
               >
-                {messageSaving ? 'Saving…' : messageSaved ? '✓ Saved' : 'Save Message'}
+                {messageSaving ? 'Saving\u2026' : messageSaved ? '\u2713 Saved' : 'Save Message'}
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* Marketing Materials */}
-      <div className="flex flex-col gap-1 px-1 pt-2">
-        <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Marketing materials</h2>
-        <p className="text-[12px] text-[#8E8EA8] font-medium">
-          Download print-ready and digital materials branded for your store.
-        </p>
-      </div>
-
-      {/* Off-screen templates for capture.
-          THE WHITE BAR LIVED HERE. This container shrink-wraps to its widest
-          child — the 1080px social graphic — and each wrapper below is a plain
-          block div, so it stretched to 1080px too. html2canvas captured the
-          wrapper, not the artwork, giving the 816px poster a 264px white strip
-          down the right-hand side. Each wrapper is now pinned to its own
-          artwork's exact size. */}
-      <div style={{ position: 'fixed', left: -9999, top: -9999, pointerEvents: 'none', zIndex: -1 }}>
-        <div ref={posterRef} style={{ width: LETTER_W, height: LETTER_H }}>
-          <PosterTemplate {...materialProps} />
-        </div>
-        <div ref={tentRef} style={{ width: LETTER_W, height: LETTER_H }}>
-          <LetterSheet guide="solid">
-            <TableTentTemplate {...tentProps} />
-          </LetterSheet>
-        </div>
-        <div ref={clingRef} style={{ width: LETTER_W, height: LETTER_H }}>
-          <LetterSheet cutLabel="Cut along the dashed line">
-            <WindowClingTemplate {...materialProps} />
-          </LetterSheet>
-        </div>
-      </div>
-
-      {/* Material 1 — Table Tent.
-          First of the printed materials because it is the counter piece, and
-          the only one carrying the register code. */}
-      <MaterialCard
-        title="Table Tent Card"
-        description="8.5×11 sheet — print, cut and fold to stand on your counter"
-        previewScale={0.31}
-        previewWidth={LETTER_W}
-        previewHeight={LETTER_H}
-        onDownload={() => handleDownload('tent', tentRef, `binperks-tabletent-${safeName}.png`)}
-        downloading={downloading === 'tent-png'}
-        onDownloadPdf={() => handleDownloadPdf('tent-pdf', tentRef, `binperks-tabletent-${safeName}.pdf`, 8.5, 11)}
-        downloadingPdf={downloading === 'tent-pdf'}
-      >
-        {/* tentProps, matching the off-screen copy above — the preview has to
-            show the same code that downloading actually produces. */}
-        <LetterSheet guide="solid">
-          <TableTentTemplate {...tentProps} />
-        </LetterSheet>
-      </MaterialCard>
-
-      {/* Material 2 — QR Code Poster */}
-      <MaterialCard
-        title="QR Code Poster"
-        description="8.5×11 — print and hang at your register or entrance"
-        previewScale={0.31}
-        previewWidth={816}
-        previewHeight={1056}
-        onDownload={() => handleDownload('poster', posterRef, `binperks-poster-${safeName}.png`)}
-        downloading={downloading === 'poster-png'}
-        onDownloadPdf={() => handleDownloadPdf('poster-pdf', posterRef, `binperks-poster-${safeName}.pdf`, 8.5, 11)}
-        downloadingPdf={downloading === 'poster-pdf'}
-      >
-        <PosterTemplate {...materialProps} />
-      </MaterialCard>
-
-      {/* Material 3 — Window Cling */}
-      <MaterialCard
-        title="Window Cling"
-        description="8.5×11 sheet — print on cling paper, cut out and stick to your door"
-        previewScale={0.31}
-        previewWidth={LETTER_W}
-        previewHeight={LETTER_H}
-        onDownload={() => handleDownload('cling', clingRef, `binperks-windowcling-${safeName}.png`)}
-        downloading={downloading === 'cling-png'}
-        onDownloadPdf={() => handleDownloadPdf('cling-pdf', clingRef, `binperks-windowcling-${safeName}.pdf`, 8.5, 11)}
-        downloadingPdf={downloading === 'cling-pdf'}
-      >
-        <LetterSheet cutLabel="Cut along the dashed line">
-          <WindowClingTemplate {...materialProps} />
-        </LetterSheet>
-      </MaterialCard>
-
-      {/* Material 4 — the ready-made social post, replacing the generated
-          1080×1080 graphic. Artwork plus the caption to go with it: the
-          graphic alone still left every merchant writing their own words. */}
-      <SocialPostSection joinUrl={joinUrl} />
-
-      {/* ── Member join link ── last on the tab, deliberately.
-          It used to sit at the top, above every material. It is the raw URL
-          behind all of them — the QR codes encode it and the social caption
-          embeds it — so a merchant who needs the bare link is looking for it
-          on purpose, while the materials are what they came here to get. */}
+      {/* \u2500\u2500 Member join link \u2500\u2500 last on the tab, deliberately.
+          It is the raw URL behind every material above it \u2014 the QR codes
+          encode it and the social caption embeds it \u2014 so a merchant who needs
+          the bare link is looking for it on purpose. */}
       <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
         <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Member join link</h2>
         <p className="text-[12px] text-[#8E8EA8] font-medium">
@@ -858,11 +563,10 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
             className="flex-shrink-0 text-[12px] font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
             style={{ backgroundColor: copied ? '#2A7D34' : '#4A4B9815', color: copied ? 'white' : '#4A4B98' }}
           >
-            {copied ? '✓ Copied' : 'Copy'}
+            {copied ? '\u2713 Copied' : 'Copy'}
           </button>
         </div>
       </div>
-
     </div>
   )
 }
