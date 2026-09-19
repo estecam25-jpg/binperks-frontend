@@ -1,6 +1,18 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  /**
+   * The bundled font has to reach the serverless function.
+   *
+   * public/ is uploaded as static CDN assets, which does NOT put it on the
+   * function's filesystem — and the marketing renderer reads the TTF off disk
+   * (lib/marketing-render). Tracing is by route glob; without this the route
+   * deploys and then throws ENOENT the first time a merchant downloads a JPG.
+   */
+  outputFileTracingIncludes: {
+    '/api/merchant/marketing/[material]': ['./public/fonts/**'],
+  },
+
   async redirects() {
     return [
       // Redirect old /join/[storeKey]/* to /member/join/[storeKey]/*

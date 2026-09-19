@@ -12,15 +12,25 @@
  *   PDF — pdf-lib draws it, with a StandardFont. Those fonts are embedded by
  *         pdf-lib itself, so the text cannot depend on whatever fonts the
  *         serverless image happens to ship. Four of the six materials are PDFs.
- *   JPG — sharp draws it through an SVG, because a JPEG has to arrive with the
- *         name already baked in. That path DOES depend on a system font being
- *         present; see rasteriseName.
+ *   JPG — sharp draws it through an SVG, because a JPEG has to arrive with
+ *         the name already baked in. That SVG carries the glyphs as PATHS,
+ *         traced from a bundled font, so it depends on no system font either.
+ *         See rasteriseName.
  *
  * The QR never depends on fonts either way: it is an image, composited by
  * sharp onto the artwork before anything else happens.
  */
 
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import sharp from 'sharp'
+// A namespace import: opentype.js's ESM build has named exports and no
+// default, so `import opentype from` resolves to undefined at runtime.
+//
+// PINNED TO 1.x. On 2.0.0 getPath emitted NaN coordinates part-way through a
+// string for this font — the first letter drew and the rest of the name came
+// out as a smear. 1.3.4 traces the same text cleanly.
+import * as opentype from 'opentype.js'
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import {
@@ -39,6 +49,37 @@ const DPI = 300
 /** How much of the placeholder box the replacement covers, as a fraction of the
  *  box, leaving the design's own border visible. */
 const INSET = 0.06
+
+/**
+ * Montserrat Bold, bundled in the repo.
+ *
+ * WHY BUNDLED AND NOT A SYSTEM FONT: the JPEG materials have to arrive with
+ * the store name already drawn, and sharp renders SVG text through librsvg,
+ * which asks fontconfig for the family. A serverless image need not ship any
+ * font at all — which is exactly how the name came out blank on Vercel while
+ * looking fine locally.
+ *
+ * The font is never handed to librsvg. opentype.js traces the glyphs and the
+ * SVG carries a <path>, so nothing in the render path consults fontconfig.
+ *
+ * Montserrat because it is already the BinPerks body face (see app/layout).
+ * public/fonts is also web-servable, but this reads it off disk; next.config
+ * traces it into the function so the file is actually there.
+ */
+const FONT_PATH = path.join(process.cwd(), 'public', 'fonts', 'Montserrat-Bold.ttf')
+
+let cachedFont: opentype.Font | null = null
+
+function nameFont(): opentype.Font {
+  if (!cachedFont) cachedFont = opentype.parse(toArrayBuffer(readFileSync(FONT_PATH)))
+  return cachedFont
+}
+
+/** Node Buffers are views into a pooled ArrayBuffer; opentype.js needs the
+ *  bytes on their own or it reads whatever else is sharing the pool. */
+function toArrayBuffer(buf: Buffer): ArrayBuffer {
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
+}
 
 export interface Rect { x: number; y: number; w: number; h: number }
 
@@ -284,23 +325,32 @@ async function rasteriseName(
   name: string, boxW: number, boxH: number, ink: { r: number; g: number; b: number },
 ): Promise<Buffer> {
   const text = name.trim() || 'Your Store'
-  let size = Math.floor(boxH * 0.62)
-  while (size > 8 && text.length * size * 0.58 > boxW * 0.94) size -= 1
+  const font = nameFont()
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${boxW}" height="${boxH}">
-    <text x="${boxW / 2}" y="${boxH / 2}" dominant-baseline="central" text-anchor="middle"
-          font-family="Arial, Helvetica, 'DejaVu Sans', 'Liberation Sans', sans-serif"
-          font-size="${size}" font-weight="bold"
-          fill="rgb(${ink.r},${ink.g},${ink.b})">${escapeXml(text)}</text>
+  // Measured, not estimated. advanceWidth comes from the font itself, so the
+  // size that fits is solved rather than guessed at 0.58em a character.
+  let size = Math.floor(boxH * 0.62)
+  while (size > 8 && font.getAdvanceWidth(text, size) > boxW * 0.92) size -= 1
+
+  const width = font.getAdvanceWidth(text, size)
+
+  // Centred on the cap height rather than the em box: a font's ascent and
+  // descent leave the visual centre above the baseline midpoint, and centring
+  // on the em box makes short text sit low in its box.
+  const scale = size / font.unitsPerEm
+  const capTop = (font.tables.os2?.sCapHeight ?? font.ascender * 0.72) * scale
+  const baseline = boxH / 2 + capTop / 2
+
+  const d = font.getPath(text, (boxW - width) / 2, baseline, size).toPathData(2)
+
+  // A PATH, not <text>: no font-family for librsvg to look up, so this renders
+  // identically on a host with no fonts installed.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(boxW)}" height="${Math.round(boxH)}">
+    <path d="${d}" fill="rgb(${ink.r},${ink.g},${ink.b})"/>
   </svg>`
   return sharp(Buffer.from(svg)).png().toBuffer()
 }
 
-function escapeXml(s: string): string {
-  return s.replace(/[<>&'"]/g, c => (
-    { '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c] as string
-  ))
-}
 
 /**
  * Lay finished units onto sheets and return a PDF.
