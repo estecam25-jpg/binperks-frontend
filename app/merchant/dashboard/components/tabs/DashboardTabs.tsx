@@ -6,6 +6,7 @@ import BinPhotosCard from '../BinPhotosCard'
 import StoreAddressCard from '../StoreAddressCard'
 import SuggestedPerks from '../SuggestedPerks'
 import { validatePin } from '@/lib/pin-strength'
+import { personalizeCaption } from '@/lib/social-caption'
 import { JOIN_SOURCE_REGISTER } from '@/lib/join-source'
 
 // --- PerksTab ---
@@ -465,68 +466,52 @@ function MaterialCard({
 }
 
 /**
- * The square images for the social post, in the order they are shown.
+ * Ready-made social post — BinPerks artwork, and the caption to go with it.
  *
- * DROP-IN SLOTS. Esteban supplies the four finished graphics; until they are
- * in the repo each entry is null and renders a numbered placeholder, so the
- * section ships and looks right with the copy that is ready now.
+ * ADMIN WRITES BOTH, once, for the whole network (admin dashboard → Social
+ * Media). Nothing here is per-merchant except the join link, which is
+ * substituted into the caption for whichever store is selected. That is why
+ * the caption arrives raw with its placeholder still in it: this component is
+ * the only place that knows whose link to put in.
  *
- * TO ADD THEM: put the files in `public/marketing/social/` and set each `src`
- * to its path, e.g. '/marketing/social/1.jpg'. Nothing else changes — the
- * strip, the alt text and the layout are already sized for 1:1 squares. Keep
- * them square and keep them small enough to load on a phone.
- */
-const SOCIAL_POST_IMAGES: { src: string | null; alt: string }[] = [
-  { src: null, alt: 'BinPerks social post graphic 1' },
-  { src: null, alt: 'BinPerks social post graphic 2' },
-  { src: null, alt: 'BinPerks social post graphic 3' },
-  { src: null, alt: 'BinPerks social post graphic 4' },
-]
-
-/**
- * The caption a merchant posts alongside the graphic.
- *
- * The join link is interpolated rather than left as a placeholder for someone
- * to fill in: a caption pasted with "[your link here]" still in it is the
- * failure this button exists to prevent. It is the store's own join URL, the
- * same one the rest of this tab hands out.
- *
- * Built as an array of lines so the blank lines between paragraphs are
- * explicit — they matter on Instagram, where a wall of text collapses.
- */
-function socialCaption(joinUrl: string): string {
-  return [
-    "\uD83C\uDF89 We're officially a BinPerks participating merchant!",
-    '',
-    'Sign up today and start earning stamps when you shop with us. Unlock rewards, enjoy member perks, and discover even more participating bin stores.',
-    '',
-    `\uD83D\uDC49 Join BinPerks here: ${joinUrl}`,
-    '',
-    'More Bins. More Wins!\u00AE',
-    '',
-    '#BinPerks #BinStore #DiscountStores #BargainShopping #FleaMarket #ThriftStore',
-  ].join('\n')
-}
-
-/**
- * Ready-made social post — artwork to attach, and the words to go with it.
- *
- * Replaces the generated 1080×1080 graphic. That asset was branded correctly
- * but still left the merchant to write their own caption, which is the part
- * most of them will not do.
+ * The four hardcoded placeholder squares that used to sit here are gone — the
+ * strip now shows exactly what admin has uploaded, and says so plainly when
+ * that is nothing.
  */
 function SocialPostSection({ joinUrl }: { joinUrl: string }) {
-  const [copied, setCopied] = useState(false)
-  const caption = socialCaption(joinUrl || 'https://app.binperks.com')
+  const [images, setImages]   = useState<{ id: string; url: string | null }[]>([])
+  const [caption, setCaption] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [copied, setCopied]   = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/merchant/social-graphics')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (cancelled || !d) return
+        setImages(d.images ?? [])
+        setCaption(d.caption ?? null)
+      })
+      .catch(() => { /* the section renders its empty state; no error box */ })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Substituted HERE, not on the server: a merchant with several locations
+  // switches stores from the picker on this page, and the caption has to
+  // follow without another round trip.
+  const personalized = caption ? personalizeCaption(caption, joinUrl) : ''
 
   async function handleCopy() {
+    if (!personalized) return
     try {
-      await navigator.clipboard.writeText(caption)
+      await navigator.clipboard.writeText(personalized)
     } catch {
       // Clipboard is blocked in some in-app browsers. The caption is on screen
       // to select by hand, and a textarea copy still works where it is not.
       const el = document.createElement('textarea')
-      el.value = caption
+      el.value = personalized
       document.body.appendChild(el)
       el.select()
       document.execCommand('copy')
@@ -541,59 +526,58 @@ function SocialPostSection({ joinUrl }: { joinUrl: string }) {
       <div>
         <h3 className="font-['Coiny'] text-lg text-[#1A1A2E]">Social Media Post</h3>
         <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
-          Pick a square, copy the caption, post it on Instagram, Facebook or TikTok.
+          Save a graphic, copy the caption, post it on Instagram, Facebook or TikTok.
         </p>
       </div>
 
-      {/* Scrolls sideways inside its own box; the tab never scrolls sideways.
-          The negative margin lets the strip bleed to the card edge while the
-          padding keeps the first square aligned with the text above it. */}
-      <div className="overflow-x-auto -mx-5 px-5">
-        <div className="flex gap-2.5 w-max pb-1">
-          {SOCIAL_POST_IMAGES.map((img, i) => (
-            <div key={i} className="w-40 h-40 flex-shrink-0 rounded-xl overflow-hidden">
-              {img.src ? (
+      {loading ? (
+        <div className="h-40 rounded-xl bg-[#F5F5F8] animate-pulse" />
+      ) : images.length === 0 ? (
+        <p className="text-[13px] text-[#8E8EA8] font-medium">
+          Social media graphics coming soon
+        </p>
+      ) : (
+        /* Scrolls sideways inside its own box; the tab never scrolls sideways.
+           The negative margin lets the strip bleed to the card edge while the
+           padding keeps the first square aligned with the text above it. */
+        <div className="overflow-x-auto -mx-5 px-5">
+          <div className="flex gap-2.5 w-max pb-1">
+            {images.map((img, i) => (
+              img.url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={img.src}
-                  alt={img.alt}
-                  className="w-40 h-40 object-cover bg-[#F5F5F8] border border-[#EBEBF2] rounded-xl"
+                  key={img.id}
+                  src={img.url}
+                  alt={`BinPerks social graphic ${i + 1}`}
+                  className="w-40 h-40 flex-shrink-0 object-cover rounded-xl bg-[#F5F5F8] border border-[#EBEBF2]"
                 />
-              ) : (
-                <div className="w-40 h-40 rounded-xl border-2 border-dashed border-[#D1D1DC] bg-[#F5F5F8] flex flex-col items-center justify-center gap-1">
-                  <span className="text-[22px] leading-none">{'\u{1F5BC}\uFE0F'}</span>
-                  <p className="text-[10px] font-bold text-[#B0B0C8]">Image {i + 1}</p>
-                </div>
-              )}
-            </div>
-          ))}
+              ) : null
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Said once, plainly, rather than on each tile — four identical
-          "coming soon" labels would be four apologies. */}
-      {SOCIAL_POST_IMAGES.every(img => !img.src) && (
-        <p className="text-[11px] font-medium text-[#B0B0C8] -mt-2">
-          Post graphics are on the way. The caption below is ready to use now.
-        </p>
       )}
 
-      {/* whitespace-pre-wrap: the blank lines between paragraphs are the
-          layout, and collapsing them would show the merchant something other
-          than what the button copies. */}
-      <div className="rounded-xl bg-[#F5F5F8] px-4 py-3.5">
-        <p className="text-[12px] font-medium text-[#1A1A2E] leading-relaxed whitespace-pre-wrap break-words">
-          {caption}
-        </p>
-      </div>
+      {/* No caption written yet shows NOTHING — not an empty box and not a
+          dead Copy button. whitespace-pre-wrap because the blank lines between
+          paragraphs are the layout, and collapsing them would show the
+          merchant something other than what the button copies. */}
+      {!loading && personalized && (
+        <>
+          <div className="rounded-xl bg-[#F5F5F8] px-4 py-3.5">
+            <p className="text-[12px] font-medium text-[#1A1A2E] leading-relaxed whitespace-pre-wrap break-words">
+              {personalized}
+            </p>
+          </div>
 
-      <button
-        onClick={handleCopy}
-        className="w-full py-3.5 rounded-xl font-bold text-[14px] text-white font-['Montserrat'] active:opacity-80 transition-all"
-        style={{ backgroundColor: copied ? '#2A7D34' : '#4A4B98' }}
-      >
-        {copied ? '\u2713 Caption copied' : 'Copy Text'}
-      </button>
+          <button
+            onClick={handleCopy}
+            className="w-full py-3.5 rounded-xl font-bold text-[14px] text-white font-['Montserrat'] active:opacity-80 transition-all"
+            style={{ backgroundColor: copied ? '#2A7D34' : '#4A4B98' }}
+          >
+            {copied ? '✓ Caption copied' : 'Copy Caption'}
+          </button>
+        </>
+      )}
     </div>
   )
 }
@@ -725,25 +709,6 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
           a fourth copy with no instructions attached to it. registerUrl is
           still built below; the table tent is what uses it now. */}
 
-      {/* Join link */}
-      <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
-        <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Member join link</h2>
-        <p className="text-[12px] text-[#8E8EA8] font-medium">
-          Share this link on social media or in your store&apos;s bio to let customers sign up online.
-        </p>
-        <div className="flex items-center gap-2 bg-[#F5F5F8] rounded-xl px-3 py-2.5">
-          <p className="flex-1 text-[12px] font-semibold text-[#8E8EA8] truncate">{joinUrl || 'Not provisioned yet'}</p>
-          <button
-            onClick={handleCopyLink}
-            disabled={!joinUrl}
-            className="flex-shrink-0 text-[12px] font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-            style={{ backgroundColor: copied ? '#2A7D34' : '#4A4B9815', color: copied ? 'white' : '#4A4B98' }}
-          >
-            {copied ? '✓ Copied' : 'Copy'}
-          </button>
-        </div>
-      </div>
-
       {/* Store Message */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[#EBEBF2]">
@@ -874,6 +839,29 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
           1080×1080 graphic. Artwork plus the caption to go with it: the
           graphic alone still left every merchant writing their own words. */}
       <SocialPostSection joinUrl={joinUrl} />
+
+      {/* ── Member join link ── last on the tab, deliberately.
+          It used to sit at the top, above every material. It is the raw URL
+          behind all of them — the QR codes encode it and the social caption
+          embeds it — so a merchant who needs the bare link is looking for it
+          on purpose, while the materials are what they came here to get. */}
+      <div className="bg-white rounded-2xl px-5 py-5 shadow-sm flex flex-col gap-3">
+        <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Member join link</h2>
+        <p className="text-[12px] text-[#8E8EA8] font-medium">
+          Share this link on social media or in your store&apos;s bio to let customers sign up online.
+        </p>
+        <div className="flex items-center gap-2 bg-[#F5F5F8] rounded-xl px-3 py-2.5">
+          <p className="flex-1 text-[12px] font-semibold text-[#8E8EA8] truncate">{joinUrl || 'Not provisioned yet'}</p>
+          <button
+            onClick={handleCopyLink}
+            disabled={!joinUrl}
+            className="flex-shrink-0 text-[12px] font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+            style={{ backgroundColor: copied ? '#2A7D34' : '#4A4B9815', color: copied ? 'white' : '#4A4B98' }}
+          >
+            {copied ? '✓ Copied' : 'Copy'}
+          </button>
+        </div>
+      </div>
 
     </div>
   )

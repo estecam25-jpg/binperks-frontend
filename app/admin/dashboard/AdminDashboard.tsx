@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin-emails'
 import ContentTab from './ContentTab'
 import AnnouncementsTab from './AnnouncementsTab'
+import SocialMediaTab from './SocialMediaTab'
 import AnalyticsTab from './AnalyticsTab'
 import { StatCard, Spinner } from './ui'
 import { CONTENT_TYPES, contentTypeBySlug } from '@/lib/admin-content'
@@ -117,7 +118,7 @@ interface ScannerStats {
 }
 type TabId =
   | 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'scanner' | 'alerts'
-  | 'analytics' | 'announcements'
+  | 'analytics' | 'announcements' | 'social'
   // Content tabs, one per entry in CONTENT_TYPES. Prefixed so a content slug
   // can never collide with an operational tab name.
   | `content:${string}`
@@ -1349,6 +1350,7 @@ export default function AdminDashboard() {
     { id: 'scanner',   label: 'Scanner' },
     { id: 'alerts',    label: 'Alerts' },
     { id: 'announcements', label: 'Announcements' },
+    { id: 'social',    label: 'Social Media' },
     // Content management. Driven by the registry so adding a type adds a tab.
     ...CONTENT_TYPES.map(t => ({ id: `content:${t.slug}` as TabId, label: t.label })),
   ]
@@ -1396,6 +1398,7 @@ export default function AdminDashboard() {
         {/* Both fetch their own data; nothing to lazy-load from here. */}
         {tab === 'analytics' && <AnalyticsTab />}
         {tab === 'announcements' && <AnnouncementsTab />}
+        {tab === 'social' && <SocialMediaTab />}
 
         {/* ContentTab fetches its own rows keyed on the slug, so switching
             between content tabs reloads without any wiring here. */}
