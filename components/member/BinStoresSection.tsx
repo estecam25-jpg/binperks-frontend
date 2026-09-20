@@ -64,9 +64,17 @@ function StoreCard({ store }: { store: Store }) {
 
   return (
     <article className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2`}>
+      {/* ABOVE the reveal, so the logo never covers the name of the store it
+          belongs to. It used to sit underneath, which meant a member scanning
+          the row saw five logos and had to look below each one to find out
+          whose it was — and a store with no logo showed an empty box first. */}
+      <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">
+        {store.displayName}
+      </p>
+
       {/* With a message the mark becomes the cover and holding reveals the
           words underneath. Without one there is nothing to reveal, so the mark
-          is drawn plainly in a box of the same height — the row stays even
+          is drawn plainly in a box of the same shape — the row stays even
           either way. */}
       {message ? (
         <RevealBox cover={mark}>
@@ -77,10 +85,6 @@ function StoreCard({ store }: { store: Store }) {
       ) : (
         <div className="relative aspect-square w-full rounded-xl overflow-hidden">{mark}</div>
       )}
-
-      <p className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">
-        {store.displayName}
-      </p>
 
       {/* One destination for every card: the Stores tab, where the member gets
           the price, the perks and the directions. A per-store deep link would

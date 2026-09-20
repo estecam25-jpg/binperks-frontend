@@ -33,6 +33,16 @@ interface Template {
   updatedAt: string | null
 }
 
+/** One per MATERIAL, not per design — see lib/marketing-lifestyle. */
+interface Lifestyle {
+  slug: string
+  label: string
+  section: 'register' | 'signage'
+  hasImage: boolean
+  previewUrl: string | null
+  updatedAt: string | null
+}
+
 const FIELDS: { key: keyof Rect; label: string }[] = [
   { key: 'x', label: 'X' }, { key: 'y', label: 'Y' },
   { key: 'w', label: 'W' }, { key: 'h', label: 'H' },
@@ -178,8 +188,93 @@ function TemplateCard({ t, onSaved }: { t: Template; onSaved: () => void }) {
   )
 }
 
+/**
+ * One material's lifestyle photo.
+ *
+ * DELIBERATELY PLAIN next to the template cards above it — there are no
+ * rectangles to position, because nothing is ever composited onto this. It is
+ * a photograph of the finished material in use, and the only decisions are
+ * which file and whether there is one.
+ *
+ * The preview is square because that is the shape of the box it lands in on
+ * the merchant's card; the server crops to square on upload, so what is shown
+ * here is exactly what a merchant sees rather than an approximation of it.
+ */
+function LifestyleCard({ item, onSaved }: { item: Lifestyle; onSaved: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr]   = useState('')
+  const input = useRef<HTMLInputElement>(null)
+
+  async function upload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setBusy(true); setErr('')
+    try {
+      const form = new FormData()
+      form.append('kind', 'lifestyle')
+      form.append('slug', item.slug)
+      form.append('file', file)
+      const res = await fetch('/api/admin/marketing-templates', { method: 'POST', body: form })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setErr(
+          d.error === 'file_too_large'   ? 'That file is too large.' :
+          d.error === 'unreadable_image' ? 'That file could not be read as an image.' :
+          'Upload failed. Try again.',
+        )
+        return
+      }
+      onSaved()
+    } catch { setErr('Upload failed. Try again.') } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-[14px] font-extrabold text-[#1A1A2E]">{item.label}</h3>
+        {!item.hasImage && (
+          <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-[#EBEBF2] text-[#8E8EA8]">
+            Optional
+          </span>
+        )}
+      </div>
+
+      <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-[#F5F5F8] border border-[#EBEBF2]">
+        {item.previewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.previewUrl}
+            alt={`${item.label} lifestyle photo`}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="h-full flex items-center justify-center px-4">
+            <p className="text-[12px] font-semibold text-[#B0B0C8] text-center leading-snug">
+              No photo — merchants see the description instead
+            </p>
+          </div>
+        )}
+      </div>
+
+      {err && <p className="text-[11px] font-semibold text-[#DA1212]">{err}</p>}
+
+      <input ref={input} type="file" accept="image/*" onChange={upload} className="hidden" />
+      <button
+        onClick={() => input.current?.click()}
+        disabled={busy}
+        className="w-full py-2 rounded-xl text-[12px] font-bold border-2 border-[#4A4B98] disabled:opacity-50"
+        style={{ color: BLUE }}
+      >
+        {busy ? 'Working…' : item.hasImage ? 'Replace photo' : 'Upload photo'}
+      </button>
+    </div>
+  )
+}
+
 export default function MarketingTemplatesTab() {
   const [templates, setTemplates] = useState<Template[]>([])
+  const [lifestyle, setLifestyle] = useState<Lifestyle[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
@@ -192,6 +287,7 @@ export default function MarketingTemplatesTab() {
         if (cancelled) return
         if (!d) { setError('Couldn’t load the templates.'); return }
         setTemplates(d.templates ?? [])
+        setLifestyle(d.lifestyle ?? [])
       })
       .catch(() => { if (!cancelled) setError('Couldn’t load the templates.') })
       .finally(() => { if (!cancelled) setLoading(false) })
@@ -251,6 +347,30 @@ export default function MarketingTemplatesTab() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {others.map(t => (
                 <TemplateCard key={t.slug + nonce} t={t} onSaved={() => setNonce(n => n + 1)} />
+              ))}
+            </div>
+          </section>
+
+          {/* Last, and separated: nothing here is printed. It is what the
+              merchant looks at while deciding whether to print. */}
+          <section className="flex flex-col gap-3">
+            <h3 className="text-[13px] font-extrabold text-[#8E8EA8] uppercase tracking-wide">
+              Lifestyle Photos
+            </h3>
+            <p className="text-[11px] text-[#8E8EA8] font-medium -mt-1.5 leading-relaxed">
+              A photo of each material in use, shown on the merchant&apos;s card
+              over the description — they hover or press and hold to read it.
+              One per material, so a single photo covers all five poster
+              designs. Every one is optional: without a photo the card shows its
+              description as plain text.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {lifestyle.map(item => (
+                <LifestyleCard
+                  key={item.slug + nonce}
+                  item={item}
+                  onSaved={() => setNonce(n => n + 1)}
+                />
               ))}
             </div>
           </section>

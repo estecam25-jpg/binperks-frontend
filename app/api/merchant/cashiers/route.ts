@@ -10,6 +10,11 @@
  *   - A cashier CANNOT be a BinPerks member (merchant must enforce)
  *   - PINs are stored as bcrypt hashes — never returned to client in raw form
  *   - Every stamp_event records cashier_id for full audit trail
+ *
+ * PHONE IS INTERNAL TO THE MERCHANT. Optional, returned only to the signed-in
+ * merchant who owns the record, and never sent anywhere else — no GHL call, no
+ * CRM, nothing member-facing. These routes fire no webhooks at all, which is
+ * what keeps that true; see lib/staff-phone before adding one.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -18,6 +23,7 @@ import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
 import { toOne } from '@/lib/supabase-relations'
 import { validatePin } from '@/lib/pin-strength'
+import { normalizeStaffPhone, validateStaffPhone } from '@/lib/staff-phone'
 
 // Auth (identify the logged-in merchant) uses the server client so we read
 // the session cookie. All actual table reads/writes use the admin client.
@@ -36,7 +42,7 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from('staff_users')
-    .select('id, name, email, role, is_active, created_at, stores(display_name)')
+    .select('id, name, email, phone, role, is_active, created_at, stores(display_name)')
     .eq('merchant_id', owner.merchantId)
     .eq('is_active', true)
     .order('role')
@@ -52,7 +58,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     cashiers: (data ?? []).map((c: {
-      id: string; name: string; email: string; role: string
+      id: string; name: string; email: string; phone: string | null; role: string
       is_active: boolean; created_at: string
       // to-ONE embed: an object, not an array — see lib/supabase-relations.
       stores: { display_name: string } | { display_name: string }[] | null
@@ -60,6 +66,9 @@ export async function GET(req: NextRequest) {
       id:        c.id,
       name:      c.name,
       email:     c.email,
+      // Only ever reaches the merchant who owns this record — never a member
+      // screen and never an outbound webhook.
+      phone:     c.phone,
       role:      c.role,
       // PIN is never returned — it's a bcrypt hash and the merchant doesn't need it
       isActive:  c.is_active,
@@ -76,11 +85,20 @@ export async function POST(req: NextRequest) {
   if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminSupabaseClient()
-  const { storeId, name, email, pin, role } = await req.json()
+  const { storeId, name, email, phone, pin, role } = await req.json()
 
   if (!storeId || !name || !pin) {
     return NextResponse.json({ error: 'storeId, name, and pin are required' }, { status: 400 })
   }
+
+  // Optional. Same shared check the form runs, because a direct POST skips the
+  // form entirely — see lib/staff-phone.
+  const rawPhone = typeof phone === 'string' ? phone : ''
+  const phoneError = validateStaffPhone(rawPhone)
+  if (phoneError) {
+    return NextResponse.json({ error: phoneError }, { status: 400 })
+  }
+  const storedPhone = normalizeStaffPhone(rawPhone) || null
 
   // Format AND strength. The blocklist is shared with the form in
   // lib/pin-strength so the two layers cannot disagree; this one is the
@@ -124,6 +142,7 @@ export async function POST(req: NextRequest) {
       store_id:    storeId,
       name:        name.trim(),
       email:       email?.trim().toLowerCase() ?? null,
+      phone:       storedPhone,
       pin:         hashedPin,
       role:        role === 'owner' ? 'owner' : 'cashier',
       is_active:   true,

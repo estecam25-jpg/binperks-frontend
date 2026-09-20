@@ -6,10 +6,15 @@ import BinPhotosCard from '../BinPhotosCard'
 import StoreAddressCard from '../StoreAddressCard'
 import SuggestedPerks from '../SuggestedPerks'
 import { validatePin } from '@/lib/pin-strength'
+import { validateStaffPhone, formatStaffPhone } from '@/lib/staff-phone'
 import { personalizeCaption } from '@/lib/social-caption'
 import {
   SECTIONS, materialsInSection, type MaterialSpec,
 } from '@/lib/marketing-materials'
+// Shared with the member cards on purpose: the hover-or-hold gesture should
+// behave identically wherever it appears, and one implementation is the only
+// way to guarantee that.
+import { RevealBox, CoverImage } from '@/components/member/FeedCards'
 
 // --- PerksTab ---
 
@@ -332,13 +337,30 @@ function SocialPostSection({ joinUrl }: { joinUrl: string }) {
  * A material whose artwork admin has not uploaded is shown, disabled, saying
  * so \u2014 rather than hidden, which would leave a merchant wondering whether
  * they had missed something.
+ *
+ * THE LIFESTYLE PHOTO IS NOT THE DOWNLOAD. It is a picture of the finished
+ * thing in use, so a merchant can see what a table tent or a window cling
+ * actually looks like before spending ink on it. It covers the description and
+ * lifts on hover or a long hold, borrowing the member cards' RevealBox so the
+ * gesture is the same one they already meet elsewhere in BinPerks.
+ *
+ * THE TITLE AND THE BUTTON STAY OUT OF IT. A merchant scanning the strip needs
+ * to know what each card is and be able to download it without first
+ * discovering a gesture; only the description \u2014 the part they can afford to
+ * hunt for \u2014 goes under the photo.
+ *
+ * NO PHOTO MEANS NO BOX. A material admin has not photographed shows its
+ * description as plain text, exactly as the card did before photos existed,
+ * rather than an empty square with nothing to reveal.
  */
 function MaterialCard({
-  spec, storeId, available,
+  spec, storeId, available, lifestyleUrl,
 }: {
   spec: MaterialSpec
   storeId: string | null
   available: boolean
+  /** Signed, short-lived, and null until admin uploads one. */
+  lifestyleUrl: string | null
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -370,12 +392,24 @@ function MaterialCard({
     }
   }
 
+  // The same block either way, so the words do not move when a photo arrives —
+  // it is only a question of whether something is sitting on top of them.
+  const description = (
+    <p className="text-[11px] text-[#8E8EA8] font-medium leading-snug">{spec.description}</p>
+  )
+
   return (
     <article className="w-[260px] flex-shrink-0 bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2.5">
-      <div className="min-h-[3.5rem]">
-        <h3 className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{spec.label}</h3>
-        <p className="text-[11px] text-[#8E8EA8] font-medium mt-1 leading-snug">{spec.description}</p>
-      </div>
+      {/* Always visible, never under the photo. */}
+      <h3 className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{spec.label}</h3>
+
+      {lifestyleUrl ? (
+        <RevealBox cover={<CoverImage src={lifestyleUrl} alt={`${spec.label} in use`} />}>
+          <div className="p-3">{description}</div>
+        </RevealBox>
+      ) : (
+        <div className="min-h-[2.25rem]">{description}</div>
+      )}
 
       {err && <p className="text-[11px] font-semibold text-[#DA1212]">{err}</p>}
 
@@ -402,6 +436,7 @@ function MaterialSection({
   storeId: string | null
 }) {
   const [availability, setAvailability] = useState<Record<string, boolean>>({})
+  const [lifestyle, setLifestyle] = useState<Record<string, string>>({})
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
@@ -411,8 +446,13 @@ function MaterialSection({
       .then(d => {
         if (cancelled || !d) return
         const map: Record<string, boolean> = {}
-        for (const m of d.materials ?? []) map[m.slug] = !!m.available
+        const photos: Record<string, string> = {}
+        for (const m of d.materials ?? []) {
+          map[m.slug] = !!m.available
+          if (m.lifestyleUrl) photos[m.slug] = m.lifestyleUrl
+        }
         setAvailability(map)
+        setLifestyle(photos)
       })
       .catch(() => { /* everything shows as not-ready; nothing breaks */ })
       .finally(() => { if (!cancelled) setLoaded(true) })
@@ -439,6 +479,7 @@ function MaterialSection({
               spec={spec}
               storeId={storeId}
               available={loaded ? (availability[spec.slug] ?? false) : false}
+              lifestyleUrl={lifestyle[spec.slug] ?? null}
             />
           ))}
         </div>
@@ -588,7 +629,14 @@ function googleFontUrl(family: string) {
   return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@700&display=swap`
 }
 
-interface Cashier { id: string; name: string; role: string; isActive: boolean }
+interface Cashier {
+  id: string
+  name: string
+  role: string
+  isActive: boolean
+  /** Internal to this merchant — see lib/staff-phone. Null when unset. */
+  phone: string | null
+}
 
 export function SettingsTab({ storeId, stores }: { storeId: string | null; stores: StoreRef[] }) {
   const activeStoreId = storeId ?? stores[0]?.id
@@ -605,6 +653,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
 
   const [cashiers, setCashiers] = useState<Cashier[]>([])
   const [newName,  setNewName]  = useState('')
+  const [newPhone, setNewPhone] = useState('')
   const [newPin,   setNewPin]   = useState('')
   const [adding,   setAdding]   = useState(false)
   const [addError, setAddError] = useState('')
@@ -689,15 +738,27 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
       setAddError(pinError)
       return
     }
+    // Optional, so a blank passes. Same shared check the API runs.
+    const phoneError = validateStaffPhone(newPhone)
+    if (phoneError) {
+      setAddError(phoneError)
+      return
+    }
     setAdding(true)
     setAddError('')
     const res = await fetch('/api/merchant/cashiers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId: activeStoreId, name: newName.trim(), pin: newPin, role: 'cashier' }),
+      body: JSON.stringify({
+        storeId: activeStoreId,
+        name: newName.trim(),
+        phone: newPhone.trim(),
+        pin: newPin,
+        role: 'cashier',
+      }),
     })
     if (res.ok) {
-      setNewName(''); setNewPin('')
+      setNewName(''); setNewPhone(''); setNewPin('')
       fetch(`/api/merchant/cashiers?storeId=${activeStoreId}`)
         .then(r => r.json()).then(d => setCashiers(d.cashiers ?? []))
     } else {
@@ -884,10 +945,13 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
           <div className="divide-y divide-[#EBEBF2]">
             {cashiers.map(c => (
               <div key={c.id} className="px-5 py-3 flex items-center gap-3">
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-bold text-[#1A1A2E]">{c.name}</p>
                   <p className="text-[11px] text-[#8E8EA8] font-medium capitalize">
-                    {c.role}
+                    {/* The role, and the number if there is one. Nothing shown
+                        when there is not — an empty dash would read as a field
+                        that failed to load rather than one left blank. */}
+                    {c.role}{c.phone ? ` · ${formatStaffPhone(c.phone)}` : ''}
                   </p>
                 </div>
                 {c.role !== 'owner' && (
@@ -923,6 +987,20 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
               className="w-20 px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-bold text-[#1A1A2E] placeholder:font-normal placeholder:text-[#D1D1DC] text-center tracking-widest"
             />
           </div>
+
+          {/* Optional, and labelled with what it is for. BinPerks never sends
+              anything to this number — it is the merchant's own note so they
+              can reach whoever awarded a stamp. */}
+          <input
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
+            placeholder="Phone (internal use only)"
+            value={newPhone}
+            onChange={e => setNewPhone(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-semibold text-[#1A1A2E] placeholder:font-normal placeholder:text-[#D1D1DC]"
+          />
+
           {addError && <p className="text-[11px] font-semibold text-[#DA1212]">{addError}</p>}
           <button
             type="submit"
