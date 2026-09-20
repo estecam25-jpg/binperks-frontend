@@ -8,9 +8,26 @@ import SuggestedPerks from '../SuggestedPerks'
 import { validatePin } from '@/lib/pin-strength'
 import { validateStaffPhone, formatStaffPhone } from '@/lib/staff-phone'
 import { personalizeCaption } from '@/lib/social-caption'
-import {
-  SECTIONS, materialsInSection, type MaterialSpec,
-} from '@/lib/marketing-materials'
+/**
+ * What /api/merchant/marketing sends back for one material.
+ *
+ * Not MaterialSpec any more. The tab used to read the hardcoded registry and
+ * knew each material's sheet layout and file stem; it now knows only what a
+ * merchant needs to see, because admin owns the rest and the geometry never
+ * belonged on the client.
+ */
+interface MerchantMaterial {
+  slug: string
+  category: string
+  title: string
+  description: string
+  /** 'pdf' or 'jpg' — what the download button says. */
+  output: string
+  available: boolean
+  missing: string[]
+  /** Signed, short-lived, and null until admin uploads one. */
+  lifestyleUrl: string | null
+}
 // Shared with the member cards on purpose: the hover-or-hold gesture should
 // behave identically wherever it appears, and one implementation is the only
 // way to guarantee that.
@@ -354,32 +371,35 @@ function SocialPostSection({ joinUrl }: { joinUrl: string }) {
  * rather than an empty square with nothing to reveal.
  */
 function MaterialCard({
-  spec, storeId, available, lifestyleUrl,
+  material, storeId,
 }: {
-  spec: MaterialSpec
+  material: MerchantMaterial
   storeId: string | null
-  available: boolean
-  /** Signed, short-lived, and null until admin uploads one. */
-  lifestyleUrl: string | null
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const { available, lifestyleUrl } = material
 
   async function download() {
     if (!available || !storeId) return
     setBusy(true); setErr('')
     try {
-      const res = await fetch(`/api/merchant/marketing/${spec.slug}?storeId=${encodeURIComponent(storeId)}`)
+      const res = await fetch(`/api/merchant/marketing/${material.slug}?storeId=${encodeURIComponent(storeId)}`)
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        setErr(d.error === 'artwork_missing' ? 'Artwork not ready yet.' : 'Could not build that file.')
+        setErr(
+          d.error === 'artwork_missing' ? 'Artwork not ready yet.' :
+          d.error === 'recipe_missing'  ? 'This material needs attention from BinPerks.' :
+          d.error === 'unknown_material' ? 'This material is no longer available.' :
+          'Could not build that file.',
+        )
         return
       }
       // Blob, not a plain link: the route answers with an attachment and this
       // keeps the merchant on the page rather than navigating away from it.
       const blob = await res.blob()
       const name = res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]
-        ?? `${spec.fileStem}.${spec.output}`
+        ?? `binperks-${material.slug}.${material.output}`
       const href = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = href; a.download = name
@@ -395,16 +415,16 @@ function MaterialCard({
   // The same block either way, so the words do not move when a photo arrives —
   // it is only a question of whether something is sitting on top of them.
   const description = (
-    <p className="text-[11px] text-[#8E8EA8] font-medium leading-snug">{spec.description}</p>
+    <p className="text-[11px] text-[#8E8EA8] font-medium leading-snug">{material.description}</p>
   )
 
   return (
     <article className="w-[260px] flex-shrink-0 bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2.5">
       {/* Always visible, never under the photo. */}
-      <h3 className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{spec.label}</h3>
+      <h3 className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{material.title}</h3>
 
       {lifestyleUrl ? (
-        <RevealBox cover={<CoverImage src={lifestyleUrl} alt={`${spec.label} in use`} />}>
+        <RevealBox cover={<CoverImage src={lifestyleUrl} alt={`${material.title} in use`} />}>
           <div className="p-3">{description}</div>
         </RevealBox>
       ) : (
@@ -422,50 +442,36 @@ function MaterialCard({
       >
         {busy ? 'Preparing\u2026'
           : !available ? 'Coming soon'
-          : `Download ${spec.output.toUpperCase()}`}
+          : `Download ${material.output.toUpperCase()}`}
       </button>
     </article>
   )
 }
 
-/** One titled, horizontally scrolling strip of materials. */
+/**
+ * One titled, horizontally scrolling strip of materials.
+ *
+ * PRESENTATIONAL ONLY. It used to fetch the material list itself, which meant
+ * every section on the page asked for the same list — and, now that admin
+ * decides which sections exist, would have meant one request per category. The
+ * tab fetches once and hands each section its own slice.
+ */
 function MaterialSection({
-  section, storeId,
+  category, materials, storeId,
 }: {
-  section: { id: 'register' | 'signage'; title: string; subtitle: string }
+  category: { id: string; title: string; subtitle: string }
+  materials: MerchantMaterial[]
   storeId: string | null
 }) {
-  const [availability, setAvailability] = useState<Record<string, boolean>>({})
-  const [lifestyle, setLifestyle] = useState<Record<string, string>>({})
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/merchant/marketing')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (cancelled || !d) return
-        const map: Record<string, boolean> = {}
-        const photos: Record<string, string> = {}
-        for (const m of d.materials ?? []) {
-          map[m.slug] = !!m.available
-          if (m.lifestyleUrl) photos[m.slug] = m.lifestyleUrl
-        }
-        setAvailability(map)
-        setLifestyle(photos)
-      })
-      .catch(() => { /* everything shows as not-ready; nothing breaks */ })
-      .finally(() => { if (!cancelled) setLoaded(true) })
-    return () => { cancelled = true }
-  }, [])
-
-  const items = materialsInSection(section.id)
+  // A category admin has emptied renders nothing at all, heading included —
+  // a titled empty strip reads as something that failed to load.
+  if (materials.length === 0) return null
 
   return (
     <section className="flex flex-col gap-2.5">
       <div className="px-1">
-        <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">{section.title}</h2>
-        <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5">{section.subtitle}</p>
+        <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">{category.title}</h2>
+        <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5">{category.subtitle}</p>
       </div>
 
       {/* Scrolls sideways inside its own box; the tab never scrolls sideways.
@@ -473,14 +479,8 @@ function MaterialSection({
           keeps the first one aligned with the heading. */}
       <div className="overflow-x-auto -mx-4 px-4 pb-1">
         <div className="flex gap-3 w-max items-stretch">
-          {items.map(spec => (
-            <MaterialCard
-              key={spec.slug}
-              spec={spec}
-              storeId={storeId}
-              available={loaded ? (availability[spec.slug] ?? false) : false}
-              lifestyleUrl={lifestyle[spec.slug] ?? null}
-            />
+          {materials.map(m => (
+            <MaterialCard key={m.slug} material={m} storeId={storeId} />
           ))}
         </div>
       </div>
@@ -495,6 +495,16 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   const [messageSaving, setMessageSaving] = useState(false)
   const [messageSaved, setMessageSaved] = useState(false)
   const [messageLoading, setMessageLoading] = useState(true)
+
+  // The material list, fetched once for the whole tab. Admin decides what is
+  // in it and what order it comes in, so nothing here is hardcoded any more --
+  // a material switched off in the admin tab is simply absent from the next
+  // response, and a new one appears without a deploy.
+  const [catalog, setCatalog] = useState<{
+    categories: { id: string; title: string; subtitle: string }[]
+    materials: MerchantMaterial[]
+  }>({ categories: [], materials: [] })
+  const [catalogLoaded, setCatalogLoaded] = useState(false)
 
   const joinUrl = activeStore?.storeKey
     ? `https://app.binperks.com/join/${activeStore.storeKey}`
@@ -512,6 +522,19 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
         setMessageLoading(false)
       })
   }, [activeStoreId])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/merchant/marketing')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (cancelled || !d) return
+        setCatalog({ categories: d.categories ?? [], materials: d.materials ?? [] })
+      })
+      .catch(() => { /* the sections render nothing; the rest of the tab works */ })
+      .finally(() => { if (!cancelled) setCatalogLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
 
   async function handleCopyLink() {
     await navigator.clipboard.writeText(joinUrl).catch(() => {})
@@ -534,15 +557,21 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   return (
     <div className="flex flex-col gap-5 p-4 pb-12">
 
-      {/* The two material sections. Everything in them is built server-side
-          from the BinPerks artwork admin uploads \u2014 see lib/marketing-render. */}
-      {SECTIONS.map(section => (
-        <MaterialSection
-          key={section.id}
-          section={section}
-          storeId={activeStoreId ?? null}
-        />
-      ))}
+      {/* The material sections, in the order admin put them in. Everything in
+          them is built server-side from the BinPerks artwork admin uploads
+          -- see lib/marketing-render. */}
+      {!catalogLoaded ? (
+        <div className="h-48 rounded-2xl bg-white animate-pulse" />
+      ) : (
+        catalog.categories.map(category => (
+          <MaterialSection
+            key={category.id}
+            category={category}
+            materials={catalog.materials.filter(m => m.category === category.id)}
+            storeId={activeStoreId ?? null}
+          />
+        ))
+      )}
 
       {/* Social post kit \u2014 admin-written artwork and caption, personalised
           with this store's join link. Not one of the printed materials. */}

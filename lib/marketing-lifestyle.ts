@@ -3,22 +3,21 @@
  *
  * NOT THE PRINTABLE ARTWORK. marketing_templates holds what gets composed into
  * a download — the design, with its [STORE NAME] and [QR CODE] rectangles.
- * This holds a photograph of the finished thing in use, shown on the card in
- * the merchant's Marketing tab so they can see what they are about to print
- * before they print it. Nothing here is ever composited or downloaded.
+ * This is a photograph of the finished thing in use, shown on the card in the
+ * merchant's Marketing tab so they can see what they are about to print before
+ * they print it. Nothing here is ever composited or downloaded.
  *
- * ONE PER MATERIAL, where base artwork is one per TEMPLATE. The five poster
+ * ONE PER MATERIAL, where base artwork is one per DESIGN. The five poster
  * designs are five templates but a single material, and one photo of a poster
- * on a wall stands for all five. That different grain is the whole reason this
- * is keyed on MATERIALS rather than living alongside the template rows.
+ * on a wall stands for all five.
  *
- * NO TABLE. The path is derived from the material slug, so whether an image
- * exists is a question about the bucket and one list() answers it for all six
- * at once. A row would only restate what storage already knows, and could
- * disagree with it.
+ * THE PATH IS STORED, NOT DERIVED. It was derived from the slug while the six
+ * materials were fixed in code. Now that admin can rename and add materials,
+ * marketing_materials.lifestyle_image_path is the record — a rename must not
+ * silently detach a photo that is still sitting in the bucket.
  *
  * PRIVATE BUCKET. Every URL is signed per request and short-lived, which also
- * means replacing an image cannot serve a stale cached copy the way a public
+ * means replacing a photo cannot serve a stale cached copy the way a public
  * URL can.
  *
  * JPEG, NOT PNG, and not only for the file size. The photo sits ON TOP of the
@@ -34,75 +33,48 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  *  to keep private, and the prefix keeps the two kinds from colliding. */
 export const LIFESTYLE_BUCKET = 'marketing-templates'
 export const LIFESTYLE_PREFIX = 'lifestyle'
+export const LIFESTYLE_EXT = '.jpg'
 
 /** How long a signed preview URL lasts. Long enough to sit on an open tab. */
 export const LIFESTYLE_SIGNED_TTL = 60 * 60
 
-/** Normalised to JPEG on upload, so the extension is never in question. */
-export const LIFESTYLE_EXT = '.jpg'
+/**
+ * Stored square at this size.
+ *
+ * The photo lands in a box about 230px wide on the card, so 1024 is generous
+ * even on a retina screen, and a merchant on a phone should not download a
+ * 12MP camera original to see a picture of a table tent.
+ */
+export const LIFESTYLE_PX = 1024
 
-export function lifestylePath(materialSlug: string): string {
+/** Where a material's photo lives. Keyed on the material slug, which is unique
+ *  and never reused, so two materials cannot overwrite each other. */
+export function lifestylePathFor(materialSlug: string): string {
   return `${LIFESTYLE_PREFIX}/${materialSlug}${LIFESTYLE_EXT}`
 }
 
-export interface LifestyleEntry {
-  path: string
-  updatedAt: string | null
-}
-
 /**
- * Which materials have a lifestyle photo, from one storage listing.
+ * Signed URLs for a set of paths in one bucket, keyed by path.
  *
- * Returns an empty map rather than throwing when the prefix does not exist
- * yet — before the first upload there is simply no folder, and that is the
- * ordinary state, not an error. Callers fall back to plain description text.
+ * One round trip however many are asked for. A path that fails to sign is left
+ * out rather than returned as null, so "in the map" means "displayable".
+ * Returns empty for an empty list instead of calling out at all.
  */
-export async function lifestyleIndex(
-  // The admin client — the bucket is private and has no policies.
+export async function signPaths(
+  // The admin client — these buckets are private and have no policies.
   admin: SupabaseClient,
-): Promise<Map<string, LifestyleEntry>> {
-  const index = new Map<string, LifestyleEntry>()
-
-  const { data, error } = await admin.storage
-    .from(LIFESTYLE_BUCKET)
-    .list(LIFESTYLE_PREFIX, { limit: 100 })
-
-  if (error || !data) return index
-
-  for (const obj of data) {
-    if (!obj.name.endsWith(LIFESTYLE_EXT)) continue
-    const slug = obj.name.slice(0, -LIFESTYLE_EXT.length)
-    index.set(slug, {
-      path: `${LIFESTYLE_PREFIX}/${obj.name}`,
-      updatedAt: obj.updated_at ?? obj.created_at ?? null,
-    })
-  }
-
-  return index
-}
-
-/**
- * Signed URLs for an index, keyed by material slug.
- *
- * One round trip for all of them. A path that fails to sign is left out rather
- * than returned as null, so a caller can treat "in the map" as "displayable".
- */
-export async function signLifestyleUrls(
-  admin: SupabaseClient,
-  index: Map<string, LifestyleEntry>,
+  bucket: string,
+  paths: string[],
 ): Promise<Record<string, string>> {
-  const slugs = [...index.keys()]
-  if (slugs.length === 0) return {}
+  const unique = [...new Set(paths)]
+  if (unique.length === 0) return {}
 
-  const paths = slugs.map(s => index.get(s)!.path)
-  const { data } = await admin.storage
-    .from(LIFESTYLE_BUCKET)
-    .createSignedUrls(paths, LIFESTYLE_SIGNED_TTL)
+  const { data } = await admin.storage.from(bucket).createSignedUrls(unique, LIFESTYLE_SIGNED_TTL)
 
   const urls: Record<string, string> = {}
-  for (let i = 0; i < slugs.length; i++) {
+  for (let i = 0; i < unique.length; i++) {
     const signed = data?.[i]?.signedUrl
-    if (signed) urls[slugs[i]] = signed
+    if (signed) urls[unique[i]] = signed
   }
   return urls
 }

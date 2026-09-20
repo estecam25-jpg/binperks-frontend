@@ -1,21 +1,33 @@
 /**
- * The merchant marketing materials.
+ * The merchant marketing materials — the half of them that lives in code.
  *
- * CLIENT-SAFE. Types and the registry only — no sharp, no pdf-lib, no Supabase.
- * The merchant Marketing tab imports this to lay out its two sections, and the
- * render route imports it to know what to build, so the two cannot disagree
- * about what exists or which URL goes on it.
+ * CLIENT-SAFE. Types and the recipes only — no sharp, no pdf-lib, no Supabase.
+ *
+ * A MATERIAL IS NOW SPLIT IN TWO, and the seam matters:
+ *
+ *   RECIPE (here)  the geometry. Sheet layout, print size, how many up, which
+ *                  designs it is built from, whether it prints mono, which
+ *                  join URL the QR encodes. This is the rendering logic, so it
+ *                  stays in code where it can be reviewed and tested.
+ *   ROW (database) what admin can safely change without a deploy. Title,
+ *                  description, category, order, active, lifestyle photo.
+ *                  See the marketing_materials table.
+ *
+ * A row names its recipe in `render_recipe`. Together they make the
+ * MaterialSpec the renderer has always taken — see specForMaterial — so
+ * lib/marketing-render did not have to change at all.
  *
  * ONE UNIT OF ARTWORK PER TEMPLATE. A six-up decal sheet is not stored as a
  * sheet: admin uploads one decal and the renderer tiles it. That keeps each
  * design's [STORE NAME] and [QR CODE] rectangles defined once, instead of once
  * per position on a page.
  *
- * WHICH QR GOES ON WHICH MATERIAL IS THE WHOLE POINT of the two sections.
+ * WHICH QR GOES ON WHICH MATERIAL IS THE WHOLE POINT of the categories.
  * At The Register carries the in-store source, whose signup awards that day's
  * visit stamp. In-Store Signage carries the plain join link, because a poster
  * on a wall is read by someone who may not be at the counter — see
- * lib/join-source.
+ * lib/join-source. A material's recipe decides this, not its category, so
+ * moving a card between sections cannot silently change what its QR does.
  */
 
 /** Which join URL a material's QR encodes. */
@@ -143,20 +155,116 @@ export function materialBySlug(slug: string): MaterialSpec | null {
   return MATERIALS.find(m => m.slug === slug) ?? null
 }
 
-export const SECTIONS: { id: 'register' | 'signage'; title: string; subtitle: string }[] = [
+// ── Categories ───────────────────────────────────────────────────────────────
+
+/**
+ * The database's category values.
+ *
+ * `social_media_post` is listed so admin sees the section, but nothing is
+ * stored under it: the Social Media tab already owns that content and
+ * duplicating it here would give two places to edit one thing.
+ */
+export type MaterialCategory = 'at_the_register' | 'in_store_signage' | 'social_media_post'
+
+export const CATEGORIES: {
+  id: MaterialCategory
+  title: string
+  subtitle: string
+  /** False for the category the Social Media tab owns. */
+  editable: boolean
+}[] = [
   {
-    id: 'register',
+    id: 'at_the_register',
     title: 'At The Register',
     subtitle: 'Stamp awarded when new members scan and sign up',
+    editable: true,
   },
   {
-    id: 'signage',
+    id: 'in_store_signage',
     title: 'In-Store Signage',
     subtitle: 'Help customers discover BinPerks and sign up',
+    editable: true,
+  },
+  {
+    id: 'social_media_post',
+    title: 'Social Media Post',
+    subtitle: 'Managed in the Social Media tab',
+    editable: false,
   },
 ]
 
-/** Everything in one section, in registry order. */
-export function materialsInSection(section: 'register' | 'signage'): MaterialSpec[] {
-  return MATERIALS.filter(m => m.section === section)
+// ── Recipes ──────────────────────────────────────────────────────────────────
+
+/**
+ * The geometry a material can be built with, by name.
+ *
+ * Keyed on the same slugs the six original materials used, so the seeded rows
+ * point at exactly the layout they have always rendered with.
+ */
+export const RENDER_RECIPES: Record<string, MaterialSpec> =
+  Object.fromEntries(MATERIALS.map(m => [m.slug, m]))
+
+export function recipeBySlug(slug: string | null | undefined): MaterialSpec | null {
+  return slug ? RENDER_RECIPES[slug] ?? null : null
+}
+
+/** What a recipe can actually produce. A sheet is a PDF and a photo print is a
+ *  JPEG — the two paths through the renderer are different, and neither can
+ *  emit the other's format. The admin format selector is limited to this. */
+export function formatsForRecipe(slug: string | null | undefined): MaterialOutput[] {
+  const r = recipeBySlug(slug)
+  return r ? [r.output] : []
+}
+
+/** The database row, as the admin and merchant routes both see it. */
+export interface MaterialRow {
+  id: string
+  slug: string
+  category: MaterialCategory
+  title: string
+  description: string
+  render_recipe: string | null
+  template_slugs: string[]
+  lifestyle_image_path: string | null
+  download_format: 'pdf' | 'jpg' | 'both'
+  display_order: number
+  active: boolean
+}
+
+/**
+ * The spec the renderer takes, assembled from a row and its recipe.
+ *
+ * The recipe supplies everything that decides how pixels land — sheet, size,
+ * fold lines, QR target. The row supplies only which designs to draw and what
+ * to call the file, which is what lets admin add a second poster set without a
+ * deploy. Null when the row names no recipe, or one that no longer exists:
+ * callers treat that as an unrenderable material rather than guessing.
+ *
+ * SLUG STAYS THE RECIPE'S. The renderer reads spec.slug to decide whether to
+ * draw the tent's fold line, so it identifies the geometry, not the material.
+ * A second tent added by admin has its own row slug and still folds; handing
+ * the row's slug down here would have silently dropped that line.
+ */
+export function specForMaterial(row: MaterialRow): MaterialSpec | null {
+  const recipe = recipeBySlug(row.render_recipe)
+  if (!recipe) return null
+
+  const templates = row.template_slugs.length > 0 ? row.template_slugs : recipe.templates
+  // A recipe's page geometry assumes a fixed number of designs — the poster PDF
+  // is one page per template, the sheets are one design tiled. Taking a
+  // different count would render a page short or drop artwork silently.
+  if (templates.length !== recipe.templates.length) return null
+
+  return {
+    ...recipe,
+    label: row.title,
+    description: row.description,
+    templates,
+    // A material that IS its recipe keeps the recipe's own stem, so the six
+    // original downloads are named exactly what they have always been named —
+    // Store Posters stays binperks-posters, not binperks-store-posters.
+    // Anything admin adds later is named for itself, so two materials sharing
+    // a recipe do not overwrite each other in a merchant's Downloads folder.
+    fileStem: row.slug === recipe.slug ? recipe.fileStem : `binperks-${row.slug}`,
+  }
 }

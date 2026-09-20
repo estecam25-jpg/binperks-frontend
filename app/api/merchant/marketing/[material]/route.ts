@@ -6,6 +6,17 @@
  * cached anywhere would go stale the moment admin replaced the artwork, and
  * these are small enough to build per download.
  *
+ * THE MATERIAL IS LOOKED UP IN THE DATABASE, not in a hardcoded registry —
+ * admin can add, retitle, reorder and deactivate them. What it still gets from
+ * code is its RECIPE: the sheet layout, print size, fold lines and QR target,
+ * which are the rendering logic and are not admin-editable. specForMaterial
+ * puts the two halves together into the spec renderMaterial has always taken,
+ * so nothing in lib/marketing-render changed.
+ *
+ * AN INACTIVE MATERIAL IS A 404 HERE TOO. The tab stops listing it, but a
+ * merchant with the URL already open should not keep downloading something
+ * admin has withdrawn.
+ *
  * STORE OWNERSHIP IS RESOLVED SERVER-SIDE. storeId arrives from the client, so
  * it is checked against the merchant's own stores before a QR is minted —
  * otherwise a merchant could print another location's code.
@@ -17,12 +28,13 @@
  *   400 { error: 'invalid_store' }
  *   404 { error: 'unknown_material' | 'Merchant not found' }
  *   409 { error: 'artwork_missing', missing: [...] }  — admin has not uploaded it
+ *   503 { error: 'recipe_missing' }  — the row names a recipe this build lacks
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
-import { materialBySlug } from '@/lib/marketing-materials'
+import { specForMaterial, type MaterialRow } from '@/lib/marketing-materials'
 import { renderMaterial, MaterialUnavailableError } from '@/lib/marketing-render'
 
 /** Building a five-page PDF from five 1100px PNGs needs more than the default. */
@@ -36,10 +48,26 @@ export async function GET(
   if (!merchant) return NextResponse.json({ error: 'Merchant not found' }, { status: 404 })
 
   const { material: slug } = await params
-  const spec = materialBySlug(slug)
-  if (!spec) return NextResponse.json({ error: 'unknown_material' }, { status: 404 })
-
   const admin = createAdminSupabaseClient()
+
+  const { data: row } = await admin
+    .from('marketing_materials')
+    .select('id, slug, category, title, description, render_recipe, template_slugs, ' +
+            'lifestyle_image_path, download_format, display_order, active')
+    .eq('slug', slug)
+    .eq('active', true)
+    .maybeSingle()
+
+  if (!row) return NextResponse.json({ error: 'unknown_material' }, { status: 404 })
+
+  const material = row as unknown as MaterialRow
+  const spec = specForMaterial(material)
+  if (!spec) {
+    // The row survives a deploy that removed its recipe; say so rather than
+    // rendering something with the wrong geometry.
+    console.error(`[merchant/marketing/${slug}] no recipe for`, material.render_recipe)
+    return NextResponse.json({ error: 'recipe_missing' }, { status: 503 })
+  }
 
   // The store must belong to this merchant. Without a storeId, their first
   // location is used — the tab always sends one, but a direct hit should still
