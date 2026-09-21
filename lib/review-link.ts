@@ -15,10 +15,10 @@
  * nobody who opened a review page.
  *
  * ── Not too often ──────────────────────────────────────────────────────────
- * One request per member per store per 30 days. ANY feedback row counts — a
- * review request, or a Wow/Meh/Bad rating the member submitted — because
- * either means this member was recently asked at this store, and a regular
- * who comes in twice a week should not be asked twice a week.
+ * One request per member per store per 30 days, so a regular who comes in
+ * twice a week is not asked twice a week. Only earlier REVIEW REQUESTS start
+ * the clock (source 'review_request'); a Wow/Meh/Bad rating the member
+ * submitted does not, so a rating never holds back the review link.
  *
  * ── Expires tonight ────────────────────────────────────────────────────────
  * At midnight in the STORE's timezone, not the server's (UTC). A review is
@@ -128,8 +128,9 @@ export function nextStoreMidnight(timezone: string | null | undefined): Date {
 }
 
 /**
- * Whether this member was asked for a review at this store recently enough
- * that asking again would be nagging.
+ * Whether this member was sent a review request at this store recently enough
+ * that sending another would be nagging. Ratings (source 'rating') are not
+ * requests and do not count.
  *
  * On a read error it answers YES. Not asking once is harmless; asking a member
  * who was asked yesterday, because a query failed, is the thing to avoid.
@@ -141,6 +142,7 @@ export async function askedRecently(admin: Admin, memberId: string, storeId: str
     .select('id', { count: 'exact', head: true })
     .eq('member_id', memberId)
     .eq('store_id', storeId)
+    .eq('source', 'review_request')
     .gte('submitted_at', since)
   if (error) {
     console.error('[review-link] recent-request check failed; skipping this request:', error)
