@@ -120,6 +120,7 @@ interface StoreRow {
   id: string; display_name: string | null; brand_name: string | null
   canonical_key: string | null; is_active: boolean | null; merchant_id: string | null
   pricing_schedule: Record<string, unknown> | null; google_maps_url: string | null
+  google_review_url: string | null
 }
 interface ActivityRow {
   member_id: string | null; store_id: string | null; merchant_id: string | null
@@ -139,6 +140,8 @@ interface LedgerRow {
   credit_amount: number | string | null; debit_amount: number | string | null
 }
 interface DecisionRow { eligibility_at_payment_time: boolean | null; commission_amount: number | string | null }
+/** Only review requests — see the feedback read below. */
+interface ReviewRequestRow { store_id: string | null; review_clicked: boolean | null }
 
 const num = (v: number | string | null | undefined): number => Number(v ?? 0) || 0
 
@@ -160,7 +163,7 @@ export async function GET(req: NextRequest) {
 
   const [
     membersRes, merchantsRes, storesRes, activityRes, rewardsRes,
-    scansRes, imageLogRes, ledgerRes, decisionsRes, catalogRes,
+    scansRes, imageLogRes, ledgerRes, decisionsRes, catalogRes, reviewRequestsRes,
   ] = await Promise.all([
     fetchAll<MemberRow>('members', (f, t) => admin.from('members')
       .select('id, first_name, last_name, phone, email, zip_code, status, subscription_status, total_stamps, created_at, origin_store_id, origin_merchant_id, referred_by_member_id, is_blacklisted')
@@ -171,7 +174,7 @@ export async function GET(req: NextRequest) {
       .order('id').range(f, t)),
 
     fetchAll<StoreRow>('stores', (f, t) => admin.from('stores')
-      .select('id, display_name, brand_name, canonical_key, is_active, merchant_id, pricing_schedule, google_maps_url')
+      .select('id, display_name, brand_name, canonical_key, is_active, merchant_id, pricing_schedule, google_maps_url, google_review_url')
       .order('id').range(f, t)),
 
     fetchAll<ActivityRow>('activity_events', (f, t) => admin.from('activity_events')
@@ -204,6 +207,15 @@ export async function GET(req: NextRequest) {
       .select('identified_product, identified_category, scan_count')
       .order('scan_count', { ascending: false, nullsFirst: false })
       .limit(10),
+
+    // Review REQUESTS only — the tracked links sent after a cashier stamp.
+    // feedback also holds Wow/Meh/Bad ratings (source 'rating'); counting
+    // those as requests would make "sent" meaningless and let click-through
+    // run past 100%, since a rating-page click has no request behind it.
+    fetchAll<ReviewRequestRow>('feedback', (f, t) => admin.from('feedback')
+      .select('store_id, review_clicked')
+      .eq('source', 'review_request')
+      .order('id').range(f, t)),
   ])
 
   const members  = membersRes.rows
@@ -226,6 +238,7 @@ export async function GET(req: NextRequest) {
   const decisions = decisionsRes.rows
 
   const truncated = [
+    reviewRequestsRes,
     membersRes, merchantsRes, storesRes, activityRes, rewardsRes,
     scansRes, imageLogRes, ledgerRes, decisionsRes,
   ].some(r => r.truncated)
@@ -471,6 +484,42 @@ export async function GET(req: NextRequest) {
 
   const duplicates = possibleDuplicates(members)
 
+  // ── 8. Reviews ──────────────────────────────────────────────────────────
+  // A request is a tracked link sent after a cashier stamp; a click is a
+  // member tapping it (preview fetchers excluded — see app/r/[code]). Every
+  // store is listed, including those with nothing sent yet, so a store that
+  // has no review URL set shows up as a zero rather than going missing.
+  const reviewRows = reviewRequestsRes.rows
+  const reviewTally = new Map<string, { sent: number; clicked: number }>()
+  for (const s of stores) reviewTally.set(s.id, { sent: 0, clicked: 0 })
+  for (const r of reviewRows) {
+    if (!r.store_id) continue
+    const t = reviewTally.get(r.store_id) ?? { sent: 0, clicked: 0 }
+    t.sent++
+    if (r.review_clicked) t.clicked++
+    reviewTally.set(r.store_id, t)
+  }
+  const reviewsSent    = reviewRows.length
+  const reviewsClicked = reviewRows.filter(r => r.review_clicked).length
+  const reviews = {
+    requestsSent:  reviewsSent,
+    linkClicks:    reviewsClicked,
+    clickThroughPct: pct(reviewsClicked, reviewsSent),
+    byStore: [...reviewTally.entries()]
+      .filter(([id]) => id !== BINPERKS_HOUSE_STORE_ID)
+      .map(([id, t]) => ({
+        storeId: id,
+        store: storeLabel(id),
+        // Whether the store can be sent review links at all — a zero here
+        // means "no review URL", not "no one clicked".
+        hasReviewUrl: !!storeById.get(id)?.google_review_url?.trim(),
+        sent: t.sent,
+        clicked: t.clicked,
+        clickThroughPct: pct(t.clicked, t.sent),
+      }))
+      .sort((a, b) => b.sent - a.sent || b.clicked - a.clicked || a.store.localeCompare(b.store)),
+  }
+
   const payload = {
     generatedAt: now.toISOString(),
     cached: false,
@@ -484,6 +533,7 @@ export async function GET(req: NextRequest) {
     scannerIntelligence,
     financialHealth,
     networkHealth,
+    reviews,
     anomalies: {
       starterOver20,
       highVelocity,

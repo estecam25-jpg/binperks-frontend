@@ -6,6 +6,7 @@ import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { postToGhl } from '@/lib/ghl-webhook'
 import { createAlert, couponReadyAlert, tierUpAlert } from '@/lib/member-alerts'
 import { awardReferralBonusIfDue } from '@/lib/referral-bonus'
+import { askedRecently, createReviewRequest, isSafeRedirectUrl } from '@/lib/review-link'
 
 export async function POST(req: NextRequest) {
   try {
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
     //     dual-write (step 5a) — permanent attribution, never recomputed here.
     const { data: member, error: memberError } = await supabase
       .from('members')
-      .select('total_stamps, coupon_due, subscription_status, first_name, phone, sms_opt_in, status, is_blacklisted, origin_store_id, origin_merchant_id')
+      .select('total_stamps, coupon_due, subscription_status, first_name, last_name, email, phone, sms_opt_in, status, is_blacklisted, origin_store_id, origin_merchant_id')
       .eq('id', memberId)
       .single()
 
@@ -316,60 +317,77 @@ export async function POST(req: NextRequest) {
     //     result and referralBonusStamps says what was added on top.
     const referralBonus = await awardReferralBonusIfDue(admin, memberId)
 
-    // 10. Post-visit review request to GHL.
+    // 10. "Member got a stamp" message to GHL, with a review link when due.
     //
-    //     AFTER THE RESPONSE, AND KEPT ALIVE UNTIL IT LANDS. The cashier is
-    //     standing at the counter with a member in front of them, so this must
-    //     not delay the stamp — but it used to be a bare `void postToGhl(...)`,
-    //     and on Vercel the instance is frozen the moment this handler returns.
-    //     The request was suspended mid-flight and never reached GHL; its 5s
-    //     timeout then fired whenever the next request woke the instance, and
-    //     was logged against THAT request. Production logs showed exactly that
-    //     for both of the last two real stamps (2026-09-08, 2026-09-17).
+    //     REPLACES the old post-visit review request, which pointed at the
+    //     Wow/Meh/Bad page. This one tells the member about their stamp and,
+    //     no more than once a month per store, asks for a review through a
+    //     tracked link — see lib/review-link.
     //
-    //     waitUntil tells Vercel to keep the function running after the
-    //     response until the promise settles. postToGhl gives up after 5s, so
-    //     the function cannot be held past that. Off Vercel it is a no-op and
-    //     the promise simply runs, which is all a dev server needs.
+    //     CASHIER STAMPS ONLY. A register-QR signup stamp is written by
+    //     /api/join/create and never passes through here, so it can never send
+    //     this — the member is standing at the counter creating their account,
+    //     not finishing a visit.
     //
-    //     ONLY TO MEMBERS WHO OPTED IN TO SMS. A review request is a
-    //     solicitation, not something the member asked for, so it respects
-    //     sms_opt_in — strictly: only an explicit true sends. The GHL workflow
-    //     sends the email from the same trigger, so an opted-out member gets
-    //     neither.
+    //     AFTER THE RESPONSE, KEPT ALIVE UNTIL IT LANDS. waitUntil holds the
+    //     function open past the response so the request is not frozen
+    //     mid-flight — the failure that silently dropped every post-visit
+    //     message before 2026-09-21. The cashier waits for none of it: the
+    //     store lookup, the 30-day check and the link are all in here too.
     //
-    //     storeName, not storeId: the GHL templates need something a person
-    //     can read, and an id is meaningless in a text message. Looked up
-    //     inside the background task so it adds nothing to the cashier's wait.
-    const postVisitUrl = process.env.GHL_POST_VISIT_WEBHOOK_URL
-    if (postVisitUrl && member.sms_opt_in === true) {
-      const feedbackUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.binperks.com') + '/member/feedback'
+    //     ONLY TO MEMBERS WHO OPTED IN TO SMS, strictly — only an explicit
+    //     true. Nothing is recorded for anyone else, so a member who is not
+    //     messaged is not counted as asked and is not put on a 30-day hold.
+    //
+    //     NOTHING IS RECORDED WITHOUT A WEBHOOK TO SEND IT TO, for the same
+    //     reason: a review request that went nowhere would count as sent and
+    //     hold the member back from the next real one.
+    const gotStampUrl = process.env.GHL_MEMBER_GOT_STAMP_WEBHOOK_URL
+    if (!gotStampUrl) {
+      console.warn('[stamp got-stamp] GHL_MEMBER_GOT_STAMP_WEBHOOK_URL is not set — stamp message and review link skipped')
+    } else if (member.sms_opt_in !== true) {
+      // Logged so "why didn't they get a text?" has an answer in the logs.
+      console.info(`[stamp got-stamp] skipped for member ${memberId}: SMS opt-in is off`)
+    } else {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.binperks.com'
 
       waitUntil((async () => {
         try {
           const { data: store } = await admin
             .from('stores')
-            .select('display_name')
+            .select('display_name, google_review_url, timezone')
             .eq('id', storeId)
             .maybeSingle()
 
-          await postToGhl(postVisitUrl, {
-            memberId,
-            firstName:   member.first_name,
+          // A review link only for a store with a usable review page, and
+          // only if this member has not been asked here in the last 30 days.
+          // Otherwise '' — the stamp message still goes out without the ask.
+          let feedbackUrl = ''
+          const reviewUrl = store?.google_review_url?.trim()
+          if (isSafeRedirectUrl(reviewUrl) && !(await askedRecently(admin, memberId, storeId))) {
+            feedbackUrl = await createReviewRequest(admin, {
+              memberId,
+              storeId,
+              reviewUrl,
+              timezone: store?.timezone,
+              appUrl,
+            })
+          }
+
+          await postToGhl(gotStampUrl, {
             phone:       member.phone,
-            storeName:   store?.display_name ?? null,
+            firstName:   member.first_name,
+            lastName:    member.last_name,
+            email:       member.email,
+            storeName:   store?.display_name ?? '',
             feedbackUrl,
-          }, 'stamp post-visit')
+          }, 'stamp got-stamp')
         } catch (err) {
-          // postToGhl never throws; this covers the store lookup. Caught here
-          // because nothing awaits this promise to catch it for us.
-          console.error('[stamp post-visit] background task failed:', err)
+          // postToGhl never throws; this covers the lookups and the link.
+          // Caught here because nothing awaits this promise to catch it.
+          console.error('[stamp got-stamp] background task failed:', err)
         }
       })())
-    } else if (postVisitUrl) {
-      // Logged so "why didn't they get a review text?" has an answer in the
-      // logs rather than a silence.
-      console.info(`[stamp post-visit] skipped for member ${memberId}: SMS opt-in is off`)
     }
 
     return NextResponse.json({

@@ -181,6 +181,7 @@ export async function GET(req: NextRequest) {
     originatedVipRes,
     couponsEarnedRes,
     totalStampsGiven,
+    reviewClicksRes,
   ] = await Promise.all([
     admin
       .from('members')
@@ -258,6 +259,16 @@ export async function GET(req: NextRequest) {
       .eq('members.origin_merchant_id', merchant.id),
 
     sumEffectiveStamps(admin, storeIds),
+
+    // Review clicks, all-time, at these stores: any feedback row a member
+    // tapped through to the review page — the tracked /r/ link sent after a
+    // stamp, or "Leave a Review" on the rating page. A count only; which
+    // members clicked is never shown to a merchant (Merchant Agreement §9.3.2).
+    admin
+      .from('feedback')
+      .select('id', { count: 'exact', head: true })
+      .in('store_id', storeIds)
+      .eq('review_clicked', true),
   ])
 
   const weekActivity = (fiscalChartRes.data ?? []) as
@@ -334,6 +345,8 @@ export async function GET(req: NextRequest) {
       totalCouponsEarned: couponsEarnedRes.count ?? 0,
       membersEnrolled:    originatedMembersRes.count ?? 0,
       vipMembers:         originatedVipMembers,
+      // Store-scoped like totalStampsGiven, so it follows the location selector.
+      reviewClicks:       reviewClicksRes.count ?? 0,
     },
     fiscalWeekChart: chartDays,
     fiscalWeekStart,

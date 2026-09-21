@@ -33,6 +33,9 @@ interface LifetimeStats {
   totalCouponsEarned: number
   membersEnrolled: number
   vipMembers: number
+  /** Taps through to the store's review page. Optional so a dashboard loaded
+   *  from an older API response still renders. */
+  reviewClicks?: number
 }
 
 interface OverviewData {
@@ -146,9 +149,9 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
           <div className="px-0.5">
             <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">All time</h2>
             <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">
-              Stamps are counted where they were awarded. Coupons and members are counted by
-              Origin Store — members who joined BinPerks through your store stay yours
-              permanently, even when they shop elsewhere in the network.
+              Stamps and review clicks are counted where they happened. Coupons and members
+              are counted by Origin Store — members who joined BinPerks through your store
+              stay yours permanently, even when they shop elsewhere in the network.
             </p>
           </div>
 
@@ -158,8 +161,15 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
               { label: 'Coupons earned',   value: lifetimeStats.totalCouponsEarned, icon: '🎟️', color: '#DA1212' },
               { label: 'Members enrolled', value: lifetimeStats.membersEnrolled,    icon: '👥', color: '#2A7D34' },
               { label: 'VIP members',      value: lifetimeStats.vipMembers,         icon: '⭐', color: '#FFB217' },
+              // Full width: a fifth card in a two-column grid would sit alone
+              // on its row. Members who tapped through to leave a review —
+              // a count, never who.
+              { label: 'Review clicks',    value: lifetimeStats.reviewClicks ?? 0,  icon: '💬', color: '#4A4B98', wide: true },
             ].map(stat => (
-              <div key={stat.label} className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-1">
+              <div
+                key={stat.label}
+                className={`bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-1 ${'wide' in stat && stat.wide ? 'col-span-2' : ''}`}
+              >
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
                     {stat.label}

@@ -32,11 +32,16 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({ ok: true })  // soft fail — click still counts
   }
 
-  // Find most recent feedback record for this member
+  // Find most recent feedback record for this member — a RATING, specifically.
+  // feedback also holds review requests now (source 'review_request', one per
+  // stamp that sent a tracked link), and those are counted by /r/[code] when
+  // their own link is tapped. Without this filter a tap here could land on a
+  // review-request row and pass a rating-page click off as a link click.
   const { data: latest } = await admin
     .from('feedback')
     .select('id')
     .eq('member_id', member.id)
+    .eq('source', 'rating')
     .order('submitted_at', { ascending: false })
     .limit(1)
     .maybeSingle()

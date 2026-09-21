@@ -59,6 +59,10 @@ interface Analytics {
     activeMerchants: number; activeStores: number; totalMerchants: number; totalStores: number
     checks: { label: string; missing: number; total: number; tone: 'green' | 'yellow' | 'red'; names: string[] }[]
   }
+  reviews: {
+    requestsSent: number; linkClicks: number; clickThroughPct: number
+    byStore: { storeId: string; store: string; hasReviewUrl: boolean; sent: number; clicked: number; clickThroughPct: number }[]
+  }
   anomalies: {
     starterOver20: { memberId: string; name: string; phone: string; totalStamps: number; originStore: string; isBlacklisted: boolean }[]
     highVelocity: { memberId: string; memberName: string; date: string; storeCount: number }[]
@@ -552,7 +556,56 @@ export default function AnalyticsTab() {
         </p>
       </Section>
 
-      {/* ── 7. Anomalies ── */}
+      {/* ── 7. Reviews ── */}
+      {data.reviews && (
+        <Section
+          title="Reviews"
+          subtitle="Tracked review links sent after a cashier stamp, and how many members tapped through."
+        >
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard label="Requests Sent" value={data.reviews.requestsSent} sub="tracked links" />
+            <StatCard label="Link Clicks"   value={data.reviews.linkClicks}   sub="members who tapped" />
+            <StatCard label="Click-Through" value={data.reviews.clickThroughPct + '%'}
+              sub={`${data.reviews.linkClicks} of ${data.reviews.requestsSent}`} />
+          </div>
+
+          <TableWrap minWidth={380}>
+            <thead>
+              <tr className="bg-[#F5F5F8]">
+                <Th>Store</Th><Th right>Sent</Th><Th right>Clicks</Th><Th right>CTR</Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#EBEBF2]">
+              {data.reviews.byStore.length === 0
+                ? <EmptyRow colSpan={4}>No stores yet.</EmptyRow>
+                : data.reviews.byStore.map(r => (
+                  <tr key={r.storeId}>
+                    <Td>
+                      {r.store}
+                      {/* Zero because it cannot send, not because no one clicked. */}
+                      {!r.hasReviewUrl && (
+                        <span className="ml-1.5 text-[10px] font-bold text-[#8A6A00]">no review URL</span>
+                      )}
+                    </Td>
+                    <Td right mono>{r.sent}</Td>
+                    <Td right mono>{r.clicked}</Td>
+                    <Td right mono>{r.sent > 0 ? r.clickThroughPct + '%' : '—'}</Td>
+                  </tr>
+                ))}
+            </tbody>
+          </TableWrap>
+
+          <p className="text-[10px] text-[#8E8EA8] font-medium leading-relaxed">
+            A member is asked at most once every 30 days per store, and only if they opted in to
+            texts. Clicks exclude the link previews messaging apps fetch on their own, so they
+            are a close estimate rather than an exact count. Taps on &ldquo;Leave a Review&rdquo;
+            from the rating page are not tracked links and are not counted here — the merchant
+            Review Clicks card includes both.
+          </p>
+        </Section>
+      )}
+
+      {/* ── 8. Anomalies ── */}
       <Section
         title={`Anomaly Detection${anomalyCount > 0 ? ` · ${anomalyCount}` : ''}`}
         subtitle="Prompts for a human to look at. Nothing here is a verdict."
