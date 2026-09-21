@@ -13,6 +13,7 @@
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
     "@upstash/redis": "^1.38.0",
+    "@vercel/functions": "^3.9.8",
     "bcryptjs": "^2.4.3",
     "dotenv": "^17.4.2",
     "html2canvas": "^1.4.1",

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import bcrypt from 'bcryptjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
     //     dual-write (step 5a) — permanent attribution, never recomputed here.
     const { data: member, error: memberError } = await supabase
       .from('members')
-      .select('total_stamps, coupon_due, subscription_status, first_name, phone, status, is_blacklisted, origin_store_id, origin_merchant_id')
+      .select('total_stamps, coupon_due, subscription_status, first_name, phone, sms_opt_in, status, is_blacklisted, origin_store_id, origin_merchant_id')
       .eq('id', memberId)
       .single()
 
@@ -315,30 +316,60 @@ export async function POST(req: NextRequest) {
     //     result and referralBonusStamps says what was added on top.
     const referralBonus = await awardReferralBonusIfDue(admin, memberId)
 
-    // 10. Fire post-visit webhook to GHL (non-blocking)
-    //     Triggers SMS prompt to leave a review / provide feedback
+    // 10. Post-visit review request to GHL.
     //
-    //     Deliberately NOT awaited: a cashier is standing at the counter with
-    //     a member in front of them, and a review request is not worth adding
-    //     up to 5s to every stamp. The bounded timeout is what keeps the
-    //     un-awaited call from lingering.
+    //     AFTER THE RESPONSE, AND KEPT ALIVE UNTIL IT LANDS. The cashier is
+    //     standing at the counter with a member in front of them, so this must
+    //     not delay the stamp — but it used to be a bare `void postToGhl(...)`,
+    //     and on Vercel the instance is frozen the moment this handler returns.
+    //     The request was suspended mid-flight and never reached GHL; its 5s
+    //     timeout then fired whenever the next request woke the instance, and
+    //     was logged against THAT request. Production logs showed exactly that
+    //     for both of the last two real stamps (2026-09-08, 2026-09-17).
     //
-    //     KNOWN LIMITATION: fire-and-forget is unreliable on Vercel. The
-    //     instance may be frozen the moment this handler returns, killing the
-    //     request mid-flight, so some review requests are silently never
-    //     delivered. The timeout bounds the call but does not fix delivery —
-    //     only awaiting does, and that trade was rejected here. If review
-    //     requests turn out to be going missing, the fix is a queue or a
-    //     scheduled job, not a longer timeout.
-    if (process.env.GHL_POST_VISIT_WEBHOOK_URL) {
+    //     waitUntil tells Vercel to keep the function running after the
+    //     response until the promise settles. postToGhl gives up after 5s, so
+    //     the function cannot be held past that. Off Vercel it is a no-op and
+    //     the promise simply runs, which is all a dev server needs.
+    //
+    //     ONLY TO MEMBERS WHO OPTED IN TO SMS. A review request is a
+    //     solicitation, not something the member asked for, so it respects
+    //     sms_opt_in — strictly: only an explicit true sends. The GHL workflow
+    //     sends the email from the same trigger, so an opted-out member gets
+    //     neither.
+    //
+    //     storeName, not storeId: the GHL templates need something a person
+    //     can read, and an id is meaningless in a text message. Looked up
+    //     inside the background task so it adds nothing to the cashier's wait.
+    const postVisitUrl = process.env.GHL_POST_VISIT_WEBHOOK_URL
+    if (postVisitUrl && member.sms_opt_in === true) {
       const feedbackUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.binperks.com') + '/member/feedback'
-      void postToGhl(process.env.GHL_POST_VISIT_WEBHOOK_URL, {
-        memberId,
-        firstName:   member.first_name,
-        phone:       member.phone,
-        storeId,
-        feedbackUrl,
-      }, 'stamp post-visit')
+
+      waitUntil((async () => {
+        try {
+          const { data: store } = await admin
+            .from('stores')
+            .select('display_name')
+            .eq('id', storeId)
+            .maybeSingle()
+
+          await postToGhl(postVisitUrl, {
+            memberId,
+            firstName:   member.first_name,
+            phone:       member.phone,
+            storeName:   store?.display_name ?? null,
+            feedbackUrl,
+          }, 'stamp post-visit')
+        } catch (err) {
+          // postToGhl never throws; this covers the store lookup. Caught here
+          // because nothing awaits this promise to catch it for us.
+          console.error('[stamp post-visit] background task failed:', err)
+        }
+      })())
+    } else if (postVisitUrl) {
+      // Logged so "why didn't they get a review text?" has an answer in the
+      // logs rather than a silence.
+      console.info(`[stamp post-visit] skipped for member ${memberId}: SMS opt-in is off`)
     }
 
     return NextResponse.json({
