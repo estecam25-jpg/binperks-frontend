@@ -33,6 +33,12 @@ export async function POST() {
   if (merchant.billing_status === 'active') {
     return NextResponse.json({ error: 'Subscription already active' }, { status: 400 })
   }
+  // Paid, waiting to sign. Another checkout here would charge them a second
+  // time for a subscription they already have — what they need is their
+  // agreement (the dashboard shows them the way to it).
+  if (merchant.billing_status === 'pending_signature') {
+    return NextResponse.json({ error: 'signature_pending' }, { status: 409 })
+  }
 
   // Same line items as /api/merchant/apply — one shared builder, so the two
   // checkout paths cannot drift apart again (they had identical copies of the

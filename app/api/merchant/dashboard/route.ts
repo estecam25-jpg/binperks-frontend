@@ -37,6 +37,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { PENDING_SIGNATURE, ensureDocusealSubmission, signPagePath } from '@/lib/merchant-onboarding'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
 
@@ -132,6 +133,25 @@ export async function GET(req: NextRequest) {
   // All table reads below use the admin client — RLS blocks these queries
   // otherwise (see CLAUDE.md CRITICAL RLS RULE).
   const admin = createAdminSupabaseClient()
+
+  // Paid but not yet signed: no dashboard — nothing is live and nothing is
+  // theirs to manage until the Merchant Agreement is signed. The page shows a
+  // gate that takes them to their agreement. The signing session is opened
+  // here if it never was, so this is also how a merchant who closed the tab
+  // after paying finds their way back.
+  if (merchant.billing_status === PENDING_SIGNATURE) {
+    const slug = await ensureDocusealSubmission(admin, merchant.id)
+    return NextResponse.json({
+      merchant: {
+        id: merchant.id,
+        companyName: merchant.company_name,
+        billingStatus: merchant.billing_status,
+        hasSubscription: true,
+        signUrl: slug ? signPagePath(slug) : null,
+      },
+      stores: [], stats: null, originMetrics: null, lifetimeStats: null, fiscalWeekChart: [],
+    })
+  }
 
   const storeIdParam = new URL(req.url).searchParams.get('storeId')
 

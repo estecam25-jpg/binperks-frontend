@@ -6,9 +6,11 @@
  * list-price estimate — a merchant who applied a promotional discount pays
  * less than list price and must not be told they paid the full amount.
  *
- * Merchant activation is handled asynchronously by the Stripe webhook at
- * /api/merchant/webhook. Nothing on this page grants access or changes state;
- * it is display only.
+ * NEXT STEP IS SIGNING. The merchant is not live yet — they sign the Merchant
+ * Agreement in-app first. This page polls /api/merchant/signup/status with the
+ * same session id and sends them on to /merchant/signup/sign as soon as their
+ * signing session is open. That status call can itself create the merchant if
+ * it gets there before the Stripe webhook — see lib/merchant-onboarding.
  */
 
 import Stripe from 'stripe'
@@ -54,6 +56,7 @@ export default async function MerchantThankYouPage({
       chargedToday={chargedToday}
       locationCountFromStripe={locationCountFromStripe}
       discountApplied={discountApplied}
+      sessionId={sessionId}
     />
   )
 }

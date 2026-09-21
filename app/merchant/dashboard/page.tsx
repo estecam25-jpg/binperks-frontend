@@ -16,6 +16,9 @@ function DashboardShell() {
   const [loading, setLoading] = useState(true)
   const [onboardingPct, setOnboardingPct] = useState(100)
   const [abandonedCheckout, setAbandonedCheckout] = useState(false)
+  // Paid but not yet signed. undefined = not gated; null = gated, but the
+  // signing link could not be prepared this time; string = the link.
+  const [signGate, setSignGate] = useState<string | null | undefined>(undefined)
   const [resuming, setResuming] = useState(false)
 
   // Tab and store from URL params — enables deep linking + back button
@@ -63,6 +66,12 @@ function DashboardShell() {
       fetch('/api/merchant/onboarding').then(r => r.ok ? r.json() : null),
     ]).then(([data, onboarding]) => {
       if (!data) return
+      if (data.merchant?.billingStatus === 'pending_signature') {
+        setCompanyName(data.merchant?.companyName ?? '')
+        setSignGate(data.merchant?.signUrl ?? null)
+        setLoading(false)
+        return
+      }
       setCompanyName(data.merchant?.companyName ?? '')
       setStores(data.stores ?? [])
       if (onboarding) setOnboardingPct(Math.round((onboarding.completedCount / onboarding.total) * 100))
@@ -111,6 +120,46 @@ function DashboardShell() {
     } else {
       setResuming(false)
     }
+  }
+
+  // Paid, not signed: the agreement comes before the dashboard. Nothing is live
+  // yet and nothing here is theirs to manage until it is signed.
+  if (signGate !== undefined) {
+    return (
+      <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
+        <div className="bg-[#4A4B98] px-6 pt-14 pb-16 flex flex-col items-center gap-4 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon.png" alt="BinPerks" className="h-16 w-16 object-contain" />
+          <h1 className="font-['Coiny'] text-3xl text-white leading-tight">One last step</h1>
+          <p className="text-[14px] text-white/75 font-medium leading-relaxed max-w-sm">
+            {companyName ? `${companyName}, your` : 'Your'} payment is in. Sign your BinPerks Merchant
+            Agreement and your dashboard opens right away.
+          </p>
+        </div>
+        <div className="w-full max-w-lg mx-auto -mt-8 px-4 pb-16">
+          <div className="bg-white rounded-2xl shadow-xl px-5 py-6 flex flex-col gap-4 text-center">
+            {signGate ? (
+              <a href={signGate} className="w-full py-3.5 rounded-xl font-bold text-[14px] text-white bg-[#4A4B98]">
+                Sign your agreement →
+              </a>
+            ) : (
+              <>
+                <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
+                  We&apos;re preparing your agreement. Refresh this page in a minute, or email{' '}
+                  <a href="mailto:support@binperks.com" className="text-[#4A4B98] font-semibold underline">support@binperks.com</a>.
+                </p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="w-full py-3.5 rounded-xl font-bold text-[14px] text-white bg-[#4A4B98]"
+                >
+                  Refresh
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
