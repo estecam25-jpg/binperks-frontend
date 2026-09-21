@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { postToGhl } from '@/lib/ghl-webhook'
 import { createAlert, couponReadyAlert, tierUpAlert } from '@/lib/member-alerts'
+import { awardReferralBonusIfDue } from '@/lib/referral-bonus'
 
 export async function POST(req: NextRequest) {
   try {
@@ -303,6 +304,17 @@ export async function POST(req: NextRequest) {
       couponRedeemed = true
     }
 
+    // 9a. Referral bonus — 2 stamps to this member and 2 to whoever referred
+    //     them, if this is their first visit and a referral is waiting.
+    //
+    //     AFTER the stamp is fully written, and unable to affect it: it never
+    //     throws, and a failure there costs the member nothing they earned
+    //     here. With no referral pending — every stamp but one per referred
+    //     member — it is a single read. Its bonus stamps go to their own rows
+    //     and their own total update, so newTotalStamps below is this visit's
+    //     result and referralBonusStamps says what was added on top.
+    const referralBonus = await awardReferralBonusIfDue(admin, memberId)
+
     // 10. Fire post-visit webhook to GHL (non-blocking)
     //     Triggers SMS prompt to leave a review / provide feedback
     //
@@ -339,6 +351,9 @@ export async function POST(req: NextRequest) {
       justLeveledUp,
       approachingLevelUp,
       isVip: member.subscription_status === 'vip',
+      // 0 on every stamp but a referred member's first. The stamp tool does not
+      // show it yet; it is here so it can without another round trip.
+      referralBonusStamps: referralBonus.referredStamps,
     })
 
   } catch (err) {

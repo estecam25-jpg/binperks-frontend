@@ -37,6 +37,7 @@ import { issueMemberOtp } from '@/lib/member-otp'
 import { postToGhl } from '@/lib/ghl-webhook'
 import { BINPERKS_HOUSE_STORE_ID, BINPERKS_HOUSE_MERCHANT_ID } from '@/lib/binperks-origin'
 import { generateReferralCode as generateShortCode, referralUrl as shortReferralUrl } from '@/lib/referral-code'
+import { awardReferralBonusIfDue } from '@/lib/referral-bonus'
 
 const APP_URL = 'https://app.binperks.com'
 
@@ -359,9 +360,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to create member' }, { status: 500 })
     }
 
-    // 5. If referred, create the referrals row (bonus stamps are awarded later,
-    //    by the award_stamp flow, once the referred member earns their first
-    //    real visit stamp — referral bonus is 2 stamps, never 5)
+    // 5. If referred, create the referrals row. Pending until the referred
+    //    member's first visit stamp, which pays 2 stamps to each side — see
+    //    lib/referral-bonus. That can be this very request (5b, below) when
+    //    they joined at the register; otherwise it is their first cashier stamp.
     if (referrerMemberId) {
       await supabase.from('referrals').insert({
         referrer_member_id: referrerMemberId,
@@ -401,6 +403,18 @@ export async function POST(req: NextRequest) {
         // authority the Origin Store attribution above is written from.
         merchantId: store.merchant_id,
       })
+    }
+
+    // 5b. Referral bonus, when this signup's register stamp WAS the first visit.
+    //
+    //     A referred member who joins at the register gets their first visit
+    //     stamp right here, not at a cashier — so if the bonus waited for
+    //     /api/stamp, this visit would already be spent and the referral would
+    //     pay out a visit late. Only when the stamp actually landed: no stamp,
+    //     no first visit, and the referral stays pending for their first
+    //     cashier stamp to pay instead. Never throws — see lib/referral-bonus.
+    if (stampAwarded && referrerMemberId) {
+      await awardReferralBonusIfDue(admin, memberId)
     }
 
     // 6. Notify GHL. Awaited — a fire-and-forget fetch is killed when the

@@ -210,6 +210,15 @@ export async function GET(req: NextRequest) {
   const stores   = storesRes.rows.filter(s => s.id !== BINPERKS_HOUSE_STORE_ID)
   const merchants = merchantsRes.rows.filter(m => m.id !== BINPERKS_HOUSE_MERCHANT_ID)
   const activity = activityRes.rows
+
+  // Activity that is an actual VISIT to a store. Referral bonus stamps are
+  // recorded at the BinPerks house store — it has no location and no cashiers,
+  // so a row there can only be a bonus (lib/referral-bonus). They are real
+  // stamps and stay in every stamp total, but they are not a member walking
+  // into a shop, so the measures that mean "visited" leave them out: a
+  // referrer would otherwise look retained, look like a cross-shopper, and
+  // could trip the three-stores-in-a-day check, all off someone else's visit.
+  const visitActivity = activity.filter(a => a.store_id !== BINPERKS_HOUSE_STORE_ID)
   const rewards  = rewardsRes.rows
   const scans    = scansRes.rows
   const imageLog = imageLogRes.rows
@@ -259,7 +268,7 @@ export async function GET(req: NextRequest) {
       totalMembers,
       conversionRate: pct(vipMembers, totalMembers),
     },
-    retention: retentionBuckets(members.map(m => m.id), activity, now),
+    retention: retentionBuckets(members.map(m => m.id), visitActivity, now),
     speedToFirstCoupon: speedToFirstCoupon(members, rewards),
     referrals: {
       membersViaReferral,
@@ -306,10 +315,10 @@ export async function GET(req: NextRequest) {
   // House-origin members are counted SEPARATELY: they have no participating
   // origin merchant at all, so every stamp they earn would qualify and would
   // overstate how much real cross-shopping is happening.
-  const houseOriginEvents = activity.filter(
+  const houseOriginEvents = visitActivity.filter(
     a => a.origin_merchant_id === BINPERKS_HOUSE_MERCHANT_ID,
   ).length
-  const crossNetworkEvents = activity.filter(
+  const crossNetworkEvents = visitActivity.filter(
     a => a.origin_merchant_id !== BINPERKS_HOUSE_MERCHANT_ID
       && a.merchant_id !== null
       && a.origin_merchant_id !== null
@@ -321,8 +330,8 @@ export async function GET(req: NextRequest) {
     inactiveStores,
     crossNetworkActivity: {
       crossNetworkEvents,
-      totalEvents: activity.length,
-      crossNetworkPct: pct(crossNetworkEvents, activity.length),
+      totalEvents: visitActivity.length,
+      crossNetworkPct: pct(crossNetworkEvents, visitActivity.length),
       houseOriginEvents,
     },
   }
@@ -455,7 +464,7 @@ export async function GET(req: NextRequest) {
     }))
     .sort((a, b) => b.totalStamps - a.totalStamps)
 
-  const highVelocity = highVelocityDays(activity, 3).map(h => ({
+  const highVelocity = highVelocityDays(visitActivity, 3).map(h => ({
     ...h,
     memberName: memberLabel(h.memberId),
   }))

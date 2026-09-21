@@ -9,9 +9,10 @@
  * so.
  *
  * LAID OUT AS THE MERCHANT SEES IT. One horizontal strip per category, cards
- * in the order they appear on the merchant's Marketing tab — so reordering is
- * done while looking at the same shape the merchant will get, rather than in a
- * vertical list that reads nothing like the result.
+ * in the order they appear on the merchant's Marketing tab. That order is
+ * display_order and is not edited here — the reorder controls were removed.
+ * The PATCH route still accepts an `order` array, so it can come back without
+ * a server change.
  *
  * DESIGNS SIT IN THE STRIP BESIDE THEIR MATERIAL, not in a section of their
  * own. A design is the printable artwork a material is built from, and the
@@ -186,13 +187,10 @@ function RectFields({
  * there. Editing happens in the panel below.
  */
 function MaterialCard({
-  m, position, count, busy, onMove, onToggle, onEdit, editing,
+  m, busy, onToggle, onEdit, editing,
 }: {
   m: Material
-  position: number
-  count: number
   busy: boolean
-  onMove: (delta: number) => void
   onToggle: () => void
   onEdit: () => void
   editing: boolean
@@ -204,26 +202,6 @@ function MaterialCard({
       className={`${CARD_W} bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-2.5`}
       style={editing ? { outline: `2px solid ${BLUE}` } : undefined}
     >
-      {/* Order, then name. Left and right because the strip runs sideways —
-          up and down would describe a list that is not on screen. */}
-      <div className="flex items-center gap-1.5">
-        <button
-          onClick={() => onMove(-1)}
-          disabled={busy || position === 0}
-          aria-label={`Move ${m.title} earlier`}
-          className="w-6 h-6 rounded-md border border-[#EBEBF2] text-[10px] font-bold text-[#8E8EA8] disabled:opacity-30"
-        >◀</button>
-        <button
-          onClick={() => onMove(1)}
-          disabled={busy || position === count - 1}
-          aria-label={`Move ${m.title} later`}
-          className="w-6 h-6 rounded-md border border-[#EBEBF2] text-[10px] font-bold text-[#8E8EA8] disabled:opacity-30"
-        >▶</button>
-        <span className="text-[9px] font-bold text-[#B0B0C8] ml-auto">
-          {position + 1} of {count}
-        </span>
-      </div>
-
       <h3 className="text-[14px] font-extrabold text-[#1A1A2E] leading-tight">{m.title}</h3>
 
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -730,29 +708,6 @@ export default function MarketingTemplatesTab() {
     return () => { cancelled = true }
   }, [nonce])
 
-  // Sends the whole category's new order, so two cards can never claim the
-  // same position the way a pair of single-row swaps can.
-  async function reorder(m: Material, delta: number) {
-    const siblings = materials
-      .filter(x => x.category === m.category)
-      .sort((a, b) => a.display_order - b.display_order)
-    const from = siblings.findIndex(x => x.id === m.id)
-    const to = from + delta
-    if (from < 0 || to < 0 || to >= siblings.length) return
-
-    const next = [...siblings]
-    ;[next[from], next[to]] = [next[to], next[from]]
-
-    setBusy(true)
-    await fetch('/api/admin/marketing-materials', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order: next.map(x => x.id) }),
-    }).catch(() => {})
-    setBusy(false)
-    reload()
-  }
-
   async function toggleActive(m: Material) {
     setBusy(true)
     await fetch('/api/admin/marketing-materials', {
@@ -858,14 +813,11 @@ export default function MarketingTemplatesTab() {
                    from, so a card and its artwork are always together. */
                 <div className="overflow-x-auto -mx-4 px-4 pb-1">
                   <div className="flex gap-3 w-max items-stretch">
-                    {items.map((m, i) => (
+                    {items.map(m => (
                       <Fragment key={m.id}>
                         <MaterialCard
                           m={m}
-                          position={i}
-                          count={items.length}
                           busy={busy}
-                          onMove={delta => reorder(m, delta)}
                           onToggle={() => toggleActive(m)}
                           onEdit={() => setEditing(
                             editing?.kind === 'material' && editing.id === m.id

@@ -11,7 +11,8 @@
  *   4. Insert stores row for the first location (is_active: false until paid)
  *   5. Create Stripe customer
  *   6. Create Stripe checkout session (subscription)
- *   7. Notify GHL merchant-created webhook (fire-and-forget, skipped if URL isn't configured)
+ *   7. Notify GHL: merchant-created, and the abandoned-checkout alert (both
+ *      skipped if their URL isn't configured, neither able to block checkout)
  *   8. Return { checkoutUrl, merchantId }
  *
  * Note: GHL_MERCHANT_CREATED_WEBHOOK_URL handles the welcome SMS — no separate welcome webhook needed.
@@ -188,20 +189,50 @@ export async function POST(req: NextRequest) {
 
     // 7. Notify GHL. Awaited — a fire-and-forget fetch is killed when the
     //    handler returns on Vercel, so the welcome SMS was being dropped at
-    //    random. Costs up to 5s before the checkout redirect; postToGhl never
-    //    throws, so a GHL outage cannot block a merchant from paying.
-    //    Skipped entirely if the webhook URL isn't configured yet.
+    //    random. postToGhl never throws, so a GHL outage cannot block a
+    //    merchant from paying. The two calls run side by side, so a slow GHL
+    //    costs one 5s timeout before the checkout redirect, not two.
+    const ghlCalls: Promise<boolean>[] = []
+
     const ghlWebhook = process.env.GHL_MERCHANT_CREATED_WEBHOOK_URL
     if (ghlWebhook) {
-      await postToGhl(ghlWebhook, {
+      ghlCalls.push(postToGhl(ghlWebhook, {
         merchantId:  merchant.id,
         firstName,
         lastName,
         phone,
         email:       normalizedEmail,
         companyName,
-      }, '/api/merchant/apply')
+      }, '/api/merchant/apply'))
     }
+
+    // 7a. Abandoned-checkout alert.
+    //
+    //     SENT WHEN CHECKOUT STARTS, NOT WHEN IT IS ABANDONED. BinPerks cannot
+    //     know a merchant has walked away until they have — so this hands GHL
+    //     the details now, and the GHL workflow decides when to follow up.
+    //     That workflow MUST stop once the merchant pays, or every merchant
+    //     who pays gets a "you didn't finish" message a day later.
+    //
+    //     checkoutUrl is Stripe's session URL, which Stripe expires after 24
+    //     hours. A follow-up sent later than that links to a dead page; a
+    //     merchant can still finish from the dashboard, which offers a fresh
+    //     checkout to any merchant still marked pending.
+    const abandonedWebhook = process.env.GHL_MERCHANT_ABANDONED_CHECKOUT_WEBHOOK_URL
+    if (abandonedWebhook) {
+      ghlCalls.push(postToGhl(abandonedWebhook, {
+        merchantName:  `${firstName} ${lastName}`.trim(),
+        businessName:  companyName,
+        merchantEmail: normalizedEmail,
+        merchantPhone: phone ?? null,
+        storeName,
+        checkoutUrl:   session.url,
+      }, '/api/merchant/apply abandoned-checkout'))
+    } else {
+      console.warn('[/api/merchant/apply] GHL_MERCHANT_ABANDONED_CHECKOUT_WEBHOOK_URL is not set — abandoned-checkout alert skipped')
+    }
+
+    await Promise.all(ghlCalls)
 
     return NextResponse.json({
       checkoutUrl: session.url,
