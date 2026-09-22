@@ -154,32 +154,39 @@ export default function SignAgreement({
     )
   }
 
+  // FULL HEIGHT, NO OVERFLOW CLIPPING. DocuSeal pins its field panel (the
+  // input and the Next / Complete button) to the bottom of the screen with
+  // `position: sticky; bottom: 0`. Any ancestor with overflow hidden or auto
+  // becomes the thing it sticks to instead — which used to be our rounded
+  // card, so the panel sat at the very end of the document and the merchant
+  // had to scroll down to it after every field. The form container below is
+  // at least a full viewport tall and nothing around it clips, so the panel
+  // stays on screen the whole way through.
   return (
     <div className="min-h-dvh bg-[#F5F5F8]">
       <Header
         title="Sign your agreement"
         subtitle="One last step. Review and sign your BinPerks Merchant Agreement to activate your account."
       />
-      <div className="w-full max-w-3xl mx-auto -mt-8 px-4 pb-16">
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden min-h-[420px] relative">
-          {phase === 'loading' && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white z-10">
-              <Spinner />
-              <p className="text-[13px] text-[#8E8EA8] font-medium">Loading your agreement…</p>
-            </div>
-          )}
-          <DocusealForm
-            src={src}
-            email={email ?? undefined}
-            withTitle={false}
-            onLoad={() => setPhase('signing')}
-            onComplete={() => { void confirm() }}
-          />
-        </div>
-        <p className="text-[11px] text-[#B0B0C8] font-medium text-center mt-4 leading-relaxed">
-          Questions about the agreement? Email{' '}
-          <a href="mailto:support@binperks.com" className="text-[#4A4B98] font-semibold underline">support@binperks.com</a>.
-        </p>
+      <p className="text-[11px] text-[#8E8EA8] font-medium text-center py-3 px-4 leading-relaxed bg-white border-b border-[#EBEBF2]">
+        Questions about the agreement? Email{' '}
+        <a href="mailto:support@binperks.com" className="text-[#4A4B98] font-semibold underline">support@binperks.com</a>.
+      </p>
+      <div className="relative w-full min-h-dvh bg-white">
+        {phase === 'loading' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white z-10">
+            <Spinner />
+            <p className="text-[13px] text-[#8E8EA8] font-medium">Loading your agreement…</p>
+          </div>
+        )}
+        <DocusealForm
+          src={src}
+          email={email ?? undefined}
+          withTitle={false}
+          style={{ display: 'block', minHeight: '100dvh' }}
+          onLoad={() => setPhase('signing')}
+          onComplete={() => { void confirm() }}
+        />
       </div>
     </div>
   )
