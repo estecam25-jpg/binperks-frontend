@@ -24,6 +24,12 @@ import { FeedSection, FeedCarousel, RevealBox, CoverImage, CARD_W } from './Feed
 
 const BINPERKS_BLUE = '#4A4B98'
 
+/** How big the logo tile gets, in px. A square as wide as the card read as a
+ *  billboard in a row a member is meant to skim; at this size it is a
+ *  thumbnail under the store's name, and three cards fit the screen instead of
+ *  one and a half. Still square, still cropped rather than squashed. */
+const MARK_SIZE = 160
+
 interface Store {
   id: string
   displayName: string
@@ -77,13 +83,18 @@ function StoreCard({ store }: { store: Store }) {
           is drawn plainly in a box of the same shape — the row stays even
           either way. */}
       {message ? (
-        <RevealBox cover={mark}>
+        <RevealBox cover={mark} maxSize={MARK_SIZE}>
           <div className="p-3">
             <p className="text-[12px] font-medium text-[#8E8EA8] leading-relaxed">{message}</p>
           </div>
         </RevealBox>
       ) : (
-        <div className="relative aspect-square w-full rounded-xl overflow-hidden">{mark}</div>
+        <div
+          className="relative aspect-square w-full rounded-xl overflow-hidden mx-auto"
+          style={{ maxWidth: MARK_SIZE }}
+        >
+          {mark}
+        </div>
       )}
 
       {/* One destination for every card: the Stores tab, where the member gets

@@ -98,6 +98,20 @@ export default function MemberHomePage() {
             catalogue — that lives on the MORE tab. */}
         <BeyondSections pinnedOnly showEmptySections={false} />
 
+        {/* ── Support ──
+            Where a member looks when something is wrong: the end of the first
+            screen they open. Deliberately quiet — a line of text, not a
+            banner — because it is only of interest to the member who needs
+            it. The same address appears on the account screen and in every
+            error message; this is the one that is there before anything has
+            gone wrong. */}
+        <p className="w-full text-center text-[12px] font-medium text-[#8E8EA8] leading-relaxed pt-1">
+          Need help? Contact BinPerks support at{' '}
+          <a href="mailto:support@binperks.com" className="underline text-[#4A4B98] font-semibold">
+            support@binperks.com
+          </a>
+        </p>
+
         {/* Clears the fixed bottom nav. A dedicated spacer rather than padding
             on an ancestor: the scanner and account screens each set their own
             height, and padding on a wrapper they overflow does not reach them.

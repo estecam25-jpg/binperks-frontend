@@ -1091,8 +1091,9 @@ export function GettingStartedTab({ storeId }: { storeId: string | null }) {
   const [total,          setTotal]          = useState(0)
   const [loading,        setLoading]        = useState(true)
   const [loadFailed,     setLoadFailed]     = useState(false)
-  const [confirming,     setConfirming]     = useState(false)
-  const [confirmed,      setConfirmed]      = useState(false)
+  // Which item is mid-confirm, by id — one flag for the whole list would grey
+  // out every "Mark done" button while any one of them was saving.
+  const [confirming,     setConfirming]     = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/merchant/onboarding')
@@ -1112,18 +1113,26 @@ export function GettingStartedTab({ storeId }: { storeId: string | null }) {
       .catch(() => { setLoadFailed(true); setLoading(false) })
   }, [])
 
-  async function handleConfirmTraining() {
-    setConfirming(true)
+  /** The items the merchant ticks off themselves — BinPerks has no way to see
+   *  a cashier trained or a coupon added to a till. Item id → PATCH action. */
+  const SELF_CONFIRMED: Record<string, string> = {
+    cashier_training: 'confirm_training',
+    pos_coupons:      'confirm_pos_coupons',
+  }
+
+  async function handleConfirm(itemId: string) {
+    const action = SELF_CONFIRMED[itemId]
+    if (!action) return
+    setConfirming(itemId)
     const res = await fetch('/api/merchant/onboarding', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'confirm_training' }),
+      body: JSON.stringify({ action }),
     })
     if (res.ok) {
-      setConfirmed(true)
-      setItems(prev => prev.map(i => i.id === 'cashier_training' ? { ...i, completed: true } : i))
+      setItems(prev => prev.map(i => i.id === itemId ? { ...i, completed: true } : i))
       setCompletedCount(c => c + 1)
     }
-    setConfirming(false)
+    setConfirming(null)
   }
 
   if (loading) {
@@ -1225,13 +1234,13 @@ export function GettingStartedTab({ storeId }: { storeId: string | null }) {
                   Add
                 </a>
               )}
-              {item.id === 'cashier_training' && !item.completed && (
+              {SELF_CONFIRMED[item.id] && !item.completed && (
                 <button
-                  onClick={handleConfirmTraining}
-                  disabled={confirming || confirmed}
+                  onClick={() => handleConfirm(item.id)}
+                  disabled={confirming !== null}
                   className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-[#4A4B98] text-white text-[11px] font-bold disabled:opacity-50"
                 >
-                  {confirming ? '…' : 'Mark done'}
+                  {confirming === item.id ? '…' : 'Mark done'}
                 </button>
               )}
             </div>

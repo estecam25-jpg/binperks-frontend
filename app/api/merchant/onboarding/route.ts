@@ -17,7 +17,7 @@ export async function GET() {
   const admin = createAdminSupabaseClient()
 
   const [stores, activePerks, staff, stampCheck, binPhotoCheck] = await Promise.all([
-    admin.from('stores').select('id, logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at, agreement_signed_at').eq('merchant_id', merchant.id),
+    admin.from('stores').select('id, logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at, pos_coupons_confirmed_at, agreement_signed_at').eq('merchant_id', merchant.id),
     admin.from('perks').select('member_type').eq('merchant_id', merchant.id).eq('is_active', true),
     admin.from('staff_users').select('id').eq('merchant_id', merchant.id).eq('is_active', true),
     admin.from('activity_events').select('id').eq('merchant_id', merchant.id).limit(1),
@@ -43,6 +43,10 @@ export async function GET() {
   const reviewUrlSet       = storeList.some(s => !!s.google_review_url)
   const mktDownloaded      = storeList.some(s => !!s.marketing_downloaded_at)
   const trainingConfirmed  = storeList.some(s => !!s.cashier_training_confirmed_at)
+  // Nothing BinPerks can observe — the coupon amounts are entered in the
+  // merchant's own point-of-sale system — so, like cashier training, this is
+  // ticked off by the merchant saying they have done it.
+  const posCouponsAdded    = storeList.some(s => !!s.pos_coupons_confirmed_at)
   const agreementSigned    = storeList.some(s => !!s.agreement_signed_at)
   const binPhotosAdded     = (binPhotoCheck.data ?? []).length > 0
 
@@ -56,6 +60,13 @@ export async function GET() {
     { id: 'review_url',        label: 'Google Review URL added',                          completed: reviewUrlSet,                                binPerks: false },
     { id: 'free_perks',        label: 'Free member perk added',                          completed: freePerksCount >= 1,                         binPerks: false },
     { id: 'vip_perks',         label: 'VIP perks added (3+ required)',                   completed: vipPerksCount >= 3,                          binPerks: false },
+    {
+      id: 'pos_coupons',
+      label: 'Add BinPerks coupons to your POS system',
+      description: 'Add the BinPerks coupon amounts ($5, $7, $10, $12, $15) to your point-of-sale system so cashiers can apply them when members redeem rewards.',
+      completed: posCouponsAdded,
+      binPerks: false,
+    },
     { id: 'cashier_pin',       label: 'Cashier PIN created',                             completed: staffCount > 0,                              binPerks: false },
     { id: 'mkt_downloaded',    label: 'Marketing materials downloaded',                  completed: mktDownloaded,                               binPerks: false },
     { id: 'stamp_tested',      label: 'Stamp tool tested',                               completed: stampsTested,                                binPerks: false },
@@ -81,11 +92,21 @@ export async function PATCH(req: NextRequest) {
 
   const { action } = await req.json() as { action?: string }
 
-  if (action === 'confirm_training') {
+  // The checklist items BinPerks cannot observe for itself: the merchant says
+  // when they are done, and each one stamps its own column on every store the
+  // merchant owns. Listed here rather than branched one by one so the next
+  // self-confirmed item is a line, not another if.
+  const CONFIRMABLE: Record<string, string> = {
+    confirm_training:    'cashier_training_confirmed_at',
+    confirm_pos_coupons: 'pos_coupons_confirmed_at',
+  }
+
+  const column = action ? CONFIRMABLE[action] : undefined
+  if (column) {
     const admin = createAdminSupabaseClient()
     const now = new Date().toISOString()
     await admin.from('stores')
-      .update({ cashier_training_confirmed_at: now })
+      .update({ [column]: now })
       .eq('merchant_id', merchant.id)
     return NextResponse.json({ ok: true })
   }

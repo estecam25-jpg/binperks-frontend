@@ -80,12 +80,18 @@ export function FeedSection({
  * should not offer to save the picture.
  */
 export function RevealBox({
-  cover, children,
+  cover, children, maxSize,
 }: {
   /** What sits on top until the member asks to see through it — an image on a
    *  feed card, a logo or an initials tile on a store card. */
   cover: React.ReactNode
   children: React.ReactNode
+  /** Caps the box in px and centres it, for a surface where a full-width
+   *  square is more picture than the card wants — Bin Stores Near Me, where
+   *  the logo is a thumbnail beside the store's name rather than the point of
+   *  the card. Capping the WIDTH is what keeps it square: the height comes
+   *  from the width, so a max-height alone would flatten it. */
+  maxSize?: number
 }) {
   const [revealed, setRevealed] = useState(false)
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -105,7 +111,7 @@ export function RevealBox({
   return (
     <div
       className={`relative ${REVEAL_SHAPE} w-full rounded-xl overflow-hidden select-none`}
-      style={{ WebkitTouchCallout: 'none' }}
+      style={{ WebkitTouchCallout: 'none', maxWidth: maxSize, marginInline: maxSize ? 'auto' : undefined }}
       onPointerEnter={e => { if (e.pointerType === 'mouse') setRevealed(true) }}
       onPointerLeave={hide}
       onPointerDown={e => {
