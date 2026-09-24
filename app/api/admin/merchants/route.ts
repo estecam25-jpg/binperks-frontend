@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { postToGhl } from '@/lib/ghl-webhook'
 import { verifyAdmin } from '@/lib/admin-auth'
+import { onboardingPercent } from '@/lib/merchant-onboarding-checklist'
 
 export async function GET(req: NextRequest) {
   const adminEmail = await verifyAdmin()
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [merchantsResult, stampEvents, allMembers, w9Records, allStores, allPerks, allStaff, allStamps, participantTypes] = await Promise.all([
+  const [merchantsResult, stampEvents, allMembers, w9Records, allStores, allPerks, allStaff, allStamps, allBinPhotos, participantTypes] = await Promise.all([
     admin.from('merchants')
       // stripe_customer_id, NOT stripe_subscription_id — that column does not
       // exist on merchants and PostgREST rejected the whole select, which is why
@@ -57,10 +58,15 @@ export async function GET(req: NextRequest) {
     admin.from('activity_events').select('merchant_id, effective_stamps').gte('occurred_at', sevenDaysAgo),
     admin.from('members').select('merchant_id, subscription_status'),
     admin.from('merchant_w9').select('merchant_id, status, submitted_at, reviewed_at'),
-    admin.from('stores').select('merchant_id, logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at'),
+    // Every column the shared checklist asks about — the onboarding
+    // percentage below is the merchant's own list, counted, so it reads the
+    // same rows the merchant's Getting Started tab does.
+    admin.from('stores').select('merchant_id, logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at, pos_coupons_confirmed_at, agreement_signed_at').order('created_at', { ascending: true }),
     admin.from('perks').select('merchant_id, is_active, member_type').eq('is_active', true),
     admin.from('staff_users').select('merchant_id').eq('is_active', true),
     admin.from('activity_events').select('merchant_id'),
+    // Bin photos hang off stores, so the merchant id comes through the join.
+    admin.from('store_bin_photos').select('id, stores!inner(merchant_id)').eq('active', true),
     admin.from('participant_types').select('id, display_name'),
   ])
 
@@ -104,26 +110,46 @@ export async function GET(req: NextRequest) {
   }
   const stampedMerchants = new Set((allStamps.data ?? []).map((s: { merchant_id: string }) => s.merchant_id))
 
+  // A photo row carries its store, and the store its merchant.
+  const binPhotoMerchants = new Set(
+    (allBinPhotos.data ?? [])
+      .map(r => (r as { stores?: { merchant_id?: string } | { merchant_id?: string }[] }).stores)
+      .flatMap(s => Array.isArray(s) ? s : s ? [s] : [])
+      .map(s => s.merchant_id)
+      .filter((id): id is string => !!id),
+  )
+
+  /**
+   * The merchant's own checklist, counted.
+   *
+   * It used to be a second list written out here, which drifted from the one
+   * the merchant sees: it counted two W-9 rows their list never had, missed
+   * the bin photos item, held one slot permanently true, and divided by a
+   * hardcoded 13. A merchant at 8 of 13 on their screen could read 77% here.
+   * Now both come from lib/merchant-onboarding-checklist, so the number on
+   * this card is the fraction of that list the merchant has ticked off.
+   *
+   * The W-9 has not gone missing: it is reviewed in admin, shown on the card
+   * as its own status, and covered in the checklist by the DocuSeal item.
+   */
   function calcOnboarding(m: { id: string; billing_status: string }) {
-    const w9 = w9ByMerchant[m.id] ?? null
     const mStores = storesByMerchant[m.id] ?? []
     const primary = mStores[0]
-    const checks = [
-      !!w9 && w9.status !== 'rejected',
-      w9?.status === 'approved',
-      mStores.length > 0,
-      m.billing_status === 'active',
-      !!(primary?.logo_url && primary?.brand_color && primary?.font_family),
-      mStores.some(s => !!s.google_review_url),
-      (freePerksByMerchant[m.id] ?? 0) >= 1,
-      (vipPerksByMerchant[m.id]  ?? 0) >= 3,
-      (staffByMerchant[m.id]     ?? 0) > 0,
-      mStores.some(s => !!s.marketing_downloaded_at),
-      stampedMerchants.has(m.id),
-      true,
-      mStores.some(s => !!s.cashier_training_confirmed_at),
-    ]
-    return Math.round(checks.filter(Boolean).length / 13 * 100)
+    return onboardingPercent({
+      billingStatus:     m.billing_status,
+      storeCount:        mStores.length,
+      brandConfigured:   !!(primary?.logo_url && primary?.brand_color && primary?.font_family),
+      reviewUrlSet:      mStores.some(s => !!s.google_review_url),
+      freePerks:         freePerksByMerchant[m.id] ?? 0,
+      vipPerks:          vipPerksByMerchant[m.id]  ?? 0,
+      staffCount:        staffByMerchant[m.id]     ?? 0,
+      mktDownloaded:     mStores.some(s => !!s.marketing_downloaded_at),
+      stampsTested:      stampedMerchants.has(m.id),
+      trainingConfirmed: mStores.some(s => !!s.cashier_training_confirmed_at),
+      posCouponsAdded:   mStores.some(s => !!s.pos_coupons_confirmed_at),
+      agreementSigned:   mStores.some(s => !!s.agreement_signed_at),
+      binPhotosAdded:    binPhotoMerchants.has(m.id),
+    })
   }
 
   // Aggregate member counts per merchant

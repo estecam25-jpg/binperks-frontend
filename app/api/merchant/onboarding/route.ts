@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
+import { onboardingChecklist } from '@/lib/merchant-onboarding-checklist'
 
 /** See lib/merchant-auth. A stale auth_user_id used to 401 here, which the
  *  Getting Started tab renders as an empty checklist. */
@@ -17,7 +18,7 @@ export async function GET() {
   const admin = createAdminSupabaseClient()
 
   const [stores, activePerks, staff, stampCheck, binPhotoCheck] = await Promise.all([
-    admin.from('stores').select('id, logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at, pos_coupons_confirmed_at, agreement_signed_at').eq('merchant_id', merchant.id),
+    admin.from('stores').select('id, logo_url, brand_color, font_family, google_review_url, marketing_downloaded_at, cashier_training_confirmed_at, pos_coupons_confirmed_at, agreement_signed_at').eq('merchant_id', merchant.id).order('created_at', { ascending: true }),
     admin.from('perks').select('member_type').eq('merchant_id', merchant.id).eq('is_active', true),
     admin.from('staff_users').select('id').eq('merchant_id', merchant.id).eq('is_active', true),
     admin.from('activity_events').select('id').eq('merchant_id', merchant.id).limit(1),
@@ -32,55 +33,31 @@ export async function GET() {
       .limit(1),
   ])
 
-  const storeList      = stores.data ?? []
-  const primaryStore   = storeList[0]
-  const perks          = activePerks.data ?? []
-  const freePerksCount = perks.filter(p => p.member_type === 'free').length
-  const vipPerksCount  = perks.filter(p => p.member_type === 'vip').length
-  const staffCount     = (staff.data ?? []).length
-  const stampsTested   = (stampCheck.data ?? []).length > 0
-  const brandConfigured    = !!primaryStore?.logo_url && !!primaryStore?.brand_color && !!primaryStore?.font_family
-  const reviewUrlSet       = storeList.some(s => !!s.google_review_url)
-  const mktDownloaded      = storeList.some(s => !!s.marketing_downloaded_at)
-  const trainingConfirmed  = storeList.some(s => !!s.cashier_training_confirmed_at)
-  // Nothing BinPerks can observe — the coupon amounts are entered in the
-  // merchant's own point-of-sale system — so, like cashier training, this is
-  // ticked off by the merchant saying they have done it.
-  const posCouponsAdded    = storeList.some(s => !!s.pos_coupons_confirmed_at)
-  const agreementSigned    = storeList.some(s => !!s.agreement_signed_at)
-  const binPhotosAdded     = (binPhotoCheck.data ?? []).length > 0
+  const storeList    = stores.data ?? []
+  const primaryStore = storeList[0]
+  const perks        = activePerks.data ?? []
 
-  const items = [
-    // BinPerks sets up (1-3)
-    { id: 'agreement_signed',  label: 'Merchant Agreement + W-9 signed (via DocuSeal)',  completed: agreementSigned, binPerks: true  },
-    { id: 'store_provisioned', label: 'Store provisioned',                                completed: storeList.length > 0,                        binPerks: true  },
-    { id: 'activated',         label: 'Merchant account activated',                       completed: merchant.billing_status === 'active',        binPerks: true  },
-    // Merchant responsibility (4-12)
-    { id: 'brand_configured',  label: 'Brand configured (logo, color, font)',             completed: brandConfigured,                             binPerks: false },
-    { id: 'review_url',        label: 'Google Review URL added',                          completed: reviewUrlSet,                                binPerks: false },
-    { id: 'free_perks',        label: 'Free member perk added',                          completed: freePerksCount >= 1,                         binPerks: false },
-    { id: 'vip_perks',         label: 'VIP perks added (3+ required)',                   completed: vipPerksCount >= 3,                          binPerks: false },
-    {
-      id: 'pos_coupons',
-      label: 'Add BinPerks coupons to your POS system',
-      description: 'Add the BinPerks coupon amounts ($5, $7, $10, $12, $15) to your point-of-sale system so cashiers can apply them when members redeem rewards.',
-      completed: posCouponsAdded,
-      binPerks: false,
-    },
-    { id: 'cashier_pin',       label: 'Cashier PIN created',                             completed: staffCount > 0,                              binPerks: false },
-    { id: 'mkt_downloaded',    label: 'Marketing materials downloaded',                  completed: mktDownloaded,                               binPerks: false },
-    { id: 'stamp_tested',      label: 'Stamp tool tested',                               completed: stampsTested,                                binPerks: false },
-    { id: 'cashier_training',  label: 'Cashier training completed',                      completed: trainingConfirmed,                           binPerks: false },
-    {
-      id: 'bin_photos',
-      label: 'Add photos of what\u2019s in your bins',
-      description: 'Show members what\u2019s in stock this week to drive more visits.',
-      completed: binPhotosAdded,
-      binPerks: false,
-      // Deep link straight to the card rather than "go to Settings and scroll".
-      href: '/merchant/dashboard?tab=settings#bin-photos',
-    },
-  ]
+  // The items themselves live in lib/merchant-onboarding-checklist, shared
+  // with the admin merchant list so the percentage shown there cannot drift
+  // from the list shown here. This route's job is the facts.
+  const items = onboardingChecklist({
+    billingStatus:     merchant.billing_status,
+    storeCount:        storeList.length,
+    brandConfigured:   !!primaryStore?.logo_url && !!primaryStore?.brand_color && !!primaryStore?.font_family,
+    reviewUrlSet:      storeList.some(s => !!s.google_review_url),
+    freePerks:         perks.filter(p => p.member_type === 'free').length,
+    vipPerks:          perks.filter(p => p.member_type === 'vip').length,
+    staffCount:        (staff.data ?? []).length,
+    mktDownloaded:     storeList.some(s => !!s.marketing_downloaded_at),
+    stampsTested:      (stampCheck.data ?? []).length > 0,
+    trainingConfirmed: storeList.some(s => !!s.cashier_training_confirmed_at),
+    // Nothing BinPerks can observe — the coupon amounts are entered in the
+    // merchant's own point-of-sale system — so, like cashier training, this
+    // is ticked off by the merchant saying they have done it.
+    posCouponsAdded:   storeList.some(s => !!s.pos_coupons_confirmed_at),
+    agreementSigned:   storeList.some(s => !!s.agreement_signed_at),
+    binPhotosAdded:    (binPhotoCheck.data ?? []).length > 0,
+  })
 
   const completedCount = items.filter(i => i.completed).length
   return NextResponse.json({ items, completedCount, total: items.length })
