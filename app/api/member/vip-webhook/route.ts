@@ -44,7 +44,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { postToGhl } from '@/lib/ghl-webhook'
+import { postToGhl, memberOptedIntoSms } from '@/lib/ghl-webhook'
 import { resolveTierName } from '@/lib/tiers'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
@@ -96,7 +96,7 @@ async function markFailed(supabase: SupabaseAdmin, eventId: string, details: str
 
 // ── GHL notifications ───────────────────────────────────────────────────────
 
-const MEMBER_CONTACT_COLUMNS = 'id, first_name, last_name, phone, email, total_stamps'
+const MEMBER_CONTACT_COLUMNS = 'id, first_name, last_name, phone, email, total_stamps, sms_opt_in'
 
 interface MemberContact {
   id: string
@@ -105,6 +105,7 @@ interface MemberContact {
   phone: string | null
   email: string | null
   total_stamps: number | null
+  sms_opt_in: boolean | null
 }
 
 /**
@@ -116,12 +117,21 @@ interface MemberContact {
  * try/catch so nothing about building the payload can fail a Stripe event
  * whose database work has already been committed.
  */
-async function notifyGhl(envVar: string, payload: Record<string, unknown>, label: string): Promise<void> {
+async function notifyGhl(
+  envVar: string,
+  payload: Record<string, unknown>,
+  label: string,
+  member: MemberContact,
+): Promise<void> {
   const url = process.env[envVar]
   if (!url) {
     console.warn(`[member/vip-webhook] ${envVar} not set — ${label} not sent to GHL`)
     return
   }
+  // A GHL workflow sends its SMS and its email together, so a member who has
+  // opted out of texts gets neither — see memberOptedIntoSms. Their VIP status
+  // itself is already written; this is only the message about it.
+  if (!memberOptedIntoSms(member, `member/vip-webhook ${label}`)) return
   try {
     const delivered = await postToGhl(url, payload, `member/vip-webhook ${label}`)
     if (delivered) console.log(`[member/vip-webhook] GHL ${label} sent for member ${payload.memberId}`)
@@ -183,7 +193,7 @@ async function setVipAndNotify(
     // stored (CLAUDE.md core rule 3), so computed here at send time.
     tier:               resolveTierName(m.total_stamps ?? 0, 'vip'),
     subscriptionStatus: 'vip',
-  }, 'VIP upgrade')
+  }, 'VIP upgrade', m)
 
   return 'upgraded'
 }
@@ -356,7 +366,7 @@ export async function POST(req: NextRequest) {
               phone:     m.phone ?? '',
               email:     m.email ?? '',
               cancelsAt: cancelsAtIso(subscription),
-            }, 'VIP cancellation')
+            }, 'VIP cancellation', m)
           } else {
             console.warn(`[member/vip-webhook] Cancellation scheduled for unknown member ${memberId} — GHL not sent`)
           }

@@ -283,8 +283,11 @@ export default function ThankYouPage() {
         <div className="w-full flex flex-col gap-3">
           <div className="flex flex-col items-center text-center gap-1">
             <p className="font-['Coiny'] text-xl text-[#1A1A2E]">Share &amp; both earn bonus stamps</p>
+            {/* Paid when the friend earns their first visit stamp, not when
+                they sign up — see lib/referral-bonus. */}
             <p className="text-[12px] text-[#8E8EA8] font-medium">
-              When a friend joins using your link, you earn 2 bonus stamps.
+              When a friend joins with your link and earns their first stamp at a
+              store, you both get 2 bonus stamps.
             </p>
           </div>
 

@@ -223,10 +223,48 @@ export async function PATCH(req: NextRequest) {
       .from('merchants').select('id, name, owner_email, company_name').eq('id', merchantId).single()
     if (fetchErr || !merchant) return NextResponse.json({ error: 'merchant_not_found' }, { status: 404 })
 
-    await Promise.all([
-      admin.from('merchants').update({ billing_status: 'active', subscription_status: 'active' }).eq('id', merchantId),
-      admin.from('stores').update({ is_active: true }).eq('merchant_id', merchantId),
-    ])
+    // EVERYTHING ACTIVATION MEANS, not just the billing flag.
+    //
+    // This button is the manual fallback for the DocuSeal signature path, and
+    // it used to set billing_status and is_active alone. A merchant activated
+    // here was therefore live but invisible: network_visible false kept their
+    // store out of the member app, enrollment_enabled false refused new
+    // members at their join link, and commission_eligible false meant the
+    // commission decision recorded on their members' payments was "not
+    // eligible" — permanently, because those decisions are never recalculated.
+    //
+    // Same writes as activateAfterSignature in lib/merchant-onboarding, which
+    // is the ordinary path.
+    const activatedAt = new Date().toISOString()
+
+    await admin.from('merchants')
+      .update({ billing_status: 'active', subscription_status: 'active' })
+      .eq('id', merchantId)
+
+    await admin.from('stores')
+      .update({ is_active: true, network_visible: true, enrollment_enabled: true })
+      .eq('merchant_id', merchantId)
+
+    // Commission eligibility — never over an admin suspension, and the audit
+    // row only for the call that actually flipped it.
+    const { data: flipped } = await admin.from('merchants')
+      .update({ commission_eligible: true, commission_eligible_from: activatedAt })
+      .eq('id', merchantId)
+      .not('admin_suspended', 'is', true)
+      .or('commission_eligible.is.null,commission_eligible.eq.false,commission_eligible_from.is.null')
+      .select('id')
+
+    if (flipped && flipped.length > 0) {
+      const { error: histError } = await admin.from('origin_eligibility_history').insert({
+        merchant_id:         merchantId,
+        event_type:          'activated',
+        effective_at:        activatedAt,
+        triggered_by:        'admin_action',
+        reason:              `Activated manually in admin by ${adminEmail}`,
+        commission_eligible: true,
+      })
+      if (histError) console.error('[admin/merchants] eligibility history insert failed:', histError)
+    }
 
     // Awaited — a fire-and-forget fetch is killed when the handler returns on
     // Vercel, so the activation email was being dropped at random, leaving an

@@ -237,9 +237,11 @@ export default function JoinSignupPage() {
         <div className="bg-green-50 border-b border-green-200 px-5 py-2.5 flex items-center gap-2">
           <span className="text-base">🎁</span>
           <p className="text-[12px] font-semibold text-[#2A7D34]">
+            {/* The bonus is paid on this member's first VISIT stamp, not at
+                signup — see lib/referral-bonus. */}
             {ref.referrerFirstName
-              ? <>Referred by <strong>{ref.referrerFirstName}</strong> — they&apos;ll earn 2 bonus stamps when you join!</>
-              : <>You were referred — they&apos;ll earn 2 bonus stamps when you join!</>}
+              ? <>Referred by <strong>{ref.referrerFirstName}</strong> — you each earn 2 bonus stamps when you get your first stamp at a store.</>
+              : <>You were referred — you each earn 2 bonus stamps when you get your first stamp at a store.</>}
           </p>
         </div>
       )}

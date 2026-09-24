@@ -23,6 +23,35 @@
 export const GHL_TIMEOUT_MS = 5000
 
 /**
+ * May this member be messaged through GHL at all?
+ *
+ * STRICTLY TRUE, matching the stamp notification: null, undefined and false
+ * all mean no. A member whose opt-in was never recorded has not opted in.
+ *
+ * WHY THIS STOPS THE WHOLE WEBHOOK, EMAIL INCLUDED. A GHL workflow is one
+ * inbound webhook that sends the SMS and the email itself; there is no way
+ * from here to ask for the email half alone. Firing it anyway to save the
+ * email would text someone who asked not to be texted, so the call is dropped
+ * and logged. Splitting a workflow in GHL into SMS and email branches, both
+ * keyed on a flag in the payload, is what would let the email through — and
+ * this helper is the one place that decision would be relaxed.
+ *
+ * Alerts inside the app are unaffected: lib/member-alerts writes those to the
+ * member's own account and never goes near GHL.
+ *
+ * @returns true when the caller should send.
+ */
+export function memberOptedIntoSms(
+  member: { id?: string | null; sms_opt_in?: boolean | null } | null | undefined,
+  label: string,
+): boolean {
+  if (member?.sms_opt_in === true) return true
+  // Logged so "why didn't they get a text?" has an answer in the logs.
+  console.info(`[${label}] skipped for member ${member?.id ?? 'unknown'}: SMS opt-in is off`)
+  return false
+}
+
+/**
  * POST a payload to a GHL webhook. Resolves to whether it was delivered.
  *
  * Never throws — network errors, non-2xx responses and timeouts are all

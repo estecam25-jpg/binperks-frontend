@@ -127,7 +127,8 @@ export default function JoinLanding({
           <span className="text-xl flex-shrink-0">🎁</span>
           <p className="text-[13px] font-semibold text-white leading-snug">
             <span className="font-bold">{referrer.referrerFirstName}</span> invited you!
-            {' '}Join free and you both earn bonus stamps.
+            {' '}Join free — you both earn 2 bonus stamps once you get your first
+            {' '}stamp at a store.
           </p>
         </div>
       )}
@@ -248,9 +249,14 @@ export default function JoinLanding({
       {referrer && (
         <div className="mx-5 mb-8 bg-green-50 border-2 border-green-200 rounded-2xl p-5 max-w-md mx-auto w-full">
           <p className="font-['Coiny'] text-xl text-[#1A1A2E] mb-1">You were referred! 🎉</p>
+          {/* WHEN the bonus lands, not just that it does. Both sides are paid
+              on the referred member's FIRST VISIT STAMP, not at signup — see
+              lib/referral-bonus. Saying "when you join" set up a referrer to
+              watch for stamps that were never coming yet. */}
           <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
-            Join today and <strong className="text-[#1A1A2E]">{referrer.referrerFirstName}</strong> earns
-            {' '}2 bonus stamps as a thank-you. You&apos;ll get a head start on your first reward.
+            Earn your first stamp at any participating store and you each get
+            {' '}2 bonus stamps — you and{' '}
+            <strong className="text-[#1A1A2E]">{referrer.referrerFirstName}</strong>.
           </p>
         </div>
       )}

@@ -3,7 +3,7 @@ import { waitUntil } from '@vercel/functions'
 import bcrypt from 'bcryptjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { postToGhl } from '@/lib/ghl-webhook'
+import { postToGhl, memberOptedIntoSms } from '@/lib/ghl-webhook'
 import { createAlert, couponReadyAlert, tierUpAlert } from '@/lib/member-alerts'
 import { awardReferralBonusIfDue } from '@/lib/referral-bonus'
 import { askedRecently, createReviewRequest, isSafeRedirectUrl } from '@/lib/review-link'
@@ -36,8 +36,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify PIN with bcrypt. Supports legacy plaintext PINs during transition.
+    //
+    // '$2' IS THE BCRYPT PREFIX — every bcrypt hash starts $2a$, $2b$ or $2y$.
+    // The test was `startsWith('')`, which every string passes, so a legacy
+    // plaintext PIN was handed to bcrypt.compare and could never match: that
+    // cashier simply could not stamp. Today every active PIN is hashed, so
+    // nothing was failing in practice — but the fallback would have been dead
+    // the moment a plaintext PIN existed again.
     const storedPin: string = cashier.pin ?? ''
-    const isHash = storedPin.startsWith('')
+    const isHash = storedPin.startsWith('$2')
     const pinValid = isHash
       ? await bcrypt.compare(pin, storedPin)
       : storedPin === pin  // legacy plaintext fallback
@@ -92,7 +99,7 @@ export async function POST(req: NextRequest) {
 
     // 2a. Check if free member has already used their one lifetime coupon.
     //     Use admin client — rewards table has RLS that blocks anon reads.
-    //     Core Rule #12: free members get one  coupon lifetime, then must upgrade.
+    //     Core Rule #12: free members get one $5 coupon lifetime, then must upgrade.
     const { count: redeemedCount } = await admin
       .from('rewards')
       .select('*', { count: 'exact', head: true })
@@ -240,7 +247,7 @@ export async function POST(req: NextRequest) {
     const couponEarned = newCycle < oldCycle || newCycle === 0
 
     // 8. Determine coupon value (thresholds match VIP tier levels)
-    //    Bronze VIP (0-199) = , Starter free (any) = 
+    //    Bronze VIP (0-199) = $7, Starter free (any) = $5 
     const couponValue =
       newTotalStamps >= 2000 ? 15 :
       newTotalStamps >= 750  ? 12 :
@@ -345,9 +352,9 @@ export async function POST(req: NextRequest) {
     const gotStampUrl = process.env.GHL_MEMBER_GOT_STAMP_WEBHOOK_URL
     if (!gotStampUrl) {
       console.warn('[stamp got-stamp] GHL_MEMBER_GOT_STAMP_WEBHOOK_URL is not set — stamp message and review link skipped')
-    } else if (member.sms_opt_in !== true) {
-      // Logged so "why didn't they get a text?" has an answer in the logs.
-      console.info(`[stamp got-stamp] skipped for member ${memberId}: SMS opt-in is off`)
+    } else if (!memberOptedIntoSms({ id: memberId, sms_opt_in: member.sms_opt_in }, 'stamp got-stamp')) {
+      // Nothing to do — memberOptedIntoSms logged why. Same rule as the VIP
+      // and referral messages, from one place.
     } else {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.binperks.com'
 

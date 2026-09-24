@@ -58,7 +58,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { postToGhl } from '@/lib/ghl-webhook'
+import { postToGhl, memberOptedIntoSms } from '@/lib/ghl-webhook'
 import { createAlert, couponReadyAlert, tierUpAlert } from '@/lib/member-alerts'
 import { BINPERKS_HOUSE_MERCHANT_ID, BINPERKS_HOUSE_STORE_ID } from '@/lib/binperks-origin'
 
@@ -79,11 +79,12 @@ interface BonusMember {
   is_blacklisted: boolean | null
   origin_store_id: string | null
   origin_merchant_id: string | null
+  sms_opt_in: boolean | null
 }
 
 const MEMBER_COLUMNS =
   'id, first_name, last_name, phone, email, total_stamps, subscription_status, ' +
-  'status, is_blacklisted, origin_store_id, origin_merchant_id'
+  'status, is_blacklisted, origin_store_id, origin_merchant_id, sms_opt_in'
 
 /** What happened for one side of the referral. */
 type SideOutcome =
@@ -352,7 +353,11 @@ export async function awardReferralBonusIfDue(
     // A retry that found the stamps already there has nothing new to say.
     const calls: Promise<boolean>[] = []
 
-    if (referrer && referrerOutcome === 'awarded') {
+    // ONLY TO MEMBERS WHO OPTED IN TO SMS. A GHL workflow sends its text and
+    // its email in one call, so a member who opted out of texts gets neither —
+    // see memberOptedIntoSms. The stamps are already theirs either way, and
+    // their own app shows them.
+    if (referrer && referrerOutcome === 'awarded' && memberOptedIntoSms(referrer, 'referral-bonus referrer')) {
       const url = process.env.GHL_MEMBER_REFERRAL_BONUS_REFERRER_WEBHOOK_URL
       if (url) {
         calls.push(postToGhl(url, {
@@ -368,7 +373,7 @@ export async function awardReferralBonusIfDue(
       }
     }
 
-    if (referredOutcome === 'awarded') {
+    if (referredOutcome === 'awarded' && memberOptedIntoSms(referred, 'referral-bonus referred')) {
       const url = process.env.GHL_MEMBER_REFERRAL_BONUS_REFERRED_WEBHOOK_URL
       if (url) {
         calls.push(postToGhl(url, {
