@@ -40,6 +40,19 @@ interface Merchant {
   adminSuspended: boolean
   adminSuspensionReason: string | null
 }
+
+/**
+ * Is this merchant switched off?
+ *
+ * TWO VALUES MEAN OFF. A Stripe cancellation writes 'inactive'; the admin
+ * Deactivate button wrote 'deactivated' for years and now writes 'inactive'
+ * too. Both are recognised here so the Deactivated tab shows every switched-off
+ * merchant however they got there — a cancelled merchant used to appear under
+ * neither tab — and the Deactivate button greys out for both.
+ */
+function isSwitchedOff(billingStatus: string | null | undefined): boolean {
+  return billingStatus === 'inactive' || billingStatus === 'deactivated'
+}
 interface EligibilityEvent {
   id: string; eventType: string; effectiveAt: string
   triggeredBy: string | null; reason: string | null; commissionEligible: boolean | null
@@ -328,7 +341,7 @@ function MerchantCard({
           {actionLoading === m.id + 'activate' ? '…' : 'Activate'}
         </button>
         <button onClick={() => onAction(m.id, 'deactivate')}
-          disabled={!!actionLoading || m.billing_status === 'deactivated'}
+          disabled={!!actionLoading || isSwitchedOff(m.billing_status)}
           className="flex-1 py-2 rounded-xl text-[12px] font-bold bg-[#DA1212] text-white disabled:opacity-40">
           {actionLoading === m.id + 'deactivate' ? '…' : 'Deactivate'}
         </button>
@@ -629,7 +642,11 @@ export default function AdminDashboard() {
       merchantW9Filter === 'approved' ? w9s === 'approved' :
       merchantW9Filter === 'rejected' ? w9s === 'rejected' : true
     return (!q || (m.company_name ?? '').toLowerCase().includes(q) || (m.owner_email ?? '').toLowerCase().includes(q))
-        && (merchantStatus === 'all' || m.billing_status === merchantStatus)
+        && (merchantStatus === 'all'
+              ? true
+              : merchantStatus === 'deactivated'
+                ? isSwitchedOff(m.billing_status)
+                : m.billing_status === merchantStatus)
         && w9ok
   }).sort((a, b) => {
     // Abandoned checkouts float to top

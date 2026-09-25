@@ -279,10 +279,47 @@ export async function PATCH(req: NextRequest) {
       }, '/api/admin/merchants')
     }
   } else {
-    await Promise.all([
-      admin.from('merchants').update({ billing_status: 'deactivated' }).eq('id', merchantId),
-      admin.from('stores').update({ is_active: false }).eq('merchant_id', merchantId),
-    ])
+    // THE MIRROR OF ACTIVATE — everything switched on above is switched off.
+    //
+    // It used to set billing_status and is_active alone, which left a
+    // deactivated merchant half-live: network_visible true kept their store in
+    // the member app's store list, enrollment_enabled true let their join link
+    // keep signing people up, and commission_eligible true meant BinPerks kept
+    // recording commission on their members' payments.
+    //
+    // 'inactive', matching what the Stripe cancellation webhook writes, so one
+    // status means one thing however a merchant came to be switched off.
+    //
+    // NOTHING IS DELETED. Members, stamps, coupons and history are untouched —
+    // this is a switch, not an erase, and Activate puts it all back.
+    const deactivatedAt = new Date().toISOString()
+
+    await admin.from('merchants')
+      .update({
+        billing_status:               'inactive',
+        commission_eligible:          false,
+        commission_suspended_at:      deactivatedAt,
+        commission_suspension_reason: `Deactivated manually in admin by ${adminEmail}`,
+        last_deactivated_at:          deactivatedAt,
+      })
+      .eq('id', merchantId)
+
+    await admin.from('stores')
+      .update({ is_active: false, network_visible: false, enrollment_enabled: false })
+      .eq('merchant_id', merchantId)
+
+    // event_type is CHECK-constrained; 'admin_suspended' is the manual one
+    // ('cancelled' belongs to Stripe). The audit trail is the record of when a
+    // merchant stopped earning commission, so a failed insert is logged.
+    const { error: histError } = await admin.from('origin_eligibility_history').insert({
+      merchant_id:         merchantId,
+      event_type:          'admin_suspended',
+      effective_at:        deactivatedAt,
+      triggered_by:        'admin_action',
+      reason:              `Deactivated manually in admin by ${adminEmail}`,
+      commission_eligible: false,
+    })
+    if (histError) console.error('[admin/merchants] eligibility history insert failed:', histError)
   }
 
   return NextResponse.json({ ok: true })
