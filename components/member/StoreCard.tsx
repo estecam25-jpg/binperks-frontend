@@ -38,6 +38,11 @@
 import { formatPrice, type TodayPrice } from '@/lib/store-pricing'
 import { RevealBox, CoverImage } from './FeedCards'
 
+/** How wide the logo / message box is on a store card — and, because the box
+ *  is square, how tall. 96px (Tailwind w-24): a thumbnail beside the store's
+ *  details rather than a picture that pushes them off the screen. */
+const MARK_W = 'w-24'
+
 const BINPERKS_BLUE = '#4A4B98'
 
 /** Which expandable section is showing. */
@@ -177,19 +182,33 @@ export default function StoreCard({
             message only     the words, uncovered
             neither          an empty box, so the card is still the same height
           The box is ALWAYS here. Sizing it to its contents would make a card
-          with a long message tower over its neighbours in the list. */}
+          with a long message tower over its neighbours in the list.
+
+          A THUMBNAIL, NOT A BILLBOARD. The box used to run the full width of
+          the card, which on a phone meant one store filled the screen and the
+          price, directions and perks below it were all beneath the fold. MARK
+          is the width; the square shape comes from the aspect ratio, so
+          capping the width is what makes it small without distorting a logo.
+          Left-aligned rather than centred: at this size a centred square
+          floats away from the store name it belongs to.
+
+          STORES TAB ONLY. Bin Stores Near Me caps itself at 160px and the
+          Beyond the Bins cards are full width on purpose — theirs IS the
+          content. */}
       <div className="px-4 pt-3">
-        {logo && message ? (
-          <RevealBox cover={<CoverImage src={logo} alt={`${store.displayName} logo`} />}>
-            <StoreMessage text={message} />
-          </RevealBox>
-        ) : (
-          <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-white">
-            {logo
-              ? <CoverImage src={logo} alt={`${store.displayName} logo`} />
-              : message ? <StoreMessage text={message} /> : null}
-          </div>
-        )}
+        <div className={MARK_W}>
+          {logo && message ? (
+            <RevealBox cover={<CoverImage src={logo} alt={`${store.displayName} logo`} />}>
+              <StoreMessage text={message} />
+            </RevealBox>
+          ) : (
+            <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-white">
+              {logo
+                ? <CoverImage src={logo} alt={`${store.displayName} logo`} />
+                : message ? <StoreMessage text={message} /> : null}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* A special event today gets its name AND price, prominently — it is
