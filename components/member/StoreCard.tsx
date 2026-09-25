@@ -7,18 +7,22 @@
  * merchant brand, because a member visits a location, not a company.
  *
  * LAYOUT, top to bottom:
- *   name → key → city, state                    (never covered)
- *   the store's logo over its message, square   (the reveal)
- *   [ Directions ] [ Today's bin price ]        (never covered)
+ *   name → key → city, state
+ *   logo thumbnail | the store's message, beside it
+ *   [ Directions ] [ Today's bin price ]
  *   [ What's in the Bins ] [ View Store Perks ]
  *   the open panel, if either button is on
  *
- * THE LOGO SITS OVER THE MESSAGE, in the same square box the Beyond the Bins
- * cards use, revealed by the same hover-or-hold gesture — RevealBox is
- * imported from those cards rather than reimplemented, so the two cannot
- * drift apart. The box is always rendered and its height comes from its own
- * width, which is what keeps every card the same height whatever the message
- * length.
+ * THE LOGO SITS BESIDE THE MESSAGE, not over it. It used to be a square that
+ * covered the words until the member hovered or held — the same reveal the
+ * Beyond the Bins cards use. That made sense while the box was the width of
+ * the card and the artwork was the point; shrunk to a thumbnail it was a small
+ * square hiding text for no reason, and a member had to know to press it.
+ * Side by side, both are simply readable, and the card keeps its height
+ * because the message is clamped rather than scrolled.
+ *
+ * The reveal still belongs on Bin Stores Near Me and Beyond the Bins, where
+ * the image IS the content — this card's content is the store's details.
  *
  * NO INITIALS TILE. The card used to lead with the store's first letter on its
  * brand colour, as a stand-in until logo_url reached members. It has, so the
@@ -36,11 +40,10 @@
  */
 
 import { formatPrice, type TodayPrice } from '@/lib/store-pricing'
-import { RevealBox, CoverImage } from './FeedCards'
+import { CoverImage } from './FeedCards'
 
-/** How wide the logo / message box is on a store card — and, because the box
- *  is square, how tall. 96px (Tailwind w-24): a thumbnail beside the store's
- *  details rather than a picture that pushes them off the screen. */
+/** The logo thumbnail: 96px square (Tailwind w-24 with an aspect ratio), so a
+ *  logo is recognisable without pushing the store's details off the screen. */
 const MARK_W = 'w-24'
 
 const BINPERKS_BLUE = '#4A4B98'
@@ -48,16 +51,18 @@ const BINPERKS_BLUE = '#4A4B98'
 /** Which expandable section is showing. */
 export type StorePanel = 'bins' | 'perks'
 
-/** The store's own words, filling the reveal box. Italic, as a quote from the
- *  merchant rather than another field of the card. Scrolls rather than
- *  stretching the box — the fixed height is the point. */
+/** The store's own words, beside the logo. Italic, as a quote from the
+ *  merchant rather than another field of the card.
+ *
+ *  CLAMPED TO FOUR LINES, which is about the height of the thumbnail it sits
+ *  next to: a merchant who writes an essay gets the start of it rather than a
+ *  card three times the height of its neighbours. min-w-0 so a long unbroken
+ *  word wraps instead of pushing the logo off the card. */
 function StoreMessage({ text }: { text: string }) {
   return (
-    <div className="h-full w-full overflow-y-auto px-4 py-4 flex items-center">
-      <p className="text-[13px] italic text-[#4A4A5C] font-medium leading-relaxed">
-        {text}
-      </p>
-    </div>
+    <p className="flex-1 min-w-0 text-[13px] italic text-[#4A4A5C] font-medium leading-relaxed line-clamp-4">
+      {text}
+    </p>
   )
 }
 
@@ -175,41 +180,27 @@ export default function StoreCard({
         )}
       </div>
 
-      {/* ── Logo over message, square ──
-          Four cases, and each one is deliberate:
-            logo + message   the logo covers the words until hover or hold
-            logo only        the logo, with no gesture to discover
-            message only     the words, uncovered
-            neither          an empty box, so the card is still the same height
-          The box is ALWAYS here. Sizing it to its contents would make a card
-          with a long message tower over its neighbours in the list.
+      {/* ── Logo beside message ──
+          Three cases:
+            logo + message   thumbnail on the left, words to the right
+            logo only        the thumbnail alone
+            message only     the words, full width
+          With neither, nothing is rendered at all — an empty square used to be
+          drawn to keep every card the same height, which a stacked list does
+          not need (the horizontal Bin Stores Near Me row does, and keeps it).
 
-          A THUMBNAIL, NOT A BILLBOARD. The box used to run the full width of
-          the card, which on a phone meant one store filled the screen and the
-          price, directions and perks below it were all beneath the fold. MARK
-          is the width; the square shape comes from the aspect ratio, so
-          capping the width is what makes it small without distorting a logo.
-          Left-aligned rather than centred: at this size a centred square
-          floats away from the store name it belongs to.
-
-          STORES TAB ONLY. Bin Stores Near Me caps itself at 160px and the
-          Beyond the Bins cards are full width on purpose — theirs IS the
-          content. */}
-      <div className="px-4 pt-3">
-        <div className={MARK_W}>
-          {logo && message ? (
-            <RevealBox cover={<CoverImage src={logo} alt={`${store.displayName} logo`} />}>
-              <StoreMessage text={message} />
-            </RevealBox>
-          ) : (
-            <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-white">
-              {logo
-                ? <CoverImage src={logo} alt={`${store.displayName} logo`} />
-                : message ? <StoreMessage text={message} /> : null}
+          items-center so a one-line message sits level with the middle of the
+          logo rather than floating at its top. */}
+      {(logo || message) && (
+        <div className="px-4 pt-3 flex items-center gap-3.5">
+          {logo && (
+            <div className={`${MARK_W} flex-shrink-0 relative aspect-square rounded-xl overflow-hidden bg-white`}>
+              <CoverImage src={logo} alt={`${store.displayName} logo`} />
             </div>
           )}
+          {message && <StoreMessage text={message} />}
         </div>
-      </div>
+      )}
 
       {/* A special event today gets its name AND price, prominently — it is
           the reason to come in, so it outranks the price tile below. */}
