@@ -15,7 +15,14 @@
  *     from the day they joined, so someone who signed up and never came back
  *     is exactly who this is for
  *   · not messaged in the last 30 days
- *   · not a BinPerks house member
+ *
+ * HOW THEY JOINED DOES NOT MATTER. This used to skip members whose origin is
+ * the BinPerks house — the attribution a member gets when they join without a
+ * store's link. That is not an internal account: it is anyone who signed up
+ * from a BinPerks post or link, and skipping them meant the members with no
+ * store of their own were the only ones never invited back. Members with no
+ * origin at all were caught by the same filter, since a NULL fails an
+ * inequality test in SQL.
  *
  * ── Messaged at most once per 30 days, even if this crashes ────────────────
  * The member is CLAIMED before the webhook is sent: reactivation_sent_at is
@@ -37,7 +44,6 @@ import { timingSafeEqual } from 'node:crypto'
 import { waitUntil } from '@vercel/functions'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { postToGhl } from '@/lib/ghl-webhook'
-import { BINPERKS_HOUSE_MERCHANT_ID } from '@/lib/binperks-origin'
 
 /** Silence that counts as dormant, and the gap between two messages to the
  *  same member. One number: a member messaged today is dormant again in 30
@@ -99,7 +105,6 @@ export async function GET(req: NextRequest) {
     .eq('status', 'active')
     .eq('is_blacklisted', false)
     .eq('sms_opt_in', true)
-    .neq('origin_merchant_id', BINPERKS_HOUSE_MERCHANT_ID)
     .or(`reactivation_sent_at.is.null,reactivation_sent_at.lt.${cutoff}`)
     .lt('created_at', cutoff)
 
