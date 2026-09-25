@@ -24,12 +24,6 @@ import { FeedSection, FeedCarousel, RevealBox, CoverImage, CARD_W } from './Feed
 
 const BINPERKS_BLUE = '#4A4B98'
 
-/** How big the logo tile gets, in px. A square as wide as the card read as a
- *  billboard in a row a member is meant to skim; at this size it is a
- *  thumbnail under the store's name, and three cards fit the screen instead of
- *  one and a half. Still square, still cropped rather than squashed. */
-const MARK_SIZE = 160
-
 interface Store {
   id: string
   displayName: string
@@ -81,20 +75,22 @@ function StoreCard({ store }: { store: Store }) {
       {/* With a message the mark becomes the cover and holding reveals the
           words underneath. Without one there is nothing to reveal, so the mark
           is drawn plainly in a box of the same shape — the row stays even
-          either way. */}
+          either way.
+
+          THE SAME SIZE AS EVERY OTHER HOME FEED CARD. Same shell, same
+          padding, same full-width square, so this row and Deals Near You
+          below it read as one feed rather than two sizes of card. It was
+          capped at 160px for a while and looked like a different component.
+          Anything that changes the size belongs in RevealBox, where every
+          card picks it up together. */}
       {message ? (
-        <RevealBox cover={mark} maxSize={MARK_SIZE}>
+        <RevealBox cover={mark}>
           <div className="p-3">
             <p className="text-[12px] font-medium text-[#8E8EA8] leading-relaxed">{message}</p>
           </div>
         </RevealBox>
       ) : (
-        <div
-          className="relative aspect-square w-full rounded-xl overflow-hidden mx-auto"
-          style={{ maxWidth: MARK_SIZE }}
-        >
-          {mark}
-        </div>
+        <div className="relative aspect-square w-full rounded-xl overflow-hidden">{mark}</div>
       )}
 
       {/* One destination for every card: the Stores tab, where the member gets
