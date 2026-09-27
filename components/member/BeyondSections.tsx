@@ -207,7 +207,10 @@ export default function BeyondSections({
   )
 
   return showGroupHeader
-    ? <FeedSection title="Beyond the Bins">{body}</FeedSection>
+    // The subtitle is the same sentence the MORE tab carries under its own
+    // page title: these partners are not places to earn a stamp, and on Home
+    // they sit directly below Bin Stores Near Me, which are.
+    ? <FeedSection title="Beyond the Bins" subtitle="These businesses do not award BinPerks stamps">{body}</FeedSection>
     // Without the heading the sections still need the section element's
     // spacing, or they butt against whatever the page put above them.
     : <section className="w-full flex flex-col gap-2.5">{body}</section>
