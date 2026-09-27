@@ -25,8 +25,11 @@ export default function MemberMorePage() {
           <h1 className="font-['Coiny'] text-[26px] text-[#1A1A2E] leading-tight">
             Beyond the Bins
           </h1>
+          {/* SAYS WHAT THESE ARE NOT. Every other surface in the app is a
+              place to earn a stamp, so a member could reasonably read a row of
+              partner cards as more of the same. */}
           <p className="text-[13px] text-[#8E8EA8] font-medium mt-1">
-            Exclusive perks and deals from our partners
+            These businesses do not award BinPerks stamps
           </p>
           {/* The cards carry artwork over their text now, and nothing on a
               card says so — a picture that hides a description is only a
