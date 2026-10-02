@@ -197,7 +197,7 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
           <p className="font-['Coiny'] text-[26px] text-[#1A1A2E] leading-tight">
-            PAID <span className="text-[#4A4B98]">VIP</span> Member Perks
+            <span className="text-[#4A4B98]">PAID</span> VIP Member Perks
           </p>
           <span className="text-[11px] font-semibold text-[#8E8EA8]">5 slots &middot; min 3 active</span>
         </div>

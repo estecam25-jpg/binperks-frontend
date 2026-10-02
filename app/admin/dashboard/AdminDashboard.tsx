@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin-emails'
+import { TIER_EMOJI, TIER_LABELS } from '@/lib/tiers'
 import ContentTab from './ContentTab'
 import AnnouncementsTab from './AnnouncementsTab'
 import SocialMediaTab from './SocialMediaTab'
@@ -139,14 +140,34 @@ type TabId =
 
 // ── Module-level helper components ────────────────────────────────────────
 
+/**
+ * The member's tier, as a pill.
+ *
+ * EMOJI AND NAMES COME FROM lib/tiers, never from a copy. This badge had a
+ * list of its own and had drifted: Starter showed 🪸, a coral, where every
+ * other surface shows 🪨. Only the colours are local, because they are this
+ * screen's own styling and nothing else uses them.
+ */
 function TierBadge({ status, stamps }: { status: string; stamps: number }) {
-  const t =
-    status !== 'vip'    ? { label: '🪸 Starter', bg: 'bg-gray-100 text-gray-600' } :
-    stamps >= 2000      ? { label: '💎 Diamond', bg: 'bg-purple-100 text-purple-700' } :
-    stamps >= 750       ? { label: '🥇 Gold',    bg: 'bg-yellow-100 text-yellow-700' } :
-    stamps >= 200       ? { label: '🥈 Silver',  bg: 'bg-slate-100 text-slate-600' }  :
-                          { label: '🥉 Bronze',  bg: 'bg-orange-100 text-orange-700' }
-  return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.bg}`}>{t.label}</span>
+  const tier =
+    status !== 'vip' ? 'Free'    :
+    stamps >= 2000   ? 'Diamond' :
+    stamps >= 750    ? 'Gold'    :
+    stamps >= 200    ? 'Silver'  : 'Bronze'
+
+  const bg = {
+    Free:    'bg-gray-100 text-gray-600',
+    Bronze:  'bg-orange-100 text-orange-700',
+    Silver:  'bg-slate-100 text-slate-600',
+    Gold:    'bg-yellow-100 text-yellow-700',
+    Diamond: 'bg-purple-100 text-purple-700',
+  }[tier]
+
+  return (
+    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${bg}`}>
+      {TIER_EMOJI[tier]} {TIER_LABELS[tier]}
+    </span>
+  )
 }
 
 /** Small static pill used for V3 status chips. */

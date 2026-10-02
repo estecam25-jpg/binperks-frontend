@@ -62,8 +62,8 @@ export interface MaterialSpec {
   /**
    * The template slugs this material is built from, in order.
    *
-   * One for everything except the posters, which combine five designs into one
-   * five-page PDF.
+   * One for everything except the posters, which combine ten designs into one
+   * ten-page PDF.
    */
   templates: string[]
   /** Absent for the multi-page poster PDF, which is one design per page. */
@@ -121,10 +121,13 @@ export const MATERIALS: MaterialSpec[] = [
     slug: 'store-posters',
     label: 'Store Posters',
     section: 'signage',
-    description: '5 poster designs — print and display throughout your store',
+    description: '10 poster designs — print and display throughout your store',
     qrTarget: 'social',
     output: 'pdf',
-    templates: ['poster-1', 'poster-2', 'poster-3', 'poster-4', 'poster-5'],
+    templates: [
+      'poster-1', 'poster-2', 'poster-3', 'poster-4', 'poster-5',
+      'poster-6', 'poster-7', 'poster-8', 'poster-9', 'poster-10',
+    ],
     fileStem: 'binperks-posters',
   },
   {
