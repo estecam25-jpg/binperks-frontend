@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
+import { TIER_EMOJI, resolveTierName } from '@/lib/tiers'
 import GetTheApp from '@/components/member/GetTheApp'
 import AppHeader from '@/components/member/AppHeader'
 
@@ -22,6 +23,9 @@ interface MeResponse {
   member: {
     firstName: string; phone: string; email: string; smsOptIn: boolean
     subscriptionStatus?: 'free' | 'vip'
+    /** Read for the VIP tier emoji below — a VIP's badge is their own tier,
+     *  not a diamond for everyone. /api/member/me has always returned it. */
+    totalStamps?: number
   }
 }
 
@@ -148,6 +152,17 @@ export default function MemberSettingsPage() {
 
   if (!data) return null
 
+  // THEIR OWN TIER, not a diamond for every VIP. A Bronze member paying for
+  // VIP was shown 💎 beside "VIP member", which is Diamond's badge and reads
+  // as a tier they have not reached. resolveTierName applies the core rule
+  // (Starter → Bronze needs a subscription), and the emoji comes from the one
+  // mapping in lib/tiers that every other surface uses.
+  // 'vip' is passed literally, not from the member row: this label only ever
+  // renders for someone Stripe says has a live subscription, and a row still
+  // reading 'free' mid-upgrade would otherwise put the Starter rock beside the
+  // words "VIP member".
+  const vipEmoji = TIER_EMOJI[resolveTierName(data.member.totalStamps ?? 0, 'vip')]
+
   function formatPhone(digits: string): string {
     if (digits.length !== 10) return digits
     return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`
@@ -214,7 +229,7 @@ export default function MemberSettingsPage() {
 
             {vip.unmanageable ? (
               <>
-                <p className="text-[14px] font-bold text-[#1A1A2E]">💎 VIP member</p>
+                <p className="text-[14px] font-bold text-[#1A1A2E]">{vipEmoji} VIP member</p>
                 <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">
                   To change or cancel your membership, email{' '}
                   <a href="mailto:support@binperks.com" className="underline text-[#4A4B98] font-semibold">
@@ -235,7 +250,7 @@ export default function MemberSettingsPage() {
               </>
             ) : (
               <>
-                <p className="text-[14px] font-bold text-[#1A1A2E]">💎 VIP member — $29.99/month</p>
+                <p className="text-[14px] font-bold text-[#1A1A2E]">{vipEmoji} VIP member — $29.99/month</p>
                 {vip.currentPeriodEnd && (
                   <p className="text-[12px] text-[#8E8EA8] font-medium">
                     Renews {formatLongDate(vip.currentPeriodEnd)}

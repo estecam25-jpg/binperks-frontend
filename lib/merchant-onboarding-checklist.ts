@@ -68,7 +68,7 @@ export function onboardingChecklist(f: OnboardingFacts): OnboardingItem[] {
     {
       id: 'pos_coupons',
       label: 'Add BinPerks coupons to your POS system',
-      description: 'Add the BinPerks Coupon amounts ($2, $5, $7, $10, $12, $15) to your point-of-sale system so cashiers can apply them when members redeem rewards.',
+      description: 'Add the BinPerks Coupon amounts ($2, $5, $7, $10, $12, $15) to your point-of-sale system so cashiers can apply them when members redeem rewards. The $2 coupon is used for reactivation campaigns.',
       completed: f.posCouponsAdded,
       binPerks: false,
     },
