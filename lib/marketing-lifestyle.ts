@@ -7,7 +7,7 @@
  * merchant's Marketing tab so they can see what they are about to print before
  * they print it. Nothing here is ever composited or downloaded.
  *
- * ONE PER MATERIAL, where base artwork is one per DESIGN. The five poster
+ * ONE PER MATERIAL, where base artwork is one per DESIGN. The ten poster
  * designs are five templates but a single material, and one photo of a poster
  * on a wall stands for all five.
  *

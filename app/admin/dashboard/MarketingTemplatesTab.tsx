@@ -16,9 +16,9 @@
  *
  * DESIGNS SIT IN THE STRIP BESIDE THEIR MATERIAL, not in a section of their
  * own. A design is the printable artwork a material is built from, and the
- * five poster designs mean nothing on their own — following the material they
+ * ten poster designs mean nothing on their own — following the material they
  * belong to is what makes them legible. They are a different KIND of card, in
- * grey, so the strip does not read as eleven materials.
+ * grey, so the strip does not read as sixteen materials.
  *
  * TWO HALVES OF A MATERIAL, and only one of them is editable here:
  *
@@ -211,13 +211,17 @@ function MaterialCard({
       </div>
 
       {/* The photo large, the designs small beside it — the photo is this
-          card's own, the designs are shown in full further along the strip. */}
+          card's own, the designs are shown in full further along the strip.
+
+          EVERY DESIGN, not the first six. The grid was capped at six while the
+          posters were a set of five, so the cap never showed. At ten designs it
+          did: four posters were missing from the card with nothing to say so. */}
       <div className="flex gap-2">
         <div className="w-[96px] flex-shrink-0">
           <Thumb url={m.lifestyleUrl} label="Photo" empty="No photo" />
         </div>
         <div className="flex-1 min-w-0 grid grid-cols-3 gap-1.5 content-start">
-          {m.artwork.slice(0, 6).map(a => (
+          {m.artwork.map(a => (
             <Thumb key={a.slug} url={a.previewUrl} label="" empty="—" />
           ))}
         </div>
@@ -267,7 +271,7 @@ function MaterialCard({
  *
  * GREY, AND LABELLED AS ARTWORK, because it is not a material: a merchant
  * never sees it as a card and cannot download it on its own. Without the
- * different treatment a five-poster material would look like six materials.
+ * different treatment a ten-poster material would look like eleven materials.
  */
 function DesignCard({
   t, ownerTitle, onEdit, editing,

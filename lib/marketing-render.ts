@@ -356,7 +356,7 @@ async function rasteriseName(
  * Lay finished units onto sheets and return a PDF.
  *
  * `sheet` absent means one design per page at the page's full size, which is
- * how the five posters are combined. With a sheet, the units are tiled and the
+ * how the ten posters are combined. With a sheet, the units are tiled and the
  * grid is centred on the page.
  *
  * The store name is drawn HERE for every PDF, in Helvetica-Bold, which pdf-lib
