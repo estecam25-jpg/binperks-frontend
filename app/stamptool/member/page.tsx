@@ -8,6 +8,7 @@ import TierBadge from '@/components/stamp/TierBadge'
 import StampProgress from '@/components/stamp/StampProgress'
 import { cashierSession, storeSession, foundMemberSession, type FoundMember } from '@/lib/stamp-session'
 import { COUPON_CYCLE, tierFor, cycleRemaining } from '@/lib/tiers'
+import { isSpendable } from '@/lib/coupon-settlement'
 
 export default function MemberViewPage() {
   const router = useRouter()
@@ -56,14 +57,25 @@ export default function MemberViewPage() {
       subscriptionStatus:   fresh.subscription_status,
     })
 
+    // Re-read the coupon rather than trusting the cached value: it may have
+    // expired, or been spent at another till, since the lookup screen.
+    const { data: openRewards } = await supabase
+      .from('rewards')
+      .select('id, coupon_value, status, expires_at')
+      .eq('member_id', cached.id)
+      .eq('status', 'earned')
+      .order('earned_at', { ascending: true })
+
+    const nextCoupon = (openRewards ?? []).find(r => isSpendable(r as { status: string; expires_at?: string | null }))
+
     setMember({
       ...cached,
       totalStamps: fresh.total_stamps,
       cycleStamps: fresh.cycle_stamps ?? 0,
       vipProgressionStamps: fresh.vip_progression_stamps ?? 0,
       subscriptionStatus: fresh.subscription_status,
-      couponDue: fresh.coupon_due,
-      couponValue: tier.couponValue,
+      couponDue: !!nextCoupon,
+      couponValue: nextCoupon ? Number(nextCoupon.coupon_value) : tier.couponValue,
       alreadyStampedToday: !!todayVisitResult.data,
     })
     setRefreshing(false)

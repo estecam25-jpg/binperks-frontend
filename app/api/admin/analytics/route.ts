@@ -108,6 +108,7 @@ interface MemberRow {
   total_stamps: number | null; created_at: string | null
   origin_store_id: string | null; origin_merchant_id: string | null
   referred_by_member_id: string | null; is_blacklisted: boolean | null
+  reactivation_stage: number | null
 }
 interface MerchantRow {
   id: string; company_name: string | null; name: string | null
@@ -166,7 +167,7 @@ export async function GET(req: NextRequest) {
     scansRes, imageLogRes, ledgerRes, decisionsRes, catalogRes, reviewRequestsRes,
   ] = await Promise.all([
     fetchAll<MemberRow>('members', (f, t) => admin.from('members')
-      .select('id, first_name, last_name, phone, email, zip_code, status, subscription_status, total_stamps, created_at, origin_store_id, origin_merchant_id, referred_by_member_id, is_blacklisted')
+      .select('id, first_name, last_name, phone, email, zip_code, status, subscription_status, total_stamps, created_at, origin_store_id, origin_merchant_id, referred_by_member_id, is_blacklisted, reactivation_stage')
       .order('id').range(f, t)),
 
     fetchAll<MerchantRow>('merchants', (f, t) => admin.from('merchants')
@@ -510,6 +511,129 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.sent - a.sent || b.clicked - a.clicked || a.store.localeCompare(b.store)),
   }
 
+  // ── 7a. Merchant inactivity, transfers, settlement and reactivation ──────
+  //
+  // Admin-only, and deliberately computed here rather than in the merchant
+  // dashboard: a merchant must never see which members moved, where they came
+  // from, or what another merchant owes.
+  const DAY = 24 * 60 * 60 * 1000
+
+  const [
+    inactiveRes, transfersRes, binperksFundedRes, owedRes, reactivationCouponsRes,
+  ] = await Promise.all([
+    admin.from('merchants')
+      .select('id, company_name, billing_status, payment_failed_at, became_inactive_at, negative_balance')
+      .in('billing_status', ['grace_period', 'inactive']),
+    admin.from('member_origin_history')
+      .select('id, from_merchant_id, to_merchant_id, reason, occurred_at')
+      .order('occurred_at', { ascending: false })
+      .limit(500),
+    admin.from('settlement_ledger')
+      .select('debit_amount, origin_merchant_id')
+      .eq('ledger_entry_type', 'coupon_debit_binperks'),
+    admin.from('merchants')
+      .select('id, company_name, negative_balance')
+      .gt('negative_balance', 0),
+    admin.from('rewards')
+      .select('id, status, earned_at')
+      .eq('reward_type', 'reactivation'),
+  ])
+
+  const transfers = transfersRes.data ?? []
+  const transfersOutByMerchant = new Map<string, number>()
+  const transfersInByMerchant  = new Map<string, number>()
+  for (const t of transfers) {
+    if (t.from_merchant_id) transfersOutByMerchant.set(t.from_merchant_id as string, (transfersOutByMerchant.get(t.from_merchant_id as string) ?? 0) + 1)
+    if (t.to_merchant_id)   transfersInByMerchant.set(t.to_merchant_id as string, (transfersInByMerchant.get(t.to_merchant_id as string) ?? 0) + 1)
+  }
+
+  const inactiveMerchants = (inactiveRes.data ?? []).map(m => ({
+    merchantId:        m.id as string,
+    name:              (m.company_name as string) ?? '—',
+    status:            m.billing_status as string,
+    paymentFailedAt:   m.payment_failed_at as string | null,
+    becameInactiveAt:  m.became_inactive_at as string | null,
+    // Days left before stamping stops. Null once it already has.
+    graceDaysLeft: m.billing_status === 'grace_period' && m.payment_failed_at
+      ? Math.max(0, Math.ceil((new Date(m.payment_failed_at as string).getTime() + 30 * DAY - now.getTime()) / DAY))
+      : null,
+    membersTransferredAway: transfersOutByMerchant.get(m.id as string) ?? 0,
+  })).sort((a, b) => (a.status === b.status ? 0 : a.status === 'inactive' ? -1 : 1))
+
+  const originTransfers = {
+    total:            transfers.length,
+    fromInactive:     transfers.filter(t => t.reason === 'origin_inactive').length,
+    fromHouse:        transfers.filter(t => t.reason === 'house_origin_first_stamp').length,
+    recent: transfers.slice(0, 25).map(t => ({
+      occurredAt: t.occurred_at as string,
+      from:       t.from_merchant_id ? merchantLabel(t.from_merchant_id as string) : 'BinPerks (direct)',
+      to:         merchantLabel(t.to_merchant_id as string),
+      reason:     t.reason as string,
+    })),
+    byReceivingMerchant: [...transfersInByMerchant.entries()]
+      .map(([id, count]) => ({ merchantId: id, name: merchantLabel(id), count }))
+      .sort((a, b) => b.count - a.count),
+  }
+
+  const binperksFunded = (binperksFundedRes.data ?? []).reduce((sum, r) => sum + Number(r.debit_amount ?? 0), 0)
+  const owedToBinPerks = {
+    // Coupons BinPerks paid for because the funding merchant could not.
+    binperksFundedCoupons: Math.round(binperksFunded * 100) / 100,
+    // Carried negative balances — what a merchant owes after its share ran out.
+    byMerchant: (owedRes.data ?? []).map(m => ({
+      merchantId: m.id as string,
+      name:       (m.company_name as string) ?? '—',
+      amount:     Math.round(Number(m.negative_balance ?? 0) * 100) / 100,
+    })).sort((a, b) => b.amount - a.amount),
+  }
+
+  // ── Reactivation ─────────────────────────────────────────────────────────
+  const reactivationCoupons = reactivationCouponsRes.data ?? []
+  const couponsAdded        = reactivationCoupons.length
+  const couponsRedeemed     = reactivationCoupons.filter(r => r.status === 'redeemed').length
+  const couponsExpired      = reactivationCoupons.filter(r => r.status === 'expired').length
+
+  const messagedDay30 = members.filter(m => (m.reactivation_stage ?? 0) >= 30).length
+  const messagedDay60 = members.filter(m => (m.reactivation_stage ?? 0) >= 60).length
+
+  // AT RISK: quiet for 21–29 days. The window before the first reminder goes
+  // out, which is when a call from the store still feels like service rather
+  // than an automated chase.
+  const lastActivityByMember = new Map<string, number>()
+  for (const a of visitActivity) {
+    const id = a.member_id as string
+    const t  = new Date(a.occurred_at as string).getTime()
+    if (!lastActivityByMember.has(id) || t > (lastActivityByMember.get(id) ?? 0)) {
+      lastActivityByMember.set(id, t)
+    }
+  }
+
+  const atRisk = members
+    .filter(m => m.status === 'active' && !m.is_blacklisted)
+    .map(m => {
+      const since = lastActivityByMember.get(m.id) ?? new Date(m.created_at as string).getTime()
+      return { m, quietDays: Math.floor((now.getTime() - since) / DAY) }
+    })
+    .filter(x => x.quietDays >= 21 && x.quietDays <= 29)
+    .map(x => ({
+      memberId:    x.m.id,
+      name:        [x.m.first_name, x.m.last_name].filter(Boolean).join(' ') || '—',
+      quietDays:   x.quietDays,
+      originStore: storeLabel(x.m.origin_store_id),
+      tier:        x.m.subscription_status === 'vip' ? 'VIP' : 'Starter',
+    }))
+    .sort((a, b) => b.quietDays - a.quietDays)
+
+  const reactivation = {
+    messagedDay30,
+    messagedDay60,
+    couponsAdded,
+    couponsRedeemed,
+    couponsExpired,
+    redemptionPct: pct(couponsRedeemed, couponsAdded),
+    atRisk,
+  }
+
   const payload = {
     generatedAt: now.toISOString(),
     cached: false,
@@ -524,6 +648,10 @@ export async function GET(req: NextRequest) {
     financialHealth,
     networkHealth,
     reviews,
+    inactiveMerchants,
+    originTransfers,
+    owedToBinPerks,
+    reactivation,
     anomalies: {
       highVelocity,
       possibleDuplicates: duplicates,

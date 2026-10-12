@@ -54,7 +54,7 @@ export async function GET() {
   // lifetime $5 coupon yet.
   const { data: rewards } = await supabase
     .from('rewards')
-    .select('id, coupon_value, reward_type, status, earned_at, redeemed_at')
+    .select('id, coupon_value, reward_type, status, earned_at, redeemed_at, expires_at')
     .eq('member_id', member.id)
     .order('earned_at', { ascending: false })
 
@@ -117,6 +117,9 @@ export async function GET() {
       status:      r.status,
       earnedAt:    r.earned_at,
       redeemedAt:  r.redeemed_at,
+      // Null for an ordinary coupon, which never expires. Set for the $2
+      // reactivation coupon, which the app shows with a countdown.
+      expiresAt:   r.expires_at,
     })),
     freePerks,
     vipPerks,

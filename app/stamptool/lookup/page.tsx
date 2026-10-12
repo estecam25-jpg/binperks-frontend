@@ -15,6 +15,7 @@ import {
   type RecentLookup,
 } from '@/lib/stamp-session'
 import { tierFor } from '@/lib/tiers'
+import { isSpendable } from '@/lib/coupon-settlement'
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 10)
@@ -135,6 +136,18 @@ export default function LookupPage() {
       subscriptionStatus:   member.subscription_status,
     })
 
+    // THE COUPON IN THEIR HAND, not the one their tier would earn. A $2
+    // reactivation coupon is worth $2 however Gold the member is, and reading
+    // the tier value here would have the cashier announce the wrong amount.
+    const { data: openRewards } = await supabase
+      .from('rewards')
+      .select('id, coupon_value, status, expires_at')
+      .eq('member_id', member.id)
+      .eq('status', 'earned')
+      .order('earned_at', { ascending: true })
+
+    const nextCoupon = (openRewards ?? []).find(r => isSpendable(r as { status: string; expires_at?: string | null }))
+
     const found: FoundMember = {
       id: member.id,
       firstName: member.first_name,
@@ -144,8 +157,8 @@ export default function LookupPage() {
       cycleStamps: member.cycle_stamps ?? 0,
       vipProgressionStamps: member.vip_progression_stamps ?? 0,
       subscriptionStatus: member.subscription_status,
-      couponDue: member.coupon_due,
-      couponValue: tier.couponValue,
+      couponDue: !!nextCoupon,
+      couponValue: nextCoupon ? Number(nextCoupon.coupon_value) : tier.couponValue,
       isBlacklisted: false,
       alreadyStampedToday: !!todayVisit,
     }

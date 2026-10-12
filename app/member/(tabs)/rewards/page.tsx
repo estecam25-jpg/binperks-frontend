@@ -30,6 +30,32 @@ interface MemberData {
   referralCode: string | null
 }
 
+/** One coupon as /api/member/me serves it. */
+interface Reward {
+  id: string
+  couponValue: number | string
+  rewardType: string
+  status: string
+  earnedAt: string
+  /** Null for an ordinary coupon. Set for the $2 reactivation coupon. */
+  expiresAt: string | null
+}
+
+/** Whole days until a coupon expires. 0 means today is the last day. */
+function daysLeft(expiresAt: string, now: Date = new Date()): number {
+  const ms = new Date(expiresAt).getTime() - now.getTime()
+  return ms <= 0 ? 0 : Math.ceil(ms / (24 * 60 * 60 * 1000))
+}
+
+/** AN EXPIRED COUPON IS NOT SHOWN AT ALL. The daily job marks it 'expired',
+ *  but a member opening the app between expiry and that sweep must not see a
+ *  coupon the till would refuse — so the time is checked here too. */
+function isLive(r: Reward, now: Date = new Date()): boolean {
+  if (r.status !== 'earned') return false
+  if (!r.expiresAt) return true
+  return new Date(r.expiresAt).getTime() > now.getTime()
+}
+
 /** The locked table, read from lib/tiers so values are never restated here —
  *  including the multipliers, which are already the source of truth for what
  *  the stamp route awards per visit.
@@ -55,6 +81,7 @@ function membershipLabel(name: TierName): string {
 export default function MemberRewardsPage() {
   const router = useRouter()
   const [member, setMember] = useState<MemberData | null>(null)
+  const [rewards, setRewards] = useState<Reward[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
@@ -66,6 +93,7 @@ export default function MemberRewardsPage() {
       })
       .then(d => {
         if (d?.member) setMember(d.member)
+        if (Array.isArray(d?.rewards)) setRewards(d.rewards as Reward[])
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -81,6 +109,8 @@ export default function MemberRewardsPage() {
       // Clipboard can be blocked; the link is on screen to copy by hand.
     }
   }
+
+  const liveCoupons = rewards.filter(r => isLive(r))
 
   // From VIP progression, never the lifetime count — see lib/tiers.
   const currentTier = member
@@ -118,6 +148,56 @@ export default function MemberRewardsPage() {
               couponDue={member.couponDue}
               showUpgradeCta={member.subscriptionStatus === 'free'}
             />
+
+            {/* ── Coupons in hand ──
+                Shown above the reference table because it is the only part of
+                this screen a member can act on today. A coupon with an expiry
+                carries a countdown: the $2 reactivation coupon lasts 14 days
+                and a member needs to know that without reading the terms. */}
+            {liveCoupons.length > 0 && (
+              <section className="w-full flex flex-col gap-2.5">
+                <h2 className="text-[15px] font-extrabold text-[#1A1A2E] px-1">
+                  {liveCoupons.length === 1 ? 'Your coupon' : 'Your coupons'}
+                </h2>
+                <div className="w-full flex flex-col gap-2">
+                  {liveCoupons.map(r => {
+                    const left = r.expiresAt ? daysLeft(r.expiresAt) : null
+                    const urgent = left !== null && left <= 3
+                    return (
+                      <div
+                        key={r.id}
+                        className="w-full bg-white rounded-2xl shadow-sm px-5 py-4 flex items-center gap-4"
+                      >
+                        <div
+                          className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 font-['Coiny'] text-xl text-white"
+                          style={{ backgroundColor: r.rewardType === 'reactivation' ? '#DA1212' : BINPERKS_BLUE }}
+                        >
+                          ${Number(r.couponValue)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-bold text-[#1A1A2E] leading-tight">
+                            {r.rewardType === 'reactivation' ? 'Welcome back coupon' : 'Reward coupon'}
+                          </p>
+                          <p className="text-[12px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">
+                            Show your phone number at any participating store to use it.
+                          </p>
+                          {left !== null && (
+                            <p
+                              className="text-[12px] font-bold mt-1"
+                              style={{ color: urgent ? '#DA1212' : '#8A6A00' }}
+                            >
+                              {left === 0
+                                ? 'Expires today'
+                                : `${left} day${left === 1 ? '' : 's'} left to use it`}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
 
             {/* ── Reward structure ── reference, NOT a ladder */}
             <section className="w-full flex flex-col gap-2.5">

@@ -114,6 +114,11 @@ async function sumEffectiveStamps(
   return total
 }
 
+/** Round to cents — the ledger stores numerics and floats drift. */
+function money(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
 export async function GET(req: NextRequest) {
   // Resolved through lib/merchant-auth, which falls back to owner_email when
   // merchants.auth_user_id is stale. A plain auth_user_id lookup returning 404
@@ -317,6 +322,31 @@ export async function GET(req: NextRequest) {
   const commissionEligible = merchant.commission_eligible ?? false
   const originatedVipMembers = originatedVipRes.count ?? 0
 
+  // ── Coupon settlement, all-time ─────────────────────────────────────────
+  // Read from the ledger rather than recomputed from rewards: the ledger is
+  // what the monthly batch actually settles, so these two numbers always
+  // agree with the statement. Rows are claims; money moves at month end.
+  const [reimbursedRes, chargedRes, reactivationRes] = await Promise.all([
+    admin.from('settlement_ledger')
+      .select('credit_amount')
+      .eq('ledger_entry_type', 'coupon_credit_redeeming')
+      .eq('redeeming_merchant_id', merchant.id),
+    admin.from('settlement_ledger')
+      .select('debit_amount')
+      .eq('ledger_entry_type', 'coupon_debit_origin')
+      .eq('origin_merchant_id', merchant.id),
+    // Reactivation coupons this merchant honoured, whoever funded them.
+    admin.from('rewards')
+      .select('id', { count: 'exact', head: true })
+      .eq('reward_type', 'reactivation')
+      .eq('status', 'redeemed')
+      .in('redeemed_at_location_id', storeIds),
+  ])
+
+  const reimbursedToYou = (reimbursedRes.data ?? []).reduce((sum, r) => sum + Number(r.credit_amount ?? 0), 0)
+  const chargedToYou    = (chargedRes.data   ?? []).reduce((sum, r) => sum + Number(r.debit_amount  ?? 0), 0)
+  const reactivationRedeemed = reactivationRes.count ?? 0
+
   return NextResponse.json({
     merchant: {
       id:              merchant.id,
@@ -357,6 +387,13 @@ export async function GET(req: NextRequest) {
       monthlyCommissionPotential: commissionEligible
         ? Number((originatedVipMembers * ORIGIN_COMMISSION_PER_VIP).toFixed(2))
         : null,
+    },
+    couponSettlement: {
+      // TOTALS ONLY, NEVER NAMES. A merchant sees what it is owed and what it
+      // owes; who the members were is not theirs to know.
+      reimbursedToYou:     money(reimbursedToYou),
+      chargedToYou:        money(chargedToYou),
+      reactivationRedeemed,
     },
     lifetimeStats: {
       // Store-scoped, so this one follows the location selector.

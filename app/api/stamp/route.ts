@@ -8,6 +8,9 @@ import { createAlert, couponReadyAlert, tierUpAlert } from '@/lib/member-alerts'
 import { awardReferralBonusIfDue } from '@/lib/referral-bonus'
 import { askedRecently, createReviewRequest, isSafeRedirectUrl } from '@/lib/review-link'
 import { TIERS, tierFor, applyCycle } from '@/lib/tiers'
+import { canAwardStamps, CANNOT_STAMP_MESSAGE } from '@/lib/merchant-status'
+import { transferOriginIfDue } from '@/lib/origin-transfer'
+import { recordCouponRedemption, isSpendable } from '@/lib/coupon-settlement'
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,7 +59,30 @@ export async function POST(req: NextRequest) {
 
     const merchantId = cashier.merchant_id
 
-    // 0a. Load the member and decide whether they may be stamped HERE.
+    // 0a. MAY THIS STORE STAMP AT ALL?
+    //
+    //     A merchant in its 30-day grace period still can — nothing changes
+    //     for the member or the cashier while a payment is being chased. Once
+    //     the grace period runs out the account is inactive and every one of
+    //     its stores stops, because a stamp is a promise to fund a coupon
+    //     later and an unpaid merchant cannot keep making them.
+    //
+    //     Checked here rather than in the stamp tool because the tool is not
+    //     enforcement: this route is a plain POST.
+    const { data: stampingMerchant } = await admin
+      .from('merchants')
+      .select('billing_status, admin_suspended')
+      .eq('id', merchantId)
+      .maybeSingle()
+
+    if (!canAwardStamps(stampingMerchant)) {
+      return NextResponse.json(
+        { error: 'store_cannot_stamp', message: CANNOT_STAMP_MESSAGE },
+        { status: 403 },
+      )
+    }
+
+    // 0b. Load the member and decide whether they may be stamped HERE.
     //
     //     Deliberately NOT scoped to the cashier's merchant. This route used to
     //     require members.merchant_id === the cashier's merchant, which rejected
@@ -84,6 +110,22 @@ export async function POST(req: NextRequest) {
     if (member.status !== 'active' || member.is_blacklisted) {
       return NextResponse.json({ error: 'member_inactive' }, { status: 403 })
     }
+
+    // 0c. ORIGIN TRANSFER, BEFORE ANYTHING IS WRITTEN.
+    //
+    //     A member whose origin merchant has gone inactive — or who joined
+    //     through BinPerks directly and has never been stamped anywhere —
+    //     is attributed to this store from this stamp forward. Done first so
+    //     the visit, the activity row, any coupon this visit completes and
+    //     every commission afterwards all belong to the store that earned
+    //     them. Nothing already settled moves, and a merchant that later pays
+    //     up does not get the member back.
+    const origin = await transferOriginIfDue(
+      admin,
+      { id: memberId, origin_store_id: member.origin_store_id, origin_merchant_id: member.origin_merchant_id },
+      storeId,
+      merchantId,
+    )
 
     // 1. Check for duplicate visit today
     const { data: existingVisit } = await supabase
@@ -175,7 +217,7 @@ export async function POST(req: NextRequest) {
     // distinguishable by migrated_from IS NULL.
     const awardedAt = new Date().toISOString()
 
-    if (!member.origin_store_id || !member.origin_merchant_id) {
+    if (!origin.originStoreId || !origin.originMerchantId) {
       // activity_events.origin_* are NOT NULL, so there is no row to write.
       // This used to be a warning and a skip, which was survivable while
       // stamp_events still captured the stamp — now it would lose it entirely.
@@ -196,8 +238,8 @@ export async function POST(req: NextRequest) {
       member_id:          memberId,
       store_id:           storeId,
       merchant_id:        merchantId,
-      origin_store_id:    member.origin_store_id,
-      origin_merchant_id: member.origin_merchant_id,
+      origin_store_id:    origin.originStoreId,
+      origin_merchant_id: origin.originMerchantId,
       participant_type:   'bin_store',
       activity_type:      'store_visit',
       stamps_awarded:     1,
@@ -286,6 +328,12 @@ export async function POST(req: NextRequest) {
           reward_type:           'visit_reward',
           status:                'earned',
           earned_at:             earnedAt,
+          // WHO PAYS, frozen now. The member's origin as at this moment —
+          // which, after the transfer above, is this store if the old one had
+          // gone inactive. A cycle that began elsewhere is owed in full by
+          // whoever is the origin when it completes.
+          funding_store_id:      origin.originStoreId,
+          funding_merchant_id:   origin.originMerchantId,
         })),
       )
       await supabase
@@ -310,26 +358,70 @@ export async function POST(req: NextRequest) {
       await createAlert(admin, tierUpAlert(memberId, justLeveledUp, storeId))
     }
 
-    // 9. Redeem existing coupon if coupon_due was true
+    // 9. Redeem ONE coupon if the member had one waiting.
+    //
+    //    ONE, OLDEST FIRST. This used to update every row with status
+    //    'earned', which redeemed a member's whole stack in a single
+    //    transaction — survivable while a free member could only ever hold
+    //    one, and wrong the moment they can hold several. The member hands
+    //    over one coupon at the counter and one is what gets marked.
+    //
+    //    An expired coupon is not redeemable and is passed over rather than
+    //    spent; the sweep in the reactivation cron closes it out.
     let couponRedeemed = false
+    let redeemedValue: number | null = null
+
     if (member.coupon_due) {
-      await supabase
+      const { data: open } = await admin
         .from('rewards')
-        .update({
-          status:                  'redeemed',
-          redeemed_at:             new Date().toISOString(),
-          redeemed_at_location_id: storeId,
-          redeemed_by:             cashierId,
-        })
+        .select('id, member_id, coupon_value, status, expires_at, funding_store_id, funding_merchant_id')
         .eq('member_id', memberId)
         .eq('status', 'earned')
+        .order('earned_at', { ascending: true })
 
-      await supabase
-        .from('members')
-        .update({ coupon_due: false })
-        .eq('id', memberId)
+      const spendable = (open ?? []).filter(r => isSpendable(r as { status: string; expires_at?: string | null }))
+      const toRedeem  = spendable[0]
 
-      couponRedeemed = true
+      if (toRedeem) {
+        const redeemedAt = new Date()
+        const { data: claimed } = await admin
+          .from('rewards')
+          .update({
+            status:                  'redeemed',
+            redeemed_at:             redeemedAt.toISOString(),
+            redeemed_at_location_id: storeId,
+            redeemed_by:             cashierId,
+          })
+          .eq('id', toRedeem.id)
+          // Compare-and-set: two tills cannot spend the same coupon twice.
+          .eq('status', 'earned')
+          .select('id')
+
+        if (claimed && claimed.length > 0) {
+          couponRedeemed = true
+          redeemedValue  = Number(toRedeem.coupon_value ?? 0)
+
+          // Who owes whom. Nothing is written when the store that funded the
+          // coupon is the store honouring it — see lib/coupon-settlement.
+          await recordCouponRedemption(
+            admin,
+            toRedeem as unknown as Parameters<typeof recordCouponRedemption>[1],
+            storeId,
+            merchantId,
+            redeemedAt,
+          )
+        }
+      }
+
+      // coupon_due reflects whether anything spendable is still waiting, so a
+      // member holding two coupons keeps the flag after spending one.
+      const stillWaiting = spendable.filter(r => r.id !== toRedeem?.id).length > 0
+      if (!stillWaiting) {
+        await supabase
+          .from('members')
+          .update({ coupon_due: false })
+          .eq('id', memberId)
+      }
     }
 
     // 9a. Referral bonus — 2 stamps to this member and 2 to whoever referred
@@ -421,6 +513,9 @@ export async function POST(req: NextRequest) {
       stampCount: stampsToAward,
       couponIssued,
       couponRedeemed,
+      // The face value actually handed over, which is not always the tier
+      // value: a $2 reactivation coupon is redeemed the same way.
+      redeemedCouponValue: redeemedValue,
       couponValue,
       // How many cycles this visit completed. More than one is rare but real.
       couponsIssued: couponsEarned,

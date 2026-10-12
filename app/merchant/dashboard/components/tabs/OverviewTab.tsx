@@ -39,6 +39,17 @@ interface LifetimeStats {
   reviewClicks?: number
 }
 
+/** Coupon money, all-time. Totals only — a merchant never sees which member
+ *  earned or spent a coupon, here or anywhere else. */
+interface CouponSettlement {
+  /** Coupons this store honoured for members another store funds. Owed TO you. */
+  reimbursedToYou: number
+  /** Coupons your members earned and spent elsewhere. Owed BY you. */
+  chargedToYou: number
+  /** Reactivation coupons redeemed at your stores, whoever funded them. */
+  reactivationRedeemed: number
+}
+
 interface OverviewData {
   merchant: {
     commissionEligible: boolean
@@ -54,6 +65,7 @@ interface OverviewData {
   } | null
   originMetrics: OriginMetrics | null
   lifetimeStats: LifetimeStats | null
+  couponSettlement: CouponSettlement | null
   fiscalWeekChart: ChartDay[]
   fiscalWeekStart: string
 }
@@ -74,7 +86,7 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
   if (loading) return <LoadingSkeleton />
   if (!data?.stats) return <EmptyState />
 
-  const { stats, fiscalWeekChart, merchant, originMetrics, lifetimeStats } = data
+  const { stats, fiscalWeekChart, merchant, originMetrics, lifetimeStats, couponSettlement } = data
   const showStamps = metric === 'stamps'
   const valueFor = (d: ChartDay) => showStamps ? d.stampCount : d.visitCount
   const maxValue = Math.max(...fiscalWeekChart.map(valueFor), 1)
@@ -145,6 +157,63 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
       {/* ── All time ──
           Weekly figures above answer "how is this week going"; these answer
           "what has this store put into the network". */}
+      {couponSettlement && (
+        <div className="flex flex-col gap-2.5">
+          <div className="px-0.5">
+            <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">Coupon settlement</h2>
+            <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">
+              Coupons are funded by the store a member belongs to. These are settled in
+              your monthly statement, not paid per redemption.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              {
+                label: 'Reimbursed to you',
+                value: couponSettlement.reimbursedToYou,
+                hint:  'Coupons you honoured for other stores\u2019 members',
+                color: '#2A7D34', icon: '\u2b06\ufe0f',
+              },
+              {
+                label: 'Charged to you',
+                value: couponSettlement.chargedToYou,
+                hint:  'Your members\u2019 coupons spent at other stores',
+                color: '#DA1212', icon: '\u2b07\ufe0f',
+              },
+            ].map(t => (
+              <div key={t.label} className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
+                    {t.label}
+                  </span>
+                  <span className="text-lg">{t.icon}</span>
+                </div>
+                <span className="font-['Coiny'] text-3xl leading-none" style={{ color: t.color }}>
+                  ${t.value.toFixed(2)}
+                </span>
+                <span className="text-[11px] text-[#8E8EA8] font-medium leading-snug">{t.hint}</span>
+              </div>
+            ))}
+
+            <div className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-1 col-span-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
+                  Reactivation coupons redeemed
+                </span>
+                <span className="text-lg">\ud83d\udd01</span>
+              </div>
+              <span className="font-['Coiny'] text-3xl leading-none" style={{ color: '#4A4B98' }}>
+                {couponSettlement.reactivationRedeemed.toLocaleString()}
+              </span>
+              <span className="text-[11px] text-[#8E8EA8] font-medium leading-snug">
+                Members who came back and spent a win-back coupon at your store
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {lifetimeStats && (
         <div className="flex flex-col gap-2.5">
           <div className="px-0.5">

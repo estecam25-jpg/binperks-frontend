@@ -229,9 +229,13 @@ export async function POST(req: NextRequest) {
 
         // Only move to grace_period if currently active — don't overwrite billing_suspended
         if (merchant.billing_status === 'active') {
+          // payment_failed_at starts the 30-day clock that
+          // /api/cron/merchant-inactivity reads. Set only on the move out of
+          // 'active', so a second failed invoice inside the same grace period
+          // does not push the deadline back.
           await supabase
             .from('merchants')
-            .update({ billing_status: 'grace_period' })
+            .update({ billing_status: 'grace_period', payment_failed_at: new Date().toISOString() })
             .eq('id', merchant.id)
 
           await supabase.from('origin_eligibility_history').insert({
@@ -267,11 +271,30 @@ export async function POST(req: NextRequest) {
           .eq('stripe_customer_id', customerId)
           .single()
 
-        if (merchant && merchant.billing_status === 'grace_period') {
+        // PAYING RESTORES THE ACCOUNT, from grace period or from inactive.
+        // The clock is cleared either way; what paying does not undo is a
+        // member who already transferred to another store.
+        if (merchant && (merchant.billing_status === 'grace_period' || merchant.billing_status === 'inactive')) {
+          const wasInactive = merchant.billing_status === 'inactive'
+
           await supabase
             .from('merchants')
-            .update({ billing_status: 'active' })
+            .update({
+              billing_status:               'active',
+              payment_failed_at:            null,
+              became_inactive_at:           null,
+              commission_eligible:          true,
+              commission_suspended_at:      null,
+              commission_suspension_reason: null,
+            })
             .eq('id', merchant.id)
+
+          // An account that had gone inactive had its stores switched off.
+          if (wasInactive) {
+            await supabase.from('stores')
+              .update({ is_active: true, network_visible: true, enrollment_enabled: true })
+              .eq('merchant_id', merchant.id)
+          }
 
           await supabase.from('origin_eligibility_history').insert({
             merchant_id:         merchant.id,

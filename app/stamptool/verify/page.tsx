@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import { cashierSession, storeSession, foundMemberSession, stampResultSession } from '@/lib/stamp-session'
 
-type VerifyState = 'writing' | 'success' | 'duplicate' | 'inactive' | 'error'
+type VerifyState = 'writing' | 'success' | 'duplicate' | 'inactive' | 'store_blocked' | 'error'
 
 export default function VerifyPage() {
   const router = useRouter()
@@ -76,6 +76,10 @@ export default function VerifyPage() {
       // generic error copy tells the cashier to check their connection, which
       // would send them chasing a network fault that does not exist.
       if (data.error === 'member_inactive') { setVerifyState('inactive'); return }
+      // The MERCHANT cannot stamp: unpaid past its 30-day grace period. The
+      // cashier is not at fault and nothing is wrong with the member, so
+      // this gets its own screen rather than the generic error.
+      if (data.error === 'store_cannot_stamp') { setVerifyState('store_blocked'); return }
       if (!res.ok) { setVerifyState('error'); return }
 
       stampResultSession.set({
@@ -125,7 +129,7 @@ export default function VerifyPage() {
   }
 
   const strokeOffset = CIRCUMFERENCE - (ringProgress / 100) * CIRCUMFERENCE
-  const isError = verifyState === 'duplicate' || verifyState === 'error' || verifyState === 'inactive'
+  const isError = verifyState === 'duplicate' || verifyState === 'error' || verifyState === 'inactive' || verifyState === 'store_blocked'
   const ringColor = verifyState === 'success' ? '#2A7D34' : isError ? '#DA1212' : '#2A7D34'
 
   const STEP_LABELS = ['Recording visit', 'Awarding stamp', 'Checking for coupon']
@@ -163,6 +167,9 @@ export default function VerifyPage() {
           {verifyState === 'inactive' && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl">!</div>
           )}
+          {verifyState === 'store_blocked' && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl">!</div>
+          )}
           {verifyState === 'error' && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl">✕</div>
           )}
@@ -173,6 +180,7 @@ export default function VerifyPage() {
           {verifyState === 'success'   && 'Stamp awarded!'}
           {verifyState === 'duplicate' && 'Already stamped today'}
           {verifyState === 'inactive'  && 'This membership is not active'}
+          {verifyState === 'store_blocked' && 'Stamps are paused for this store'}
           {verifyState === 'error'     && 'Something went wrong'}
         </h1>
 
@@ -181,6 +189,7 @@ export default function VerifyPage() {
           {verifyState === 'success'   && `${memberFirstName} has been stamped. Navigating…`}
           {verifyState === 'duplicate' && `${memberFirstName} already received a stamp today. No stamp was added.`}
           {verifyState === 'inactive'  && 'No stamp was awarded. Ask them to contact BinPerks support.'}
+          {verifyState === 'store_blocked' && "This store can't award stamps right now. Please contact BinPerks support."}
           {verifyState === 'error'     && "The stamp wasn't saved. Check your connection and try again."}
         </p>
 

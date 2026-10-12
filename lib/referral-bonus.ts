@@ -232,6 +232,12 @@ async function applyBonus(
         store_id:              BINPERKS_HOUSE_STORE_ID,
         issued_at_location_id: BINPERKS_HOUSE_STORE_ID,
         coupon_value:          value,
+        // FUNDED BY THE MEMBER'''S ORIGIN STORE, not by the house store the
+        // bonus stamps are attributed to. The stamps sit at the house so they
+        // do not inflate a merchant'''s visit counts; the coupon is real money
+        // and is owed by whoever holds the member — see lib/coupon-settlement.
+        funding_store_id:      m.origin_store_id,
+        funding_merchant_id:   m.origin_merchant_id,
         // An ordinary 20-stamp coupon. That some of the twenty came from a
         // referral does not make it a different kind of reward.
         reward_type:           'visit_reward',

@@ -63,6 +63,26 @@ interface Analytics {
     requestsSent: number; linkClicks: number; clickThroughPct: number
     byStore: { storeId: string; store: string; hasReviewUrl: boolean; sent: number; clicked: number; clickThroughPct: number }[]
   }
+  inactiveMerchants: {
+    merchantId: string; name: string; status: string
+    paymentFailedAt: string | null; becameInactiveAt: string | null
+    graceDaysLeft: number | null; membersTransferredAway: number
+  }[]
+  originTransfers: {
+    total: number; fromInactive: number; fromHouse: number
+    recent: { occurredAt: string; from: string; to: string; reason: string }[]
+    byReceivingMerchant: { merchantId: string; name: string; count: number }[]
+  }
+  owedToBinPerks: {
+    binperksFundedCoupons: number
+    byMerchant: { merchantId: string; name: string; amount: number }[]
+  }
+  reactivation: {
+    messagedDay30: number; messagedDay60: number
+    couponsAdded: number; couponsRedeemed: number; couponsExpired: number
+    redemptionPct: number
+    atRisk: { memberId: string; name: string; quietDays: number; originStore: string; tier: string }[]
+  }
   anomalies: {
     highVelocity: { memberId: string; memberName: string; date: string; storeCount: number }[]
     possibleDuplicates: { name: string; members: { id: string; phone: string; createdAt: string | null; subscriptionStatus: string | null }[] }[]
@@ -603,6 +623,128 @@ export default function AnalyticsTab() {
           </p>
         </Section>
       )}
+
+      {/* ── 7a. Merchant status and transfers ── */}
+      <Section
+        title={`Inactive Merchants${data.inactiveMerchants.length > 0 ? ` · ${data.inactiveMerchants.length}` : ''}`}
+        subtitle="A failed platform payment starts a 30-day clock. After that the merchant's stores cannot award stamps and its members move on."
+      >
+        <TableWrap>
+          <thead>
+            <tr className="bg-[#F5F5F8]">
+              <Th>Merchant</Th><Th>Status</Th><Th>Payment failed</Th><Th>Went inactive</Th><Th right>Members moved away</Th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#EBEBF2]">
+            {data.inactiveMerchants.length === 0
+              ? <EmptyRow colSpan={5}>✅ Every merchant is paid up.</EmptyRow>
+              : data.inactiveMerchants.map(m => (
+                <tr key={m.merchantId} className={m.status === 'inactive' ? 'bg-red-50' : 'bg-yellow-50'}>
+                  <Td>{m.name}</Td>
+                  <Td muted>
+                    {m.status === 'inactive'
+                      ? 'Inactive — cannot stamp'
+                      : `Grace period${m.graceDaysLeft !== null ? ` · ${m.graceDaysLeft} day${m.graceDaysLeft === 1 ? '' : 's'} left` : ''}`}
+                  </Td>
+                  <Td muted>{m.paymentFailedAt ? m.paymentFailedAt.slice(0, 10) : '—'}</Td>
+                  <Td muted>{m.becameInactiveAt ? m.becameInactiveAt.slice(0, 10) : '—'}</Td>
+                  <Td right mono>{m.membersTransferredAway}</Td>
+                </tr>
+              ))}
+          </tbody>
+        </TableWrap>
+
+        <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8] pt-2">
+          Origin transfers · {data.originTransfers.total} total
+          {data.originTransfers.total > 0 && ` · ${data.originTransfers.fromInactive} from inactive, ${data.originTransfers.fromHouse} from BinPerks direct`}
+        </p>
+        <TableWrap minWidth={420}>
+          <thead>
+            <tr className="bg-[#F5F5F8]"><Th>When</Th><Th>From</Th><Th>To</Th><Th>Reason</Th></tr>
+          </thead>
+          <tbody className="divide-y divide-[#EBEBF2]">
+            {data.originTransfers.recent.length === 0
+              ? <EmptyRow colSpan={4}>No member has changed origin store.</EmptyRow>
+              : data.originTransfers.recent.map((t, i) => (
+                <tr key={i}>
+                  <Td muted>{t.occurredAt.slice(0, 10)}</Td>
+                  <Td muted>{t.from}</Td>
+                  <Td>{t.to}</Td>
+                  <Td muted>{t.reason === 'origin_inactive' ? 'Previous store inactive' : 'Joined via BinPerks'}</Td>
+                </tr>
+              ))}
+          </tbody>
+        </TableWrap>
+      </Section>
+
+      {/* ── 7b. Owed to BinPerks ── */}
+      <Section
+        title="Owed to BinPerks"
+        subtitle="Coupons BinPerks paid for because the funding merchant could not, and balances carried after a merchant's share ran out. Collection happens outside the system."
+      >
+        <div className="bg-white rounded-xl px-4 py-3 border border-[#EBEBF2]">
+          <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8]">BinPerks-funded coupons</p>
+          <p className="font-['Coiny'] text-2xl text-[#DA1212] leading-none mt-1">
+            ${data.owedToBinPerks.binperksFundedCoupons.toFixed(2)}
+          </p>
+        </div>
+        <TableWrap minWidth={320}>
+          <thead>
+            <tr className="bg-[#F5F5F8]"><Th>Merchant</Th><Th right>Balance owed</Th></tr>
+          </thead>
+          <tbody className="divide-y divide-[#EBEBF2]">
+            {data.owedToBinPerks.byMerchant.length === 0
+              ? <EmptyRow colSpan={2}>✅ No merchant is carrying a balance.</EmptyRow>
+              : data.owedToBinPerks.byMerchant.map(m => (
+                <tr key={m.merchantId} className="bg-yellow-50">
+                  <Td>{m.name}</Td>
+                  <Td right mono>${m.amount.toFixed(2)}</Td>
+                </tr>
+              ))}
+          </tbody>
+        </TableWrap>
+      </Section>
+
+      {/* ── 7c. Reactivation ── */}
+      <Section
+        title="Reactivation"
+        subtitle="Day 30 is a reminder. Day 60 adds a $2 coupon, once per member ever, that expires after 14 days."
+      >
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { label: 'Day 30 messaged', value: String(data.reactivation.messagedDay30) },
+            { label: 'Day 60 messaged', value: String(data.reactivation.messagedDay60) },
+            { label: 'Coupons added',   value: String(data.reactivation.couponsAdded) },
+            { label: 'Coupons redeemed', value: `${data.reactivation.couponsRedeemed} · ${data.reactivation.redemptionPct}%` },
+          ].map(t => (
+            <div key={t.label} className="bg-white rounded-xl px-4 py-3 border border-[#EBEBF2]">
+              <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8]">{t.label}</p>
+              <p className="font-['Coiny'] text-2xl text-[#1A1A2E] leading-none mt-1">{t.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8] pt-2">
+          At risk · 21–29 days quiet{data.reactivation.atRisk.length > 0 ? ` · ${data.reactivation.atRisk.length}` : ''}
+        </p>
+        <TableWrap minWidth={380}>
+          <thead>
+            <tr className="bg-[#F5F5F8]"><Th>Member</Th><Th>Tier</Th><Th>Origin store</Th><Th right>Days quiet</Th></tr>
+          </thead>
+          <tbody className="divide-y divide-[#EBEBF2]">
+            {data.reactivation.atRisk.length === 0
+              ? <EmptyRow colSpan={4}>Nobody is in the window before the first reminder.</EmptyRow>
+              : data.reactivation.atRisk.map(m => (
+                <tr key={m.memberId}>
+                  <Td>{m.name}</Td>
+                  <Td muted>{m.tier}</Td>
+                  <Td muted>{m.originStore}</Td>
+                  <Td right mono>{m.quietDays}</Td>
+                </tr>
+              ))}
+          </tbody>
+        </TableWrap>
+      </Section>
 
       {/* ── 8. Anomalies ── */}
       <Section
