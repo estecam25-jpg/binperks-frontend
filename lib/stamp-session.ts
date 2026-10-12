@@ -21,7 +21,13 @@ export interface FoundMember {
   firstName: string
   lastName: string
   phone: string
+  /** Lifetime. Shown to the cashier; decides nothing. */
   totalStamps: number
+  /** 0-19 toward the next coupon. Its own counter since the cycle survives an
+   *  upgrade — see lib/tiers. */
+  cycleStamps: number
+  /** Earned while VIP. The only counter that sets a tier. */
+  vipProgressionStamps: number
   subscriptionStatus: 'free' | 'vip'
   couponDue: boolean
   couponValue: number
@@ -33,11 +39,15 @@ export interface StampResult {
   newTotalStamps: number
   stampCount: number                                      // stamps awarded this visit (multiplier applied)
   couponIssued: boolean
+  /** Cycles completed this visit. Normally 0 or 1; a high-tier member can
+   *  complete two in one go. */
+  couponsIssued: number
   couponRedeemed: boolean
   couponValue: number
+  cycleStamps: number
+  vipProgressionStamps: number
   memberFirstName: string
   memberLastName: string
-  freeCouponExhausted: boolean
   stampBlocked: boolean                                   // true when stamp was NOT awarded
   isVip: boolean                                          // false = free member (Starter badge)
   justLeveledUp: 'silver' | 'gold' | 'diamond' | null  // tier reached this visit

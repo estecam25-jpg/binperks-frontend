@@ -78,38 +78,16 @@ export default function VerifyPage() {
       if (data.error === 'member_inactive') { setVerifyState('inactive'); return }
       if (!res.ok) { setVerifyState('error'); return }
 
-      // Free member lifetime coupon exhausted — stamp was BLOCKED server-side.
-      // Returns status 200 so we must check data.error explicitly.
-      if (data.error === 'free_coupon_exhausted') {
-        stampResultSession.set({
-          newTotalStamps:      data.totalStamps ?? 0,
-          couponIssued:        false,
-          couponRedeemed:      false,
-          couponValue:         0,
-          memberFirstName:     firstName,
-          memberLastName:      lastName,
-          freeCouponExhausted:  true,
-          stampBlocked:         true,
-          isVip:                false,
-          stampCount:           0,
-          justLeveledUp:        null,
-          approachingLevelUp:   null,
-        })
-        setRingProgress(100)
-        setVerifyState('success')
-        await tick(600)
-        router.push('/stamptool/success')
-        return
-      }
-
       stampResultSession.set({
         newTotalStamps:       data.newTotalStamps,
         couponIssued:         data.couponIssued,
         couponRedeemed:       data.couponRedeemed,
         couponValue:          data.couponValue,
+        couponsIssued:        data.couponsIssued ?? (data.couponIssued ? 1 : 0),
+        cycleStamps:          data.cycleStamps ?? 0,
+        vipProgressionStamps: data.vipProgressionStamps ?? 0,
         memberFirstName:      firstName,
         memberLastName:       lastName,
-        freeCouponExhausted:  data.freeCouponExhausted ?? false,
         stampBlocked:         false,
         isVip:                data.isVip ?? false,
         stampCount:           data.stampCount ?? 1,

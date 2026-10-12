@@ -158,9 +158,11 @@ async function awardRegisterSignupStamp(
   // Straight to 1 rather than an increment: the member was inserted with
   // total_stamps 0 moments ago and nothing else can have stamped them, so there
   // is no read-modify-write here to lose a race on.
+  // cycle_stamps moves with it: this is a real stamp toward their first
+  // coupon. A brand-new member is free, so VIP progression stays at 0.
   const { error: totalError } = await admin
     .from('members')
-    .update({ total_stamps: 1 })
+    .update({ total_stamps: 1, cycle_stamps: 1 })
     .eq('id', memberId)
 
   if (totalError) {

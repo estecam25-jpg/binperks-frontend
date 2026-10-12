@@ -45,7 +45,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { postToGhl, memberOptedIntoSms } from '@/lib/ghl-webhook'
-import { resolveTierName } from '@/lib/tiers'
+import { tierNameFor } from '@/lib/tiers'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 const webhookSecret = process.env.STRIPE_MEMBER_WEBHOOK_SECRET
@@ -96,7 +96,7 @@ async function markFailed(supabase: SupabaseAdmin, eventId: string, details: str
 
 // ── GHL notifications ───────────────────────────────────────────────────────
 
-const MEMBER_CONTACT_COLUMNS = 'id, first_name, last_name, phone, email, total_stamps, sms_opt_in'
+const MEMBER_CONTACT_COLUMNS = 'id, first_name, last_name, phone, email, total_stamps, vip_progression_stamps, sms_opt_in'
 
 interface MemberContact {
   id: string
@@ -105,6 +105,7 @@ interface MemberContact {
   phone: string | null
   email: string | null
   total_stamps: number | null
+  vip_progression_stamps: number | null
   sms_opt_in: boolean | null
 }
 
@@ -191,7 +192,9 @@ async function setVipAndNotify(
     email:              m.email ?? '',
     // Always Bronze/Silver/Gold/Diamond: resolved as VIP, from stamps. Never
     // stored (CLAUDE.md core rule 3), so computed here at send time.
-    tier:               resolveTierName(m.total_stamps ?? 0, 'vip'),
+    // From VIP progression, not the lifetime count: a member upgrading today
+    // starts at Bronze however many stamps they earned while free.
+    tier:               tierNameFor({ vipProgressionStamps: m.vip_progression_stamps ?? 0, subscriptionStatus: 'vip' }),
     subscriptionStatus: 'vip',
   }, 'VIP upgrade', m)
 

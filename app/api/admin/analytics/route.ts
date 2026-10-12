@@ -462,20 +462,10 @@ export async function GET(req: NextRequest) {
     ],
   }
 
-  // ── 7. Anomalies ────────────────────────────────────────────────────────
-  // A Starter member is capped at one $5 coupon and blocked after visit 22, so
-  // this list should be empty. Anything in it means the cap did not hold.
-  const starterOver20 = members
-    .filter(m => m.subscription_status === 'free' && (m.total_stamps ?? 0) > 20)
-    .map(m => ({
-      memberId: m.id,
-      name: [m.first_name, m.last_name].filter(Boolean).join(' ') || '—',
-      phone: m.phone ?? '—',
-      totalStamps: m.total_stamps ?? 0,
-      originStore: storeLabel(m.origin_store_id),
-      isBlacklisted: m.is_blacklisted ?? false,
-    }))
-    .sort((a, b) => b.totalStamps - a.totalStamps)
+  // ── 7. Anomalies ────────────────────────────────────────────
+  // "Starter members over 20 stamps" used to live here. It existed to prove
+  // the 20-stamp cap was holding; free membership is permanent now, so a
+  // Starter with 500 stamps is a good customer rather than a bug.
 
   const highVelocity = highVelocityDays(visitActivity, 3).map(h => ({
     ...h,
@@ -535,7 +525,6 @@ export async function GET(req: NextRequest) {
     networkHealth,
     reviews,
     anomalies: {
-      starterOver20,
       highVelocity,
       possibleDuplicates: duplicates,
     },

@@ -7,6 +7,7 @@ import { postToGhl, memberOptedIntoSms } from '@/lib/ghl-webhook'
 import { createAlert, couponReadyAlert, tierUpAlert } from '@/lib/member-alerts'
 import { awardReferralBonusIfDue } from '@/lib/referral-bonus'
 import { askedRecently, createReviewRequest, isSafeRedirectUrl } from '@/lib/review-link'
+import { TIERS, tierFor, applyCycle } from '@/lib/tiers'
 
 export async function POST(req: NextRequest) {
   try {
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
     //     dual-write (step 5a) — permanent attribution, never recomputed here.
     const { data: member, error: memberError } = await supabase
       .from('members')
-      .select('total_stamps, coupon_due, subscription_status, first_name, last_name, email, phone, sms_opt_in, status, is_blacklisted, origin_store_id, origin_merchant_id')
+      .select('total_stamps, cycle_stamps, vip_progression_stamps, coupon_due, subscription_status, first_name, last_name, email, phone, sms_opt_in, status, is_blacklisted, origin_store_id, origin_merchant_id')
       .eq('id', memberId)
       .single()
 
@@ -97,44 +98,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'already_stamped' }, { status: 409 })
     }
 
-    // 2a. Check if free member has already used their one lifetime coupon.
-    //     Use admin client — rewards table has RLS that blocks anon reads.
-    //     Core Rule #12: free members get one $5 coupon lifetime, then must upgrade.
-    const { count: redeemedCount } = await admin
-      .from('rewards')
-      .select('*', { count: 'exact', head: true })
-      .eq('member_id', memberId)
-      .eq('status', 'redeemed')
+    // 2a. NO CAP. A free member earns for as long as they keep shopping: a $5
+    //     coupon every 20 stamps, for good. This is where the old "one
+    //     lifetime coupon, then blocked past 20 stamps" rule lived — it
+    //     counted redeemed rewards and refused the stamp outright, so a free
+    //     member's 21st visit returned free_coupon_exhausted and awarded them
+    //     nothing. Free membership is permanent now.
 
-    const isFreeMemberCouponExhausted =
-      member.subscription_status === 'free' && (redeemedCount ?? 0) >= 1
-
-    // Core Rule #12 enforcement: if free member already redeemed their one lifetime coupon
-    // AND has accumulated more than 20 stamps, block the stamp entirely.
-    // (Visits 1–20 are allowed so they can earn + redeem their free coupon; visit 21+ is blocked.)
-    if (member.subscription_status === 'free' && isFreeMemberCouponExhausted && member.total_stamps > 20) {
-      return NextResponse.json(
-        { error: 'free_coupon_exhausted', memberName: member.first_name, totalStamps: member.total_stamps },
-        { status: 200 }
-      )
-    }
-
-    // 3. Calculate stamp multiplier.
-    //    Free members always get 1 stamp per visit (Core Rule #12).
-    //    VIP members earn more stamps based on their tier.
-    //    Two-pass approach: if a visit causes a tier level-up, award the
-    //    NEW tier's multiplier (e.g. crossing into Silver at 200 stamps
-    //    earns 3 stamps on that same visit, not 2).
+    // 3. What this visit is worth.
+    //
+    //    The tier comes from VIP PROGRESSION stamps, never from the lifetime
+    //    count: stamps earned while free do not buy a VIP tier. A free member
+    //    is Starter at 1x however long their history.
+    //
+    //    Two passes, as before: a visit that carries a member over a tier
+    //    threshold pays at the NEW tier (crossing into Silver earns 3, not 2).
+    //    Only VIP progression can cross a threshold, so the second pass is
+    //    VIP-only.
     const totalStamps = member.total_stamps
+    const cycleStamps = member.cycle_stamps ?? 0
+    const progression = member.vip_progression_stamps ?? 0
+    const isVip       = member.subscription_status === 'vip'
 
-    const vipMultiplier = (stamps: number) =>
-      stamps >= 2000 ? 5 :
-      stamps >= 750  ? 4 :
-      stamps >= 200  ? 3 : 2
-
-    const stampsToAward =
-      member.subscription_status === 'free' ? 1
-      : vipMultiplier(totalStamps + vipMultiplier(totalStamps))  // two-pass: check post-stamp tier
+    const tierBefore = tierFor({
+      vipProgressionStamps: progression,
+      subscriptionStatus:   member.subscription_status,
+    })
+    const stampsToAward = isVip
+      ? tierFor({
+          vipProgressionStamps: progression + tierBefore.multiplier,
+          subscriptionStatus:   member.subscription_status,
+        }).multiplier
+      : tierBefore.multiplier
 
     // 4. Insert visit row
     const { error: visitError } = await supabase
@@ -224,51 +219,75 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'stamp_not_recorded' }, { status: 500 })
     }
 
-    // 6. Update total_stamps and detect tier milestones
+    // 6. Move the three counters.
+    //
+    //    LIFETIME never resets. VIP PROGRESSION moves only while they are VIP,
+    //    and never moves backwards — a member who cancels keeps the tier they
+    //    climbed to and resumes from there if they return. THE CYCLE is what
+    //    coupons are paid from, and an upgrade does not touch it: 14 of 20
+    //    toward a $5 coupon becomes 14 of 20 toward a $7 one.
     const newTotalStamps = totalStamps + stampsToAward
+    const newProgression = isVip ? progression + stampsToAward : progression
+    const cycle          = applyCycle(cycleStamps, stampsToAward)
 
-    const justLeveledUp =
-      (newTotalStamps >= 200 && totalStamps < 200) ? 'silver' :
-      (newTotalStamps >= 750 && totalStamps < 750) ? 'gold'   :
-      (newTotalStamps >= 2000 && totalStamps < 2000) ? 'diamond' : null
+    const tierAfter = tierFor({
+      vipProgressionStamps: newProgression,
+      subscriptionStatus:   member.subscription_status,
+    })
 
-    const approachingLevelUp =
-      (totalStamps < 200  && newTotalStamps >= 180)  ? 'silver'  :
-      (totalStamps < 750  && newTotalStamps >= 730)  ? 'gold'    :
-      (totalStamps < 2000 && newTotalStamps >= 1980) ? 'diamond' : null
+    // Lower-cased for the alert copy, which reads "silver" / "gold" /
+    // "diamond". Bronze is where a VIP starts, so it is never a level-up.
+    const justLeveledUp: 'silver' | 'gold' | 'diamond' | null =
+      tierAfter.name !== tierBefore.name
+      && (tierAfter.name === 'Silver' || tierAfter.name === 'Gold' || tierAfter.name === 'Diamond')
+        ? (tierAfter.name.toLowerCase() as 'silver' | 'gold' | 'diamond')
+        : null
+
+    // Within 20 progression stamps of the next rung — the nudge the stamp
+    // tool prints. The thresholds come from lib/tiers rather than numbers
+    // typed here: this test and the multiplier above each used to carry their
+    // own copy of 200 / 750 / 2000.
+    const nextRung = isVip
+      ? TIERS.find(t => newProgression < t.minStamps && newProgression >= t.minStamps - 20)
+      : undefined
+    const approachingLevelUp = nextRung
+      ? (nextRung.name.toLowerCase() as 'silver' | 'gold' | 'diamond')
+      : null
+
     await supabase
       .from('members')
-      .update({ total_stamps: newTotalStamps })
+      .update({
+        total_stamps:           newTotalStamps,
+        cycle_stamps:           cycle.cycleStamps,
+        vip_progression_stamps: newProgression,
+      })
       .eq('id', memberId)
 
-    // 7. Check if coupon earned
-    const oldCycle = totalStamps % 20
-    const newCycle = newTotalStamps % 20
-    const couponEarned = newCycle < oldCycle || newCycle === 0
-
-    // 8. Determine coupon value (thresholds match VIP tier levels)
-    //    Bronze VIP (0-199) = $7, Starter free (any) = $5 
-    const couponValue =
-      newTotalStamps >= 2000 ? 15 :
-      newTotalStamps >= 750  ? 12 :
-      newTotalStamps >= 200  ? 10 :
-      member.subscription_status === 'free' ? 5 : 7
-
-    // Only issue the coupon if the stamp threshold was crossed AND the member
-    // is eligible. Free members get exactly one lifetime coupon (Core Rule #12).
-    const couponIssued = couponEarned && !isFreeMemberCouponExhausted
+    // 7/8. Coupons. One per completed cycle — more than one is possible when
+    //      a visit carries the cycle past 20 twice, which a Diamond member's
+    //      5 stamps on an 18/20 cycle does. The old `total % 20` test could
+    //      only ever notice one.
+    //
+    //      Each is worth the member's tier AFTER this visit, which is what
+    //      makes a cycle carried through an upgrade pay out at the new rate.
+    const couponsEarned = cycle.couponsEarned
+    const couponValue   = tierAfter.couponValue
+    const couponIssued  = couponsEarned > 0
 
     if (couponIssued) {
-      await supabase.from('rewards').insert({
-        member_id:             memberId,
-        merchant_id:           merchantId,
-        store_id:              storeId,
-        issued_at_location_id: storeId,
-        coupon_value:          couponValue,
-        reward_type:           'visit_reward',
-        status:                'earned',
-        earned_at:             new Date().toISOString(),
-      })
+      const earnedAt = new Date().toISOString()
+      await supabase.from('rewards').insert(
+        Array.from({ length: couponsEarned }, () => ({
+          member_id:             memberId,
+          merchant_id:           merchantId,
+          store_id:              storeId,
+          issued_at_location_id: storeId,
+          coupon_value:          couponValue,
+          reward_type:           'visit_reward',
+          status:                'earned',
+          earned_at:             earnedAt,
+        })),
+      )
       await supabase
         .from('members')
         .update({ coupon_due: true })
@@ -403,7 +422,13 @@ export async function POST(req: NextRequest) {
       couponIssued,
       couponRedeemed,
       couponValue,
-      freeCouponExhausted: isFreeMemberCouponExhausted,
+      // How many cycles this visit completed. More than one is rare but real.
+      couponsIssued: couponsEarned,
+      // The counters, so the stamp tool shows progress without recomputing it
+      // from the lifetime total — which is no longer the cycle.
+      cycleStamps: cycle.cycleStamps,
+      vipProgressionStamps: newProgression,
+      tierName: tierAfter.name,
       justLeveledUp,
       approachingLevelUp,
       isVip: member.subscription_status === 'vip',

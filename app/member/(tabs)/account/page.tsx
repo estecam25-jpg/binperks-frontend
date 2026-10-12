@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { TIER_EMOJI, resolveTierName } from '@/lib/tiers'
+import { TIER_EMOJI, tierNameFor } from '@/lib/tiers'
 import GetTheApp from '@/components/member/GetTheApp'
 import AppHeader from '@/components/member/AppHeader'
 
@@ -24,8 +24,9 @@ interface MeResponse {
     firstName: string; phone: string; email: string; smsOptIn: boolean
     subscriptionStatus?: 'free' | 'vip'
     /** Read for the VIP tier emoji below — a VIP's badge is their own tier,
-     *  not a diamond for everyone. /api/member/me has always returned it. */
-    totalStamps?: number
+     *  not a diamond for everyone. Tier comes from VIP PROGRESSION stamps,
+     *  never the lifetime count. */
+    vipProgressionStamps?: number
   }
 }
 
@@ -161,7 +162,10 @@ export default function MemberSettingsPage() {
   // renders for someone Stripe says has a live subscription, and a row still
   // reading 'free' mid-upgrade would otherwise put the Starter rock beside the
   // words "VIP member".
-  const vipEmoji = TIER_EMOJI[resolveTierName(data.member.totalStamps ?? 0, 'vip')]
+  const vipEmoji = TIER_EMOJI[tierNameFor({
+    vipProgressionStamps: data.member.vipProgressionStamps ?? 0,
+    subscriptionStatus:   'vip',
+  })]
 
   function formatPhone(digits: string): string {
     if (digits.length !== 10) return digits
@@ -206,7 +210,8 @@ export default function MemberSettingsPage() {
             </p>
             <p className="text-[14px] font-bold text-[#1A1A2E]">🪨 Starter Membership — Free</p>
             <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed">
-              Starter members earn one lifetime reward. Upgrade to VIP to keep earning.
+              Free members earn a $5 coupon every 20 stamps, for as long as they keep
+              shopping. VIP earns more stamps per visit and bigger coupons.
             </p>
             <Link
               href="/member/upgrade"

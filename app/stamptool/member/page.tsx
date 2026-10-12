@@ -7,7 +7,7 @@ import StoreHeader from '@/components/stamp/StoreHeader'
 import TierBadge from '@/components/stamp/TierBadge'
 import StampProgress from '@/components/stamp/StampProgress'
 import { cashierSession, storeSession, foundMemberSession, type FoundMember } from '@/lib/stamp-session'
-import { resolveTier, cyclePosition, stampsToNextCoupon } from '@/lib/tiers'
+import { COUPON_CYCLE, tierFor, cycleRemaining } from '@/lib/tiers'
 
 export default function MemberViewPage() {
   const router = useRouter()
@@ -35,7 +35,7 @@ export default function MemberViewPage() {
         // subscription_status is refetched rather than taken from the cached
         // lookup: it decides the tier and coupon value, and a member who
         // upgraded to VIP since the lookup should see that here.
-        .select('total_stamps, coupon_due, is_blacklisted, subscription_status')
+        .select('total_stamps, cycle_stamps, vip_progression_stamps, coupon_due, is_blacklisted, subscription_status')
         .eq('id', cached.id)
         .single(),
       supabase
@@ -50,13 +50,17 @@ export default function MemberViewPage() {
     if (!fresh) { router.replace('/stamptool/lookup'); return }
     if (fresh.is_blacklisted) { router.replace('/stamptool/lookup'); return }
 
-    // resolveTier, not getTier: a free member is Starter with a $5 coupon no
-    // matter how many stamps they have. getTier would say Bronze/$7.
-    const tier = resolveTier(fresh.total_stamps, fresh.subscription_status)
+    // Tier from VIP progression, never the lifetime count — see lib/tiers.
+    const tier = tierFor({
+      vipProgressionStamps: fresh.vip_progression_stamps ?? 0,
+      subscriptionStatus:   fresh.subscription_status,
+    })
 
     setMember({
       ...cached,
       totalStamps: fresh.total_stamps,
+      cycleStamps: fresh.cycle_stamps ?? 0,
+      vipProgressionStamps: fresh.vip_progression_stamps ?? 0,
       subscriptionStatus: fresh.subscription_status,
       couponDue: fresh.coupon_due,
       couponValue: tier.couponValue,
@@ -85,10 +89,15 @@ export default function MemberViewPage() {
     )
   }
 
-  const tier = resolveTier(member.totalStamps, member.subscriptionStatus)
-  const cyclePos = cyclePosition(member.totalStamps)
-  const remaining = stampsToNextCoupon(member.totalStamps)
-  const filledDots = member.couponDue ? 20 : cyclePos
+  const tier = tierFor({
+    vipProgressionStamps: member.vipProgressionStamps,
+    subscriptionStatus:   member.subscriptionStatus,
+  })
+  // The cycle is its own counter now: the lifetime total no longer tells you
+  // where a member is in it, because an upgrade carries the cycle across.
+  const cyclePos = member.cycleStamps % COUPON_CYCLE
+  const remaining = cycleRemaining(member.cycleStamps)
+  const filledDots = member.couponDue ? COUPON_CYCLE : cyclePos
 
   return (
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
@@ -122,7 +131,7 @@ export default function MemberViewPage() {
               {member.firstName} {member.lastName}
             </p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <TierBadge totalStamps={member.totalStamps} subscriptionStatus={member.subscriptionStatus} />
+              <TierBadge vipProgressionStamps={member.vipProgressionStamps} subscriptionStatus={member.subscriptionStatus} />
             </div>
           </div>
         </div>

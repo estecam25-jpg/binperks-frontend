@@ -73,7 +73,7 @@ interface Store {
 type StoreToggleField = 'is_open_for_shopping' | 'network_visible' | 'enrollment_enabled'
 interface Member {
   id: string; first_name: string; last_name: string; phone: string; email: string
-  subscription_status: string; total_stamps: number; is_blacklisted: boolean
+  subscription_status: string; total_stamps: number; vip_progression_stamps?: number; is_blacklisted: boolean
   created_at: string; storeName: string
 }
 interface AlertItem { id: string; message: string; detail?: string }
@@ -148,7 +148,7 @@ type TabId =
  * other surface shows 🪨. Only the colours are local, because they are this
  * screen's own styling and nothing else uses them.
  */
-function TierBadge({ status, stamps }: { status: string; stamps: number }) {
+function TierBadge({ status, stamps }: { status: string; /** VIP progression stamps. */ stamps: number }) {
   const tier =
     status !== 'vip' ? 'Free'    :
     stamps >= 2000   ? 'Diamond' :
@@ -976,7 +976,7 @@ export default function AdminDashboard() {
                 <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">{m.total_stamps} stamps · {m.storeName}</p>
               </div>
               <div className="flex flex-col items-end gap-1">
-                <TierBadge status={m.subscription_status} stamps={m.total_stamps} />
+                <TierBadge status={m.subscription_status} stamps={m.vip_progression_stamps ?? 0} />
                 {m.is_blacklisted && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">blacklisted</span>}
               </div>
             </div>

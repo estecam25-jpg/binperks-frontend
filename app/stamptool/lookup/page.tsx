@@ -14,7 +14,7 @@ import {
   type FoundMember,
   type RecentLookup,
 } from '@/lib/stamp-session'
-import { resolveTier } from '@/lib/tiers'
+import { tierFor } from '@/lib/tiers'
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 10)
@@ -100,7 +100,7 @@ export default function LookupPage() {
     // log the collision so the duplicate can be merged.
     const { data: matches } = await supabase
       .from('members')
-      .select('id, first_name, last_name, phone, total_stamps, subscription_status, coupon_due, is_blacklisted')
+      .select('id, first_name, last_name, phone, total_stamps, cycle_stamps, vip_progression_stamps, subscription_status, coupon_due, is_blacklisted')
       .eq('phone', digits)
       .eq('status', 'active')
       .order('created_at', { ascending: true })
@@ -127,9 +127,13 @@ export default function LookupPage() {
       .eq('date', today)
       .single()
 
-    // resolveTier, not getTier: a free member is Starter with a $5 coupon no
-    // matter how many stamps they have. getTier would say Bronze/$7.
-    const tier = resolveTier(member.total_stamps, member.subscription_status)
+    // Tier from VIP progression, never the lifetime count: a free member is
+    // Starter with a $5 coupon however many stamps they have, and stamps
+    // earned while free never promote anyone.
+    const tier = tierFor({
+      vipProgressionStamps: member.vip_progression_stamps ?? 0,
+      subscriptionStatus:   member.subscription_status,
+    })
 
     const found: FoundMember = {
       id: member.id,
@@ -137,6 +141,8 @@ export default function LookupPage() {
       lastName: member.last_name,
       phone: digits,
       totalStamps: member.total_stamps,
+      cycleStamps: member.cycle_stamps ?? 0,
+      vipProgressionStamps: member.vip_progression_stamps ?? 0,
       subscriptionStatus: member.subscription_status,
       couponDue: member.coupon_due,
       couponValue: tier.couponValue,
@@ -280,7 +286,7 @@ export default function LookupPage() {
                       {foundMember.firstName} {foundMember.lastName}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
-                      <TierBadge totalStamps={foundMember.totalStamps} subscriptionStatus={foundMember.subscriptionStatus} />
+                      <TierBadge vipProgressionStamps={foundMember.vipProgressionStamps} subscriptionStatus={foundMember.subscriptionStatus} />
                       <span className="text-[12px] font-semibold text-[#8E8EA8]">
                         {foundMember.totalStamps} stamps
                       </span>

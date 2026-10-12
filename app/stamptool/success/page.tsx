@@ -7,7 +7,7 @@ import TierBadge from '@/components/stamp/TierBadge'
 import { cashierSession, storeSession, foundMemberSession, stampResultSession, signOutCashier, type StampResult } from '@/lib/stamp-session'
 import { PWA_APPS } from '@/lib/pwa-manifest'
 import { readLastStore, isStoreKeyShape } from '@/lib/stamp-store-url'
-import { resolveTier, cyclePosition, stampsToNextCoupon, TIER_DISPLAY_NAMES } from '@/lib/tiers'
+import { COUPON_CYCLE, tierFor, cycleRemaining, TIER_DISPLAY_NAMES } from '@/lib/tiers'
 
 export default function SuccessPage() {
   const router = useRouter()
@@ -28,11 +28,11 @@ export default function SuccessPage() {
 
     if (!hasAnimated.current) {
       hasAnimated.current = true
-      const cyclePos = cyclePosition(r.newTotalStamps)
-      const displayTarget = r.couponIssued ? 20 : cyclePos
+      const cyclePos = r.cycleStamps % COUPON_CYCLE
+      const displayTarget = r.couponIssued ? COUPON_CYCLE : cyclePos
       animateCount(Math.max(0, displayTarget - 4), displayTarget, 500, setDisplayStamps)
       setTimeout(() => {
-        const pct = Math.min((displayTarget / 20) * 100, 100)
+        const pct = Math.min((displayTarget / COUPON_CYCLE) * 100, 100)
         setProgressWidth(pct)
       }, 200)
     }
@@ -81,52 +81,16 @@ export default function SuccessPage() {
     )
   }
 
-  // ── Blocked screen — stamp NOT awarded (free lifetime coupon exhausted) ──
-  if (result.stampBlocked) {
-    return (
-      <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
-        <StoreHeader storeName={store.name} brandColor={store.brandColor} logoUrl={store.logoUrl} />
-        <main className="flex-1 flex flex-col items-center px-4 py-6 gap-3.5">
-
-          <div className="w-full max-w-md bg-amber-50 border-2 border-amber-200 rounded-2xl px-5 py-4">
-            <p className="text-[10px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8] mb-2">
-              Say to member
-            </p>
-            <p className="text-[15px] font-semibold text-[#1A1A2E] leading-relaxed">
-              &#34;<span className="text-[#2A7D34]">{result.memberFirstName}</span>, Thank you for being a BinPerks member.
-              You&#39;ve completed your <span className="text-[#4A4B98]">Starter</span> membership.
-              We encourage you to upgrade to <span className="text-[#2A7D34]">VIP</span> to keep earning stamps and unlock bigger rewards!&#34;
-            </p>
-          </div>
-
-          <div className="w-full max-w-md flex flex-col gap-2.5 mt-1">
-            <button
-              onClick={handleNextMember}
-              className="w-full py-5 rounded-2xl font-bold text-[17px] text-white font-['Montserrat'] bg-[#4A4B98] active:scale-[0.97] transition-all tracking-wide"
-            >
-              Next Member →
-            </button>
-            <button
-              onClick={handleReturnToSignIn}
-              className="w-full py-4 rounded-2xl font-semibold text-[15px] text-[#8E8EA8] font-['Montserrat'] border-2 border-[#EBEBF2] active:border-[#1A1A2E] active:text-[#1A1A2E] transition-colors"
-            >
-              Return to Sign In
-            </button>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
-  // resolveTier, not getTier: a free member is Starter with a $5 coupon no
-  // matter how many stamps they have. getTier would say Bronze/$7 — and this
-  // page reads the value out loud to the member via the cashier script.
-  // This page carries isVip rather than the raw status string.
-  const tier = resolveTier(result.newTotalStamps, result.isVip ? 'vip' : 'free')
-  const cyclePos = cyclePosition(result.newTotalStamps)
-  const cycleDisplay = result.couponIssued ? 20 : cyclePos
-  const remaining = result.couponIssued ? 20 : stampsToNextCoupon(result.newTotalStamps)
-  const exhausted = result.freeCouponExhausted
+  // Tier from VIP progression, never the lifetime count — the cashier reads
+  // the coupon value out loud, and a free member's $5 must not be announced as
+  // a Bronze $7. This page carries isVip rather than the raw status string.
+  const tier = tierFor({
+    vipProgressionStamps: result.vipProgressionStamps,
+    subscriptionStatus:   result.isVip ? 'vip' : 'free',
+  })
+  const cyclePos = result.cycleStamps % COUPON_CYCLE
+  const cycleDisplay = result.couponIssued ? COUPON_CYCLE : cyclePos
+  const remaining = result.couponIssued ? COUPON_CYCLE : cycleRemaining(result.cycleStamps)
   const leveledUp = result.justLeveledUp
   const approaching = result.approachingLevelUp
 
@@ -214,15 +178,6 @@ export default function SuccessPage() {
         { text: `!"` },
       ]
     }
-    if (exhausted) {
-      return [
-        { text: `"You've been stamped, ` },
-        { text: name, highlight: true },
-        { text: `! You're collecting stamps — upgrade to ` },
-        { text: `VIP`, highlight: true },
-        { text: ` to keep earning coupons!"` },
-      ]
-    }
     return [
       { text: `"Thank you ` },
       { text: name, highlight: true },
@@ -239,7 +194,6 @@ export default function SuccessPage() {
   }
 
   const progressLabel = () => {
-    if (exhausted) return <><strong className="text-[#1A1A2E]">Starter coupon used</strong> — upgrade to VIP to keep earning</>
     if (result.couponIssued) return <><strong className="text-[#1A1A2E]">Coupon earned!</strong> New cycle starts on next visit</>
     if (result.couponRedeemed) return <>Coupon redeemed · <strong className="text-[#1A1A2E]">{remaining} more stamps</strong> to earn a <strong className="text-[#1A1A2E]">${tier.couponValue} coupon</strong></>
     return <><strong className="text-[#1A1A2E]">{remaining} more stamp{remaining !== 1 ? 's' : ''}</strong> to earn a <strong className="text-[#1A1A2E]">${tier.couponValue} coupon</strong></>
@@ -277,58 +231,16 @@ export default function SuccessPage() {
           </div>
         )}
 
-        {/* VIP upgrade nudge — shown when free member has used their one lifetime coupon */}
-        {exhausted && !result.couponRedeemed && (
-          <div className="w-full max-w-md bg-[#FFB217] rounded-2xl px-5 py-4 flex items-center gap-3.5">
-            <span className="text-3xl flex-shrink-0">⭐</span>
-            <div className="flex-1">
-              <p className="text-[15px] font-bold text-[#1A1A2E] leading-tight">Upgrade to VIP to keep earning</p>
-              <p className="text-[12px] text-[#1A1A2E]/70 font-medium mt-0.5">
-                {result.memberFirstName} has used their free lifetime coupon — stamps still count toward VIP upgrade
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="bg-white rounded-2xl px-6 pb-6 pt-7 w-full max-w-md shadow-sm flex flex-col items-center gap-1.5">
-          <p className="text-[11px] font-bold tracking-[0.1em] uppercase text-[#2A7D34] mb-1">
-            ✓ +{result.stampCount ?? 1} stamp{(result.stampCount ?? 1) !== 1 ? 's' : ''} awarded
-          </p>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-['Coiny'] text-[88px] text-[#FFB217] leading-none tracking-tight">
-              {displayStamps}
-            </span>
-            <span className="font-['Coiny'] text-3xl text-[#D1D1DC] leading-none pb-2">stamps</span>
-          </div>
-          <p className="text-[17px] font-bold text-[#1A1A2E]">
-            {result.memberFirstName} {result.memberLastName}
-          </p>
-          <TierBadge totalStamps={result.newTotalStamps} tierName={!result.isVip ? 'Free' : undefined} className="mt-1" />
-        </div>
-
-        <div className="w-full max-w-md bg-amber-50 border-2 border-amber-200 rounded-2xl px-5 py-4">
-          <p className="text-[10px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8] mb-2">
-            Say to member
-          </p>
-          <p className="text-[15px] font-semibold text-[#1A1A2E] leading-relaxed">
-            {buildScriptParts().map((part, i) => (
-              part.highlight
-                ? <span key={i} className="text-[#2A7D34]">{part.text}</span>
-                : <span key={i}>{part.text}</span>
-            ))}
-          </p>
-        </div>
-
         <div className="bg-white rounded-2xl px-5 py-4 w-full max-w-md shadow-sm">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-[12px] font-bold tracking-[0.06em] uppercase text-[#8E8EA8]">
-              {exhausted ? 'Starter member — no new coupons' : 'Toward next coupon'}
+              Toward next coupon
             </span>
             <span className="text-[13px] font-bold text-[#1A1A2E]">{cycleDisplay} / 20</span>
           </div>
           <div className="h-2 rounded-full bg-[#EBEBF2] overflow-hidden mb-2">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${exhausted ? 'bg-[#D1D1DC]' : 'bg-[#FFB217]'}`}
+              className="h-full rounded-full transition-all duration-500 bg-[#FFB217]"
               style={{ width: `${progressWidth}%` }}
             />
           </div>

@@ -23,6 +23,8 @@ interface MemberData {
   firstName: string
   subscriptionStatus: 'free' | 'vip'
   totalStamps: number
+  cycleStamps: number
+  vipProgressionStamps: number
   couponDue: boolean
 }
 
@@ -66,6 +68,8 @@ export default function MemberHomePage() {
             <GreetingCard firstName={member.firstName} />
             <MembershipStampCard
               totalStamps={member.totalStamps}
+              cycleStamps={member.cycleStamps}
+              vipProgressionStamps={member.vipProgressionStamps}
               subscriptionStatus={member.subscriptionStatus}
               couponDue={member.couponDue}
             />

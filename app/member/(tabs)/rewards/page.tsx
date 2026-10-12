@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AppHeader from '@/components/member/AppHeader'
 import MembershipStampCard from '@/components/member/MembershipStampCard'
-import { TIERS, STARTER_TIER, resolveTier, TIER_EMOJI, TIER_LABELS, type TierName } from '@/lib/tiers'
+import { TIERS, STARTER_TIER, tierNameFor, TIER_EMOJI, TIER_LABELS, type TierName } from '@/lib/tiers'
 
 const BINPERKS_BLUE = '#4A4B98'
 
@@ -23,6 +23,8 @@ interface MemberData {
   firstName: string
   subscriptionStatus: 'free' | 'vip'
   totalStamps: number
+  cycleStamps: number
+  vipProgressionStamps: number
   couponDue: boolean
   referralUrl: string | null
   referralCode: string | null
@@ -80,8 +82,12 @@ export default function MemberRewardsPage() {
     }
   }
 
+  // From VIP progression, never the lifetime count — see lib/tiers.
   const currentTier = member
-    ? resolveTier(member.totalStamps, member.subscriptionStatus).name
+    ? tierNameFor({
+        vipProgressionStamps: member.vipProgressionStamps,
+        subscriptionStatus:   member.subscriptionStatus,
+      })
     : null
 
   return (
@@ -106,6 +112,8 @@ export default function MemberRewardsPage() {
           <>
             <MembershipStampCard
               totalStamps={member.totalStamps}
+              cycleStamps={member.cycleStamps}
+              vipProgressionStamps={member.vipProgressionStamps}
               subscriptionStatus={member.subscriptionStatus}
               couponDue={member.couponDue}
               showUpgradeCta={member.subscriptionStatus === 'free'}

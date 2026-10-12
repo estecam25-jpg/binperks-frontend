@@ -61,6 +61,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { postToGhl, memberOptedIntoSms } from '@/lib/ghl-webhook'
 import { createAlert, couponReadyAlert, tierUpAlert } from '@/lib/member-alerts'
 import { BINPERKS_HOUSE_MERCHANT_ID, BINPERKS_HOUSE_STORE_ID } from '@/lib/binperks-origin'
+import { tierFor, applyCycle } from '@/lib/tiers'
 
 /** Two, for both sides. Never multiplied by tier. */
 export const REFERRAL_BONUS_STAMPS = 2
@@ -74,6 +75,8 @@ interface BonusMember {
   phone: string | null
   email: string | null
   total_stamps: number | null
+  cycle_stamps: number | null
+  vip_progression_stamps: number | null
   subscription_status: string | null
   status: string | null
   is_blacklisted: boolean | null
@@ -83,7 +86,8 @@ interface BonusMember {
 }
 
 const MEMBER_COLUMNS =
-  'id, first_name, last_name, phone, email, total_stamps, subscription_status, ' +
+  'id, first_name, last_name, phone, email, total_stamps, cycle_stamps, ' +
+  'vip_progression_stamps, subscription_status, ' +
   'status, is_blacklisted, origin_store_id, origin_merchant_id, sms_opt_in'
 
 /** What happened for one side of the referral. */
@@ -109,24 +113,17 @@ const NOTHING: ReferralBonusResult = { referredStamps: 0, referred: 'none', refe
  * THE SAME GATE THE STAMP TOOL APPLIES, not a new rule. A member the cashier
  * would be refused permission to stamp does not get stamps through the back
  * door of someone else's visit:
- *   - inactive or blacklisted members are never stamped;
- *   - a Starter who has already used their one lifetime coupon and is past 20
- *     stamps is blocked (Core Rule #12) — the cap exists to make them upgrade.
+ *   - inactive or blacklisted members are never stamped.
  * Without an Origin Store there is no activity_events row to write at all.
+ *
+ * THE STARTER CAP USED TO BE CHECKED HERE TOO. Free membership is permanent
+ * now, so a free member's bonus is paid however many stamps they already have.
  */
 async function eligibility(admin: Admin, m: BonusMember): Promise<string | null> {
   if (m.status !== 'active') return 'inactive'
   if (m.is_blacklisted) return 'blacklisted'
   if (!m.origin_store_id || !m.origin_merchant_id) return 'no_origin'
 
-  if (m.subscription_status === 'free' && (m.total_stamps ?? 0) > 20) {
-    const { count } = await admin
-      .from('rewards')
-      .select('*', { count: 'exact', head: true })
-      .eq('member_id', m.id)
-      .eq('status', 'redeemed')
-    if ((count ?? 0) >= 1) return 'starter_capped'
-  }
   return null
 }
 
@@ -187,12 +184,27 @@ async function applyBonus(
   // Read the total fresh rather than trusting the copy loaded earlier: for the
   // referred member the stamp route updated it moments ago.
   const { data: fresh } = await admin
-    .from('members').select('total_stamps').eq('id', m.id).single()
-  const before = fresh?.total_stamps ?? m.total_stamps ?? 0
-  const after  = before + REFERRAL_BONUS_STAMPS
+    .from('members')
+    .select('total_stamps, cycle_stamps, vip_progression_stamps')
+    .eq('id', m.id).single()
+  const before      = fresh?.total_stamps ?? m.total_stamps ?? 0
+  const after       = before + REFERRAL_BONUS_STAMPS
+  const beforeCycle = fresh?.cycle_stamps ?? m.cycle_stamps ?? 0
+  const progression = fresh?.vip_progression_stamps ?? m.vip_progression_stamps ?? 0
+  const isVip       = m.subscription_status === 'vip'
+
+  // THE BONUS COUNTS TOWARD EVERYTHING A VISIT STAMP DOES — the cycle, and
+  // VIP progression for a member who is paying. It is not multiplied by tier
+  // (a flat 2 either way), but it is not invisible to the counters either.
+  const cycle          = applyCycle(beforeCycle, REFERRAL_BONUS_STAMPS)
+  const newProgression = isVip ? progression + REFERRAL_BONUS_STAMPS : progression
 
   const { error: totalError } = await admin
-    .from('members').update({ total_stamps: after }).eq('id', m.id)
+    .from('members').update({
+      total_stamps:           after,
+      cycle_stamps:           cycle.cycleStamps,
+      vip_progression_stamps: newProgression,
+    }).eq('id', m.id)
   if (totalError) {
     // The stamps ARE recorded; only the denormalised counter is behind, and it
     // can be recomputed from activity_events. Same position the register-signup
@@ -203,26 +215,16 @@ async function applyBonus(
   }
 
   // ── Coupon — the stamp route's rules, unchanged ──────────────────────────
-  const crossed = Math.floor(after / 20) > Math.floor(before / 20)
-  if (crossed) {
-    const isFree = m.subscription_status === 'free'
-    let exhausted = false
-    if (isFree) {
-      const { count } = await admin
-        .from('rewards')
-        .select('*', { count: 'exact', head: true })
-        .eq('member_id', m.id)
-        .eq('status', 'redeemed')
-      exhausted = (count ?? 0) >= 1
-    }
-
-    if (!exhausted) {
+  // Driven by the cycle counter now, not by the lifetime total crossing a
+  // multiple of 20: those two parted company the moment an upgrade could
+  // carry a half-finished cycle across.
+  if (cycle.couponsEarned > 0) {
+    {
       // Value by tier AFTER the award, as the stamp route does.
-      const value =
-        after >= 2000 ? 15 :
-        after >= 750  ? 12 :
-        after >= 200  ? 10 :
-        isFree ? 5 : 7
+      const value = tierFor({
+        vipProgressionStamps: newProgression,
+        subscriptionStatus:   m.subscription_status,
+      }).couponValue
 
       const { error: rewardError } = await admin.from('rewards').insert({
         member_id:             m.id,

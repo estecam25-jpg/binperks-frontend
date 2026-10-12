@@ -64,7 +64,6 @@ interface Analytics {
     byStore: { storeId: string; store: string; hasReviewUrl: boolean; sent: number; clicked: number; clickThroughPct: number }[]
   }
   anomalies: {
-    starterOver20: { memberId: string; name: string; phone: string; totalStamps: number; originStore: string; isBlacklisted: boolean }[]
     highVelocity: { memberId: string; memberName: string; date: string; storeCount: number }[]
     possibleDuplicates: { name: string; members: { id: string; phone: string; createdAt: string | null; subscriptionStatus: string | null }[] }[]
   }
@@ -220,7 +219,7 @@ export default function AnalyticsTab() {
 
   const activeRange = data.ranges.find(r => r.key === range)
   const anomalyCount =
-    an.starterOver20.length + an.highVelocity.length + an.possibleDuplicates.length
+    an.highVelocity.length + an.possibleDuplicates.length
 
   return (
     <div className="flex flex-col gap-4">
@@ -611,36 +610,6 @@ export default function AnalyticsTab() {
         subtitle="Prompts for a human to look at. Nothing here is a verdict."
       >
         <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8]">
-          Starter members over 20 stamps
-        </p>
-        <TableWrap>
-          <thead>
-            <tr className="bg-[#F5F5F8]">
-              <Th>Member</Th><Th>Phone</Th><Th>Origin store</Th><Th right>Stamps</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#EBEBF2]">
-            {an.starterOver20.length === 0
-              ? <EmptyRow colSpan={4}>✅ None — the Starter cap is holding.</EmptyRow>
-              : an.starterOver20.map(m => (
-                <tr key={m.memberId} className="bg-yellow-50">
-                  <Td>
-                    ⚠️ {m.name}
-                    {m.isBlacklisted && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">blacklisted</span>}
-                  </Td>
-                  <Td muted>{m.phone}</Td>
-                  <Td muted>{m.originStore}</Td>
-                  <Td right mono>{m.totalStamps}</Td>
-                </tr>
-              ))}
-          </tbody>
-        </TableWrap>
-        <p className="text-[10px] text-[#8E8EA8] font-medium leading-relaxed">
-          A Starter member is blocked after visit 22 and gets one $5 coupon for life, so this
-          list should stay empty.
-        </p>
-
-        <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8] pt-2">
           Stamps at 3+ stores in one day
         </p>
         <TableWrap minWidth={340}>

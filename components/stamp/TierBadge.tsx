@@ -1,8 +1,10 @@
-import { getTier, TIER_DISPLAY_NAMES, TIER_EMOJI, TIER_LABELS } from '@/lib/tiers'
+import { tierNameFor, TIER_DISPLAY_NAMES, TIER_EMOJI, TIER_LABELS } from '@/lib/tiers'
 import type { TierName } from '@/lib/tiers'
 
 interface TierBadgeProps {
-  totalStamps: number
+  /** VIP PROGRESSION stamps, not the lifetime total — a tier is earned while
+   *  paying. Ignored when tierName or a free subscriptionStatus is given. */
+  vipProgressionStamps: number
   tierName?: TierName        // pass 'Free' explicitly for free/Starter members
   subscriptionStatus?: string // if 'free', always renders Starter regardless of stamp count
   className?: string
@@ -20,8 +22,9 @@ const BADGE_STYLES: Record<TierName, string> = {
   Diamond: 'bg-indigo-50 text-indigo-700',
 }
 
-export default function TierBadge({ totalStamps, tierName, subscriptionStatus, className = '', networkLabel = false }: TierBadgeProps) {
-  const tier: TierName = subscriptionStatus === 'free' ? 'Free' : (tierName ?? getTier(totalStamps).name)
+export default function TierBadge({ vipProgressionStamps, tierName, subscriptionStatus, className = '', networkLabel = false }: TierBadgeProps) {
+  const tier: TierName = tierName
+    ?? tierNameFor({ vipProgressionStamps, subscriptionStatus })
   const label = networkLabel
     ? `${TIER_EMOJI[tier]} BinPerks ${TIER_LABELS[tier]} Member`
     : TIER_DISPLAY_NAMES[tier]

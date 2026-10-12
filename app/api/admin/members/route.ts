@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     .from('members')
     .select(`
       id, first_name, last_name, phone, email,
-      subscription_status, total_stamps, is_blacklisted, status, created_at,
+      subscription_status, total_stamps, vip_progression_stamps, is_blacklisted, status, created_at,
       stores:home_store_id ( display_name, canonical_key )
     `)
     .order('created_at', { ascending: false })

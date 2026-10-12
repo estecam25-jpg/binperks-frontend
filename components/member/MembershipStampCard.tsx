@@ -20,13 +20,13 @@ import Link from 'next/link'
 import StampProgress from '@/components/stamp/StampProgress'
 import { useStampFill } from '@/lib/use-stamp-fill'
 import {
-  TIERS, resolveTier, cyclePosition, stampsToNextCoupon,
+  TIERS, COUPON_CYCLE, tierFor, cycleRemaining,
   TIER_EMOJI, TIER_LABELS, type TierName,
 } from '@/lib/tiers'
 
 const BINPERKS_BLUE = '#4A4B98'
 
-/** Lifetime stamps at which the next tier begins, or null at the top tier.
+/** VIP progression stamps at which the next tier begins, or null at the top.
  *  Read from TIERS rather than restated, so the locked thresholds stay in one
  *  place: Bronze 0–199, Silver 200–749, Gold 750–1,999, Diamond 2,000+. */
 function nextTierFrom(current: TierName): { name: TierName; at: number } | null {
@@ -38,22 +38,29 @@ function nextTierFrom(current: TierName): { name: TierName; at: number } | null 
 
 export default function MembershipStampCard({
   totalStamps,
+  cycleStamps,
+  vipProgressionStamps,
   subscriptionStatus,
   couponDue,
   showUpgradeCta = true,
 }: {
+  /** Everything they have ever earned. Display only — drives nothing. */
   totalStamps: number
+  /** 0-19, toward the next coupon. Survives an upgrade untouched. */
+  cycleStamps: number
+  /** Earned while VIP. The only counter that decides a tier. */
+  vipProgressionStamps: number
   subscriptionStatus: 'free' | 'vip'
   couponDue: boolean
   /** Rewards already has its own upgrade path, so it hides the button. */
   showUpgradeCta?: boolean
 }) {
-  const tier = resolveTier(totalStamps, subscriptionStatus)
-  const cyclePos = cyclePosition(totalStamps)
-  const remaining = stampsToNextCoupon(totalStamps)
+  const tier = tierFor({ vipProgressionStamps, subscriptionStatus })
+  const cyclePos = cycleStamps % COUPON_CYCLE
+  const remaining = cycleRemaining(cycleStamps)
   // A due coupon shows a full card rather than wrapping to zero — same rule
   // the cashier's stamp tool uses.
-  const filled = couponDue ? 20 : cyclePos
+  const filled = couponDue ? COUPON_CYCLE : cyclePos
 
   // Same cascade the join landing page plays, from one shared hook. It fills to
   // the member's real count, not to 20 — see lib/use-stamp-fill.
@@ -89,14 +96,23 @@ export default function MembershipStampCard({
         }
       />
 
+      {/* NO CAP WARNING. This used to read "Your Starter membership ends at 20
+          stamps" — it does not end any more. A free member earns $5 every 20
+          stamps for as long as they keep shopping, and the upgrade pitch is
+          what VIP adds, not what Starter loses. */}
       {isStarter && (
         <p className="text-[12px] font-semibold text-[#8A6A00] bg-[#FFB21720] rounded-xl px-3.5 py-2.5 leading-relaxed">
-          You&apos;re almost there! Your Starter membership ends at 20 stamps.
-          Upgrade to VIP and keep the rewards coming — forever.
+          Keep going — you earn a $5 coupon every 20 stamps. VIP members earn
+          stamps faster and unlock bigger coupons.
         </p>
       )}
 
-      <TierProgress tierName={tier.name} lifetime={totalStamps} isStarter={isStarter} />
+      <TierProgress
+        tierName={tier.name}
+        lifetime={totalStamps}
+        progression={vipProgressionStamps}
+        isStarter={isStarter}
+      />
 
       {isStarter && showUpgradeCta && (
         <Link
@@ -130,18 +146,22 @@ function Bar({ pct }: { pct: number }) {
  *   Bronze/Silver/Gold — stamps to the next level, with the bar filled to it.
  *   Diamond   — full bar, maximum reached.
  *
- * STARTER HAS NO STAMP THRESHOLD TO CLIMB. Bronze is reached by subscribing,
- * not by earning stamps — a free member with 500 stamps is still Starter
- * (lib/tiers resolveTier, and the locked tier table: "Starter → Bronze: VIP
- * subscription required regardless of stamp count"). So this shows the upgrade
- * as the next step rather than a stamp countdown that would never complete. The
- * 20-stamp bar above it is their real, reachable next milestone.
+ * THE LADDER IS CLIMBED WITH VIP PROGRESSION STAMPS, not lifetime ones. Stamps
+ * earned while free do not buy a tier: someone who collected 500 as a Starter
+ * and upgraded today begins at Bronze with 0 progression. Lifetime is still
+ * shown beside it, labelled as such, because it is the number a member is
+ * proud of — it just is not the one that promotes them.
+ *
+ * STARTER HAS NO THRESHOLD TO CLIMB. Bronze is reached by subscribing, so this
+ * shows the upgrade as the next step rather than a countdown that could never
+ * complete. The 20-stamp bar above it is their real next milestone.
  */
 function TierProgress({
-  tierName, lifetime, isStarter,
+  tierName, lifetime, progression, isStarter,
 }: {
   tierName: TierName
   lifetime: number
+  progression: number
   isStarter: boolean
 }) {
   const lifetimeLabel = (
@@ -181,17 +201,17 @@ function TierProgress({
     )
   }
 
-  const toGo = Math.max(0, next.at - lifetime)
+  const toGo = Math.max(0, next.at - progression)
   // Floor, not round: at 199/200 rounding paints a full bar while a stamp is
   // still owed. The bar reads full only on arrival.
-  const pct = Math.min(100, Math.floor((lifetime / next.at) * 100))
+  const pct = Math.min(100, Math.floor((progression / next.at) * 100))
 
   return (
     <div className="border-t border-[#EBEBF2] pt-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         {lifetimeLabel}
         <span className="text-[12px] font-bold text-[#1A1A2E]">
-          {lifetime.toLocaleString()} / {next.at.toLocaleString()}
+          {progression.toLocaleString()} / {next.at.toLocaleString()} VIP
         </span>
       </div>
       <Bar pct={pct} />

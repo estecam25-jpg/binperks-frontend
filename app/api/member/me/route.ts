@@ -29,7 +29,7 @@ export async function GET() {
     .select(`
       id, first_name, last_name, phone, email,
       status, subscription_status, vip_billing_cycle,
-      total_stamps, coupon_due, sms_opt_in,
+      total_stamps, cycle_stamps, vip_progression_stamps, coupon_due, sms_opt_in,
       is_blacklisted, referral_code, referral_short_code, referral_url,
       home_store_id, merchant_id, created_at
     `)
@@ -84,6 +84,10 @@ export async function GET() {
       subscriptionStatus: member.subscription_status,
       vipBillingCycle:    member.vip_billing_cycle,
       totalStamps:        member.total_stamps,
+      // Lifetime, cycle and VIP progression are three different numbers now
+      // — see lib/tiers. The app shows all three, for different things.
+      cycleStamps:        member.cycle_stamps ?? 0,
+      vipProgressionStamps: member.vip_progression_stamps ?? 0,
       couponDue:          member.coupon_due,
       smsOptIn:           member.sms_opt_in,
       isBlacklisted:      member.is_blacklisted,
