@@ -28,6 +28,13 @@
  * The member's origin store, recorded on the reward row as funding_merchant_id
  * exactly as a 20-stamp coupon is. It settles through the same monthly batch.
  *
+ * ── THE PAUSE SWITCH ───────────────────────────────────────────────────────
+ * REACTIVATION_CRON_ENABLED must be the string "true" for this job to do
+ * anything at all. Anything else — "false", empty, unset — and it returns
+ * before it reads or writes a single row. Deliberately fail-closed: this job
+ * is the one that puts a message on a real person's phone, so a missing or
+ * fat-fingered variable has to mean silence, not a send.
+ *
  * ── EXACTLY ONCE ───────────────────────────────────────────────────────────
  * The stage is CLAIMED before anything is sent, with a compare-and-set on the
  * stage the member was on. An overlapping run, a retry, or two instances of
@@ -87,6 +94,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'not_configured' }, { status: 500 })
   }
   if (!authorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  // ── 0. Paused? ───────────────────────────────────────────────────────────
+  // Ahead of everything, including the expiry sweep, so a paused run leaves
+  // no trace: no member touched, no coupon closed, nothing sent.
+  if (process.env.REACTIVATION_CRON_ENABLED !== 'true') {
+    console.log('[cron/member-reactivation] paused — REACTIVATION_CRON_ENABLED is not "true", nothing read, changed or sent')
+    return NextResponse.json({ paused: true, messaged: 0, expired: 0, reason: 'cron_disabled' })
+  }
 
   const admin = createAdminSupabaseClient()
   const now   = new Date()
