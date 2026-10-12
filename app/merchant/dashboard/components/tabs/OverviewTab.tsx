@@ -25,8 +25,9 @@ interface OriginMetrics {
  * All-time totals.
  *
  * totalStampsGiven is counted at the LOCATION and so follows the location
- * selector. The other three are Origin Store attribution, which is permanent
- * and merchant-wide — they do not change when a location is picked.
+ * selector. The other three are Origin Store attribution, which is
+ * merchant-wide — they do not change when a location is picked. Attribution
+ * itself can move between merchants; see the Merchant Agreement section 4.4.
  */
 interface LifetimeStats {
   totalStampsGiven: number
@@ -150,8 +151,8 @@ export default function OverviewTab({ storeId }: { storeId: string | null }) {
             <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">All time</h2>
             <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5 leading-relaxed">
               Stamps and review clicks are counted where they happened. Coupons and members
-              are counted by Origin Store — members who joined BinPerks through your store
-              stay yours permanently, even when they shop elsewhere in the network.
+              are counted by Origin Store — members attributed to your store count here even
+              when they shop elsewhere in the network.
             </p>
           </div>
 

@@ -1,7 +1,12 @@
 'use client'
 
 /**
- * Member Terms of Service — Version 3.5, effective September 16, 2026.
+ * Member Terms of Service — Version 3.6, effective October 12, 2026.
+ *
+ * V3.6 is the membership restructure: free membership is permanent (a $5
+ * coupon every 20 stamps, no cap), tiers are earned with VIP progression
+ * stamps rather than lifetime ones, and a home store can change when the one
+ * on file goes inactive. Sections 3 and 5 carry most of it.
  *
  * Coupon settlement and cashier access language follows the approved Merchant
  * Agreement V3.5. The V3.4A source file
@@ -24,7 +29,7 @@ export default function MemberTermsPage() {
       <div className="bg-[#4A4B98] px-6 pt-10 pb-8 flex flex-col items-center gap-1 text-center">
         <Link href="/" className="font-['Coiny'] text-4xl text-white leading-none tracking-wide">BinPerks</Link>
         <h1 className="font-['Coiny'] text-2xl text-white/90 mt-1">Member Terms of Service</h1>
-        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.5 · Effective September 16, 2026 · BinPerks LLC · Tampa, FL</p>
+        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.6 · Last Updated October 12, 2026 · BinPerks LLC · Tampa, FL</p>
         <a href="mailto:support@binperks.com" className="text-[12px] text-white/70 font-semibold underline mt-0.5">support@binperks.com</a>
       </div>
 
@@ -33,31 +38,33 @@ export default function MemberTermsPage() {
 
         <Section title="1. What BinPerks Is">
           <P>BinPerks is a branded membership network for liquidation shoppers. When you join BinPerks, you become a member of the BinPerks LLC network — not a loyalty program owned by any individual store.</P>
-          <P>Your BinPerks membership is with <B>BinPerks LLC</B>, a Florida limited liability company. The store where you enrolled is recorded as your Origin Store, but your membership belongs to BinPerks, not to that store.</P>
+          <P>Your BinPerks membership is with <B>BinPerks LLC</B>, a Florida limited liability company. The store you join through is recorded as your <B>home store</B>, but your membership belongs to BinPerks, not to that store.</P>
         </Section>
 
         <Section title="2. Membership">
           <P><B>2.1</B> By creating a BinPerks account, you agree to these Terms of Service.</P>
           <P><B>2.2</B> BinPerks membership is available in two tiers:</P>
           <Ul items={[
-            'Starter (free) — earn stamps toward one lifetime coupon, then stamp earning pauses until upgrade',
-            'VIP ($29.99/month) — earn stamps with tier-based multipliers, earn unlimited coupons, access to all VIP perks',
+            'Starter (free) — earn a $5 coupon every 20 stamps, with no limit on how many you can earn',
+            'VIP ($29.99/month) — earn stamps faster, earn larger coupons as you move up the VIP tiers, and get all VIP perks',
           ]} />
           <P><B>2.3</B> BinPerks membership is intended only for individuals age 18 or older. BinPerks does not knowingly permit individuals under 18 to create member accounts. If BinPerks learns that an individual under 18 has created an account, BinPerks will take appropriate steps including account removal and deletion of associated personal information.</P>
           <P><B>2.4</B> One account per person. One phone number per account.</P>
           <P><B>2.5</B> Your $29.99 monthly VIP payment is billed by BinPerks LLC. BinPerks is the merchant of record for your membership payment.</P>
         </Section>
 
-        <Section title="3. Origin Store">
-          <P><B>3.1</B> When you join BinPerks, the participating location through which you enrolled is permanently recorded as your <B>Origin Store</B>. This is an internal attribution record used by BinPerks to determine merchant commission eligibility.</P>
-          <P><B>3.2</B> Your Origin Store does not limit where you can shop, earn stamps, or redeem coupons. You may visit any participating BinPerks location and earn rewards.</P>
-          <P><B>3.3</B> You cannot select, change, or transfer your Origin Store. There is no member-facing store preference setting that affects how BinPerks determines merchant compensation.</P>
+        <Section title="3. Your Home Store">
+          <P><B>3.1</B> When you join BinPerks, the participating store you joined through is recorded as your <B>home store</B>. This is a record BinPerks keeps internally to work out which merchant it pays.</P>
+          <P><B>3.2</B> If you joined directly through BinPerks rather than through a store, the first participating store that gives you a stamp becomes your home store.</P>
+          <P><B>3.3</B> If your home store leaves BinPerks or becomes inactive, your next stamp at an active participating store makes that store your new home store. This happens automatically. Where you can shop, the stamps you have earned, and the coupons you hold are never affected.</P>
+          <P><B>3.4</B> Your home store does not limit where you can shop, earn stamps, or redeem coupons. You may visit any participating BinPerks location and earn rewards.</P>
+          <P><B>3.5</B> You cannot choose or change your home store yourself. There is no setting for it, because it only affects which merchant BinPerks pays — never what you get.</P>
         </Section>
 
         <Section title="4. How Your Membership Payment Is Applied">
           <P><B>4.1</B> Your $29.99 monthly VIP membership payment is a payment to BinPerks LLC for your BinPerks network membership. BinPerks is the merchant of record for this transaction.</P>
-          <P><B>4.2</B> BinPerks separately compensates participating merchants through its Merchant Commission program, based on Origin Store attribution. The specific merchant that receives a commission is determined by BinPerks&apos; eligibility rules — not by where you shop.</P>
-          <P><B>4.3</B> If your Origin Store is not eligible for a Merchant Commission, no Merchant Commission accrues for that payment. Your membership payment remains a payment to BinPerks, and your membership benefits are completely unaffected.</P>
+          <P><B>4.2</B> BinPerks separately compensates participating merchants through its Merchant Commission program, based on which store is your home store. The specific merchant that receives a commission is determined by BinPerks&apos; eligibility rules — not by where you shop.</P>
+          <P><B>4.3</B> If your home store is not eligible for a Merchant Commission, no Merchant Commission accrues for that payment. Your membership payment remains a payment to BinPerks, and your membership benefits are completely unaffected.</P>
           <P><B>4.4</B> BinPerks&apos; commission program is a contractual arrangement between BinPerks and participating merchants. It has no effect on your stamps, coupons, perks, or any other member benefit.</P>
           <Sub>4.5 Refunds and Disputes</Sub>
           <P>BinPerks, as the merchant of record, is responsible for processing refunds and managing payment disputes on member VIP subscription payments. If you have a billing question or dispute, contact support@binperks.com before initiating a chargeback with your card issuer.</P>
@@ -66,22 +73,31 @@ export default function MemberTermsPage() {
         <Section title="5. Stamps and Rewards">
           <P><B>5.1</B> Stamps are awarded by participating BinPerks merchants during qualifying in-store visits. One qualifying visit per participating location per day.</P>
           <P><B>5.2</B> Stamps never expire.</P>
-          <P><B>5.3</B> Every 20 effective stamps earns a coupon. Effective stamps reflect the member&apos;s tier multiplier applied to each qualifying visit. Coupon values vary by membership tier:</P>
+          <P><B>5.3</B> Every 20 stamps earns a coupon. VIP members earn more than one stamp per visit, so they reach 20 faster and their coupons are worth more. Free members earn a $5 coupon every 20 stamps, with <B>no limit</B> on how many they can earn.</P>
+          <Sub>5.4 The three counts we keep</Sub>
+          <P>Your account keeps three separate numbers, and they do different jobs:</P>
+          <Ul items={[
+            'Lifetime stamps — everything you have ever earned. This number never resets. It is a record of your history with BinPerks and nothing takes it away.',
+            'Your current reward cycle — how far you are through the 20 stamps that earn your next coupon. It goes back to zero each time you earn one and starts again.',
+            'VIP progression stamps — stamps earned while you are a VIP member. These are the only stamps that count toward moving up the VIP tiers. Stamps earned while you are a free member do not count toward a VIP tier.',
+          ]} />
+          <Sub>5.5 Tiers</Sub>
           <Table
-            headers={['Tier', 'Eligibility', 'Coupon Value', 'Stamp Multiplier']}
+            headers={['Tier', 'Eligibility', 'Coupon Value', 'Stamps Per Visit']}
             rows={[
-              ['Starter',     'Free membership',              '$5.00',  '1x'],
-              ['Bronze VIP',  'VIP, 0–199 lifetime stamps',   '$7.00',  '2x'],
-              ['Silver VIP',  'VIP, 200–749 lifetime stamps', '$10.00', '3x'],
-              ['Gold VIP',    'VIP, 750–1,999 lifetime stamps', '$12.00', '4x'],
-              ['Diamond VIP', 'VIP, 2,000+ lifetime stamps',  '$15.00', '5x'],
+              ['Starter',     'Free membership',                        '$5.00',  '1'],
+              ['Bronze VIP',  'VIP, 0–199 VIP progression stamps',      '$7.00',  '2'],
+              ['Silver VIP',  'VIP, 200–749 VIP progression stamps',    '$10.00', '3'],
+              ['Gold VIP',    'VIP, 750–1,999 VIP progression stamps',  '$12.00', '4'],
+              ['Diamond VIP', 'VIP, 2,000+ VIP progression stamps',     '$15.00', '5'],
             ]}
           />
-          <P><B>5.4</B> Starter members earn one lifetime coupon. After that coupon has been redeemed, stamp earning pauses. Upgrading to VIP immediately restores stamp earning.</P>
-          <P><B>5.5</B> Coupons are valid at any participating BinPerks location, not just your Origin Store.</P>
-          <P><B>5.6</B> Coupons have no cash value and cannot be exchanged for cash.</P>
-          <P><B>5.7</B> BinPerks reserves the right to void coupons or stamps obtained through fraud, manipulation, or abuse of the platform.</P>
-          <P><B>5.8</B> Coupon values are settled within the BinPerks network and are offset against the participating merchant&apos;s revenue share. You redeem your coupon in store at a participating location; BinPerks does not make a cash payment directly to you for a coupon.</P>
+          <P><B>5.6</B> If you upgrade to VIP partway through a reward cycle, that progress carries over. If you were 14 stamps into a cycle, you are still 14 stamps in — and the coupon you earn at 20 is worth the VIP tier you are in when you finish it, not the $5 it would have been.</P>
+          <P><B>5.7</B> If you cancel VIP and later subscribe again, your VIP progression stamps pick up where they left off. You do not start over.</P>
+          <P><B>5.8</B> Coupons are valid at any participating BinPerks location, not just your home store.</P>
+          <P><B>5.9</B> Coupons have no cash value and cannot be exchanged for cash.</P>
+          <P><B>5.10</B> BinPerks reserves the right to void coupons or stamps obtained through fraud, manipulation, or abuse of the platform.</P>
+          <P><B>5.11</B> Coupon values are settled within the BinPerks network and are offset against the participating merchant&apos;s revenue share. You redeem your coupon in store at a participating location; BinPerks does not make a cash payment directly to you for a coupon.</P>
         </Section>
 
         <Section title="6. VIP Membership — Billing and Cancellation">
@@ -127,9 +143,12 @@ export default function MemberTermsPage() {
           <P><B>Authentication messages</B> — one-time sign-in codes necessary to access your account. These are security messages required for account access.</P>
           <P><B>Operational membership notifications</B> — notifications about your membership activity, including stamp confirmations and coupon notifications. These are sent as part of your membership.</P>
           <P><B>Marketing and promotional messages</B> — communications about BinPerks offers, network announcements, and participating merchant promotions. These require your separate consent where required by applicable law.</P>
-          <P><B>8.2</B> By enrolling in BinPerks membership, you consent to receive authentication and operational membership SMS messages as described above.</P>
-          <P><B>8.3</B> Marketing SMS consent is obtained separately in the enrollment flow where required by applicable law.</P>
-          <P><B>8.4</B> You may revoke consent to marketing SMS messages at any time by replying STOP to any BinPerks marketing message. Standard message and data rates may apply. Revoking marketing consent does not affect authentication or operational messages.</P>
+          <Sub>8.2 Reminders if you have not been in for a while</Sub>
+          <P>If you have not earned a stamp for 30 days, we may send you a reminder. If you still have not earned one after 60 days, we may send a second reminder and add a one-time <B>$2 coupon</B> to your account. That coupon expires 14 days after it is added.</P>
+          <P>The $2 coupon is limited to <B>one per member, ever</B>, and is not added while you are already holding an unused coupon. These reminders are operational membership messages.</P>
+          <P><B>8.3</B> By enrolling in BinPerks membership, you consent to receive authentication and operational membership SMS messages as described above.</P>
+          <P><B>8.4</B> Marketing SMS consent is obtained separately in the enrollment flow where required by applicable law.</P>
+          <P><B>8.5</B> You may revoke consent to marketing SMS messages at any time by replying STOP to any BinPerks marketing message. Standard message and data rates may apply. Revoking marketing consent does not affect authentication or operational messages.</P>
         </Section>
 
         <Section title="9. AI Product Scanner">

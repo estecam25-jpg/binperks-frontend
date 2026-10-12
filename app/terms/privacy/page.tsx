@@ -1,9 +1,10 @@
 'use client'
 
 /**
- * Privacy Policy — Version 3.5, effective September 16, 2026.
+ * Privacy Policy — Version 3.6, last updated October 12, 2026.
  *
- * Merchant data-access language follows the approved Merchant Agreement V3.5.
+ * Merchant data-access language follows the Merchant Participation and
+ * Platform Agreement V3.6.
  * The V3.4A source file (D:\BinPerks\BinPerks_Privacy_Policy_v34A.md) predates
  * this version and has NOT been regenerated — this page is the current text. The
  * "DRAFT FOR ATTORNEY REVIEW — NOT FOR EXECUTION" footer in the source is a
@@ -22,7 +23,7 @@ export default function PrivacyPolicyPage() {
       <div className="bg-[#4A4B98] px-6 pt-10 pb-8 flex flex-col items-center gap-1 text-center">
         <Link href="/" className="font-['Coiny'] text-4xl text-white leading-none tracking-wide">BinPerks</Link>
         <h1 className="font-['Coiny'] text-2xl text-white/90 mt-1">Privacy Policy</h1>
-        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.5 · Effective September 16, 2026 · BinPerks LLC · Tampa, FL</p>
+        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.6 · Last Updated October 12, 2026 · BinPerks LLC · Tampa, FL</p>
         <a href="mailto:support@binperks.com" className="text-[12px] text-white/70 font-semibold underline mt-0.5">support@binperks.com</a>
       </div>
 
@@ -63,8 +64,9 @@ export default function PrivacyPolicyPage() {
           <Ul items={[
             'To operate your BinPerks membership and loyalty rewards',
             'To send authentication codes, operational membership notifications, and where separately consented, marketing communications via SMS and email',
+            'To send an inactivity reminder if you have not earned a stamp for 30 days, and a second reminder with a one-time reactivation coupon at 60 days — both are operational membership messages',
             "To power the AI product scanner and build BinPerks' product intelligence database",
-            'To calculate and distribute merchant commissions based on your Origin Store attribution (internal use)',
+            'To calculate and distribute merchant commissions based on your home store attribution (internal use)',
             'To generate network intelligence from aggregated, anonymized data',
             'To detect and prevent fraud and platform abuse',
           ]} />
@@ -119,6 +121,7 @@ export default function PrivacyPolicyPage() {
             'Merchants do not receive an individual member list, individual member-level activity history, member contact information, or exportable member data through dashboard reporting',
             "A Merchant whose location was visited may receive aggregate operational reporting about stamp and coupon activity that occurred at that Merchant's own location",
             "No merchant receives cross-merchant member activity history — reporting never includes a member's activity at other merchants' locations",
+            "When a member's home store changes, the new store is not told which store was their home store before, and receives no information about that member's activity at any other store",
           ]} />
           <P><B>6.4</B> BinPerks may disclose information when required by law, court order, or government authority, or to protect the safety of users or the integrity of the platform.</P>
         </Section>

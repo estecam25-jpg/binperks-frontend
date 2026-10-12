@@ -1,7 +1,10 @@
 'use client'
 
 /**
- * Merchant Participation Agreement — Version 3.5, effective September 16, 2026.
+ * Merchant Participation and Platform Agreement — Version 3.6, last updated
+ * October 12, 2026. V3.6 carries the membership restructure: permanent free
+ * membership, VIP progression stamps, and a home store that moves when a
+ * merchant goes inactive (Sections 4 and 13).
  *
  * Content follows the approved Merchant Agreement V3.5. The V3.4A source file
  * (D:\BinPerks\BinPerks_Merchant_Agreement_v34A.md) predates this version and
@@ -31,15 +34,16 @@ export default function MerchantTermsPage() {
       {/* Header */}
       <div className="bg-[#4A4B98] px-6 pt-10 pb-8 flex flex-col items-center gap-1 text-center">
         <Link href="/" className="font-['Coiny'] text-4xl text-white leading-none tracking-wide">BinPerks</Link>
-        <h1 className="font-['Coiny'] text-2xl text-white/90 mt-1">Merchant Participation Agreement</h1>
-        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.5 · Effective September 16, 2026 · BinPerks LLC · Tampa, FL</p>
+        <h1 className="font-['Coiny'] text-2xl text-white/90 mt-1">Merchant Participation and Platform Agreement</h1>
+        <p className="text-[12px] text-white/60 font-medium mt-1">Version 3.6 · Last Updated October 12, 2026 · BinPerks LLC · Tampa, FL</p>
         <a href="mailto:support@binperks.com" className="text-[12px] text-white/70 font-semibold underline mt-0.5">support@binperks.com</a>
       </div>
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-5 py-8 flex flex-col gap-6">
 
         <Section title="Parties">
-          <P>This Merchant Participation Agreement (&quot;Agreement&quot;) is entered into between <B>BinPerks LLC</B>, a Florida limited liability company (&quot;BinPerks&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;), with its principal place of business at 9110 Oak Pride Ct, Tampa, FL 33647, and the participating merchant (&quot;Merchant&quot;, &quot;you&quot;, or &quot;your&quot;), whose legal business name and trade name are identified on the executed copy of this Agreement.</P>
+          <P>This Merchant Participation and Platform Agreement (&quot;Agreement&quot;) is entered into between <B>BinPerks LLC</B>, a Florida limited liability company (&quot;BinPerks&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;), with its principal place of business at 9110 Oak Pride Ct, Tampa, FL 33647, and the participating merchant (&quot;Merchant&quot;, &quot;you&quot;, or &quot;your&quot;), whose legal business name and trade name are identified on the executed copy of this Agreement.</P>
+          <P>Participation in the BinPerks network is governed by the <B>Merchant Participation and Platform Agreement, Version 3.6</B>, set out on this page. V3.6 supersedes all earlier versions.</P>
         </Section>
 
         <Section title="1. What BinPerks Is">
@@ -72,7 +76,7 @@ export default function MerchantTermsPage() {
 
         <Section title="3. Membership Relationship and Data">
           <P><B>3.1</B> All BinPerks memberships belong to BinPerks LLC, not to the Merchant.</P>
-          <P><B>3.2</B> Members join BinPerks through the Merchant&apos;s enrollment channels (QR codes, referral links, in-store signage). The Merchant that originally enrolls a member is permanently recorded as that member&apos;s <B>Origin Store</B>.</P>
+          <P><B>3.2</B> Members join BinPerks through the Merchant&apos;s enrollment channels (QR codes, referral links, in-store signage). The Merchant that enrolls a member is recorded as that member&apos;s <B>Origin Store</B>, subject to the transfer rules in Section 4.</P>
           <P><B>3.3</B> BinPerks maintains the direct membership relationship and controls access to the BinPerks member database. BinPerks retains membership and platform records in accordance with the Privacy Policy, applicable law, legitimate business requirements, and valid privacy requests.</P>
           <P><B>3.4</B> The Merchant is granted access to the BinPerks platform and member information only as described in Section 10 (Data Access and Permissions) while their subscription remains active.</P>
           <P><B>3.5</B> The Merchant may not export, download, copy, or transmit member contact information or membership data for use outside the BinPerks platform, subject to the ordinary-course records exception in Section 10.5.</P>
@@ -81,9 +85,16 @@ export default function MerchantTermsPage() {
         </Section>
 
         <Section title="4. Origin Store Attribution">
-          <P><B>4.1</B> The Merchant location that originally enrolls a BinPerks member is permanently recorded as that member&apos;s <B>Origin Store</B>. This attribution is permanent and never changes based on where the member shops, how frequently they visit other locations, member preference, or any other factor.</P>
-          <P><B>4.2</B> Origin Store attribution is an internal BinPerks acquisition record. It determines Merchant Commission eligibility as described in Section 5. It does not limit where members may shop, earn stamps, or redeem coupons.</P>
-          <P><B>4.3</B> Enrollment through valid BinPerks enrollment paths (QR codes, referral links, marketing materials) may continue even while a Merchant account is inactive. Members enrolled during inactivity remain permanently attributed to the Merchant as their Origin Store.</P>
+          <P><B>4.1</B> The Merchant location that enrolls a BinPerks member is recorded as that member&apos;s <B>Origin Store</B>. Attribution does not change because of where the member shops, how often they visit other locations, or member preference. It changes only as described in 4.4 below.</P>
+          <P><B>4.2</B> Origin Store attribution is an internal BinPerks acquisition record. It determines Merchant Commission eligibility as described in Section 5, and coupon funding as described in Section 13. It does not limit where members may shop, earn stamps, or redeem coupons.</P>
+          <Sub>4.3 Merchant Inactivity</Sub>
+          <P>A Merchant account becomes <B>inactive</B> 30 days after a failed membership payment that remains unpaid. During those 30 days the Merchant&apos;s locations continue to operate normally and may award stamps. Once the account is inactive, its locations can no longer award stamps.</P>
+          <Sub>4.4 Transfer of Origin Store</Sub>
+          <P>If a member&apos;s Origin Store has left the BinPerks network or is inactive, the next participating location that awards that member a stamp becomes the member&apos;s new Origin Store. This happens automatically, with no approval required from either merchant, and takes effect from that stamp forward.</P>
+          <P>A member who joined BinPerks directly, rather than through a participating location, is attributed to the first participating location that awards them a stamp.</P>
+          <P><B>A Merchant that reactivates does not reclaim members who have transferred.</B> Attribution that has moved stays moved. Commissions and coupon obligations follow the current Origin Store from the date of transfer; neither is applied retroactively.</P>
+          <P>The receiving Merchant is not told the member&apos;s previous Origin Store, and receives no information about that member&apos;s activity at any other location.</P>
+          <P><B>4.5</B> Enrollment through valid BinPerks enrollment paths (QR codes, referral links, marketing materials) may continue even while a Merchant account is inactive. Members enrolled during inactivity are attributed to the Merchant as their Origin Store, subject to transfer under 4.4.</P>
         </Section>
 
         <Section title="5. Merchant Commission">
@@ -225,10 +236,11 @@ export default function MerchantTermsPage() {
         </Section>
 
         <Section title="13. Cross-Network Coupons">
-          <P><B>13.1</B> BinPerks coupons are valid at any participating BinPerks location, not just the member&apos;s Origin Store.</P>
+          <P><B>13.1</B> BinPerks coupons are valid at any participating BinPerks location, not just the member&apos;s Origin Store. <B>The member&apos;s Origin Store pays for each coupon that member earns</B>, including a coupon whose 20-stamp cycle began while the member was attributed to a previous Merchant — the Merchant that is the Origin Store when the cycle completes funds the whole coupon.</P>
           <P><B>13.2</B> When the Merchant honors a coupon for a member whose Origin Store is a different merchant, the Merchant receives a coupon credit equal to the face value of the coupon honored, as recorded in the BinPerks settlement ledger.</P>
           <P><B>13.3</B> When a member attributed to the Merchant redeems a coupon at a different participating location, the Merchant is charged a coupon debit equal to the face value of the coupon redeemed, as recorded in the BinPerks settlement ledger.</P>
-          <P><B>13.4</B> If the Origin Store is inactive, BinPerks funds the coupon liability. The inactive merchant is not charged a coupon debit.</P>
+          <P><B>13.4</B> If the Origin Store is inactive, or does not pay, BinPerks pays the honoring Merchant and invoices the Origin Store for the amount.</P>
+          <P><B>13.4a</B> The reactivation coupon described in Exhibit A is funded by the member&apos;s Origin Store on the same basis as any other coupon.</P>
           <P><B>13.5</B> The coupon face values that generate settlement credits and debits are set forth in Exhibit A. The Merchant acknowledges that its participation in the cross-network coupon settlement is based on the current reward economics described in Exhibit A, subject to material change notice as provided in Section 8.</P>
           <P><B>13.6</B> Required Coupon Benefits are settled within the BinPerks network. Coupon credits and debits are recorded in the BinPerks settlement ledger and offset against the Merchant Share in the Merchant&apos;s Net Monthly Distribution under Section 6.2. BinPerks does not issue a separate cash reimbursement to the Merchant for each coupon redemption.</P>
         </Section>
@@ -286,7 +298,7 @@ export default function MerchantTermsPage() {
           <P>Upon termination:</P>
           <Ul items={[
             'The Merchant loses access to the BinPerks platform',
-            'Origin Store attribution records are preserved permanently',
+            'Origin Store attribution records are preserved, including any transfer of attribution that occurred under Section 4.4',
             'BinPerks retains membership and platform records in accordance with the Privacy Policy, applicable law, legitimate business requirements, and valid privacy requests',
             'Any outstanding negative balance remains due and payable',
             'Post-termination settlement rights and obligations are governed by Section 6.7',
@@ -332,22 +344,26 @@ export default function MerchantTermsPage() {
         </Section>
 
         <Section title="Exhibit A — Rewards and Coupon Schedule">
-          <P className="italic text-[#8E8EA8]">This Exhibit is incorporated into and made part of the Merchant Participation Agreement. All items in this Exhibit are subject to material change notice as provided in Section 8 of the Agreement.</P>
+          <P className="italic text-[#8E8EA8]">This Exhibit is incorporated into and made part of the Merchant Participation and Platform Agreement. All items in this Exhibit are subject to material change notice as provided in Section 8 of the Agreement.</P>
           <Sub>Member Tiers and Coupon Values</Sub>
           <Table
             headers={['Tier', 'Eligibility', 'Coupon Value', 'Stamp Multiplier']}
             rows={[
-              ['Starter',     'Free membership',                         '$5.00',  '1x per qualifying visit'],
-              ['Bronze VIP',  'VIP subscriber, 0–199 lifetime stamps',   '$7.00',  '2x per qualifying visit'],
-              ['Silver VIP',  'VIP subscriber, 200–749 lifetime stamps', '$10.00', '3x per qualifying visit'],
-              ['Gold VIP',    'VIP subscriber, 750–1,999 lifetime stamps', '$12.00', '4x per qualifying visit'],
-              ['Diamond VIP', 'VIP subscriber, 2,000+ lifetime stamps',  '$15.00', '5x per qualifying visit'],
+              ['Starter',     'Free membership',                                      '$5.00',  '1 per qualifying visit'],
+              ['Bronze VIP',  'VIP subscriber, 0–199 VIP progression stamps',         '$7.00',  '2 per qualifying visit'],
+              ['Silver VIP',  'VIP subscriber, 200–749 VIP progression stamps',       '$10.00', '3 per qualifying visit'],
+              ['Gold VIP',    'VIP subscriber, 750–1,999 VIP progression stamps',     '$12.00', '4 per qualifying visit'],
+              ['Diamond VIP', 'VIP subscriber, 2,000+ VIP progression stamps',        '$15.00', '5 per qualifying visit'],
             ]}
           />
           <Sub>Coupon Earning Rule</Sub>
-          <P>A member earns one coupon each time they accumulate 20 effective stamps. Effective stamps reflect the member&apos;s tier multiplier applied to each qualifying visit. One qualifying visit per participating location per day.</P>
-          <Sub>Starter Lifetime Coupon Limit</Sub>
-          <P>Starter members earn one lifetime coupon. After that coupon is redeemed, stamp earning pauses until the member upgrades to VIP.</P>
+          <P>A member earns one coupon each time they accumulate 20 stamps. VIP members earn more than one stamp per qualifying visit, as set out above. One qualifying visit per participating location per day.</P>
+          <Sub>Free Membership Is Permanent</Sub>
+          <P>Starter (free) members earn a $5.00 coupon every 20 stamps, with <B>no limit</B> on the number of coupons they may earn. Stamp earning does not pause and does not require an upgrade.</P>
+          <Sub>VIP Progression Stamps</Sub>
+          <P>VIP tiers are reached using <B>VIP progression stamps</B> — stamps earned while the member holds an active VIP subscription. Stamps earned while a member is on the free tier do not count toward a VIP tier. A member who cancels and later resubscribes resumes their VIP progression where it left off. A reward cycle in progress when a member upgrades carries over, and the resulting coupon is valued at the member&apos;s VIP tier when the cycle completes.</P>
+          <Sub>Reactivation Coupon</Sub>
+          <P>A member who has not earned a stamp for 60 days may be issued a one-time <B>$2.00</B> coupon, expiring 14 days after issue, limited to one per member for the life of their membership. It is funded by the member&apos;s Origin Store and settles as any other coupon does.</P>
           <Sub>Cross-Network Coupon Settlement</Sub>
           <Ul items={[
             'Coupon debit: When a member attributed to the Merchant redeems a valid BinPerks coupon at a different participating location, the Merchant is charged the face value of that coupon as a debit in the monthly settlement ledger.',
