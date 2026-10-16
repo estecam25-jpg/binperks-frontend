@@ -132,14 +132,19 @@ function marketingRoute(
  * two origins, which would give search two copies and give a merchant who
  * signs in from it a session on the wrong host.
  *
- * EXACT PATH ONLY. /merchant/signup/apply, /plan, /sign and /thankyou are the
+ * EXACT PATHS ONLY. /merchant/signup/apply, /plan, /sign and /thankyou are the
  * paid signup flow: Stripe's success_url and DocuSeal's redirect both name
  * app.binperks.com, and bouncing those mid-flow would strand a merchant who
  * has just paid between two origins with their session on neither.
+ *
+ * /merchant is included because it renders the same landing page, and two
+ * origins serving one page is two addresses for search to choose between.
  */
+const LEGACY_LANDING_PATHS = new Set(['/merchant', '/merchant/signup'])
+
 function legacySignupRedirect(request: NextRequest, hostname: string): URL | null {
   if (pwaAppForHost(hostname) || isMarketingHost(hostname)) return null
-  if (request.nextUrl.pathname !== '/merchant/signup') return null
+  if (!LEGACY_LANDING_PATHS.has(request.nextUrl.pathname)) return null
   // originFor, not the production origin: on localhost this has to land on the
   // dev server's own merchant host, or testing the funnel locally bounces you
   // to production.
