@@ -45,6 +45,8 @@ import Stripe from 'stripe'
 import { postToGhl } from '@/lib/ghl-webhook'
 import { merchantCheckoutLineItems } from '@/lib/merchant-checkout'
 import { signupMetadata } from '@/lib/merchant-onboarding'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { PRESETUP, finishSetupUrl } from '@/lib/presetup'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 
@@ -75,6 +77,43 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = email.toLowerCase().trim()
+
+    // ── An owner BinPerks already pre-set-up ────────────────────────────────
+    //
+    // Their merchant and store rows exist, their QR codes are printed, and the
+    // store key on those printed materials belongs to that store. Letting this
+    // form run would open a second checkout and build a SECOND merchant — the
+    // posters in their window would then point at the wrong store's join link.
+    // So they are sent to their own finish-setup link instead.
+    //
+    // Returned as checkoutUrl because that is the field the plan page already
+    // redirects to; it is this app's own URL rather than Stripe's, and the
+    // page it lands on explains where they are.
+    //
+    // ONLY 'presetup' IS INTERCEPTED. Every other merchant — active, pending,
+    // cancelled — falls through to the ordinary flow exactly as before.
+    try {
+      const admin = createAdminSupabaseClient()
+      const { data: presetup } = await admin
+        .from('merchants')
+        .select('id, billing_status, presetup_token')
+        .ilike('owner_email', normalizedEmail)
+        .eq('billing_status', PRESETUP)
+        .maybeSingle()
+
+      if (presetup?.presetup_token) {
+        console.log(`[/api/merchant/apply] ${normalizedEmail} is pre-set-up (merchant ${presetup.id}) — routing to finish-setup`)
+        return NextResponse.json({
+          checkoutUrl: finishSetupUrl(presetup.presetup_token as string, req.nextUrl.origin),
+          presetup: true,
+        })
+      }
+    } catch (lookupError) {
+      // A lookup failure must not stop an ordinary signup. The worst case is
+      // the duplicate this check exists to avoid, which an admin can see and
+      // clean up; refusing everyone's checkout would be worse.
+      console.error('[/api/merchant/apply] pre-setup lookup failed, continuing:', lookupError)
+    }
 
     // Everything the post-payment step needs to create the merchant and store.
     const metadata = signupMetadata({

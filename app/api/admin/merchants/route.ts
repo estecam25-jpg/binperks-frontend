@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { postToGhl } from '@/lib/ghl-webhook'
 import { verifyAdmin } from '@/lib/admin-auth'
-import { onboardingPercent } from '@/lib/merchant-onboarding-checklist'
+import { onboardingPercent } from '@/lib/merchant-onboarding-checklist'
+import { PRESETUP } from '@/lib/presetup'
 
 export async function GET(req: NextRequest) {
   const adminEmail = await verifyAdmin()
@@ -54,6 +55,11 @@ export async function GET(req: NextRequest) {
       // exist on merchants and PostgREST rejected the whole select, which is why
       // this route returned 500 and the Merchants tab rendered empty.
       .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at, stripe_customer_id, participant_type, commission_eligible, negative_balance, admin_suspended, admin_suspension_reason')
+      // Pre-setup stores have their own tab. They are real merchant rows, but
+      // nobody has paid, signed or agreed to anything, so counting them here
+      // would overstate the network and put an un-actionable row in every
+      // filter on this tab. They appear the moment they activate.
+      .neq('billing_status', PRESETUP)
       .order('created_at', { ascending: false }),
     admin.from('activity_events').select('merchant_id, effective_stamps').gte('occurred_at', sevenDaysAgo),
     admin.from('members').select('merchant_id, subscription_status'),

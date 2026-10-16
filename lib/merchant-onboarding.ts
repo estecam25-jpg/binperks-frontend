@@ -42,6 +42,7 @@ import Stripe from 'stripe'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { postToGhl } from '@/lib/ghl-webhook'
+import { PRESETUP, PRESETUP_MERCHANT_ID_KEY } from '@/lib/presetup'
 
 type Admin = SupabaseClient
 
@@ -181,6 +182,15 @@ export async function createMerchantAfterPayment(
     if (legacy) return adoptLegacyPending(admin, legacy as MerchantRef, subscriptionId, checkoutSessionId)
   }
 
+  // A FINISH-SETUP CHECKOUT. The merchant and store already exist — an admin
+  // pre-set them up and printed their materials — so this payment adopts that
+  // row rather than writing a second one. Checked before the form, because a
+  // finish-setup checkout carries no form: the details were entered in admin.
+  const presetupId = args.metadata?.[PRESETUP_MERCHANT_ID_KEY]
+  if (presetupId) {
+    return adoptPresetup(admin, presetupId, customerId, subscriptionId, checkoutSessionId)
+  }
+
   const form = formFromMetadata(args.metadata)
   if (!form) return null   // a member VIP checkout, or something else entirely
 
@@ -262,6 +272,90 @@ export async function createMerchantAfterPayment(
 
   console.log(`[merchant-onboarding] merchant ${merchant.id} created after payment (customer ${customerId})`)
   return merchant as MerchantRef
+}
+
+/**
+ * A pre-set-up merchant has now been paid for: move them onto the ordinary
+ * signing path.
+ *
+ * IDEMPOTENT BY COMPARE-AND-SET on billing_status, like every other step here.
+ * Three callers race to this (checkout.session.completed, subscription.created
+ * and the thank-you page) and only one may spend the status; the losers re-read
+ * and return the same merchant, so all three go on to the same signing session.
+ *
+ * THE LINK DIES HERE. presetup_token is cleared in the same update that spends
+ * the status, so the finish-setup URL stops working the moment it is paid —
+ * before signing, not after. A second person holding the link cannot start a
+ * second checkout against the same merchant.
+ *
+ * A merchant who is past 'presetup' already is returned untouched. That covers
+ * the retry case and also means this can never resurrect, re-bill or reactivate
+ * an existing merchant.
+ */
+async function adoptPresetup(
+  admin: Admin,
+  merchantId: string,
+  customerId: string,
+  subscriptionId: string | null,
+  checkoutSessionId: string | null,
+): Promise<MerchantRef | null> {
+  const { data: current } = await admin
+    .from('merchants')
+    .select('id, billing_status, docuseal_slug, auth_user_id, owner_email')
+    .eq('id', merchantId)
+    .maybeSingle()
+  if (!current) {
+    console.error(`[merchant-onboarding] finish-setup checkout names merchant ${merchantId}, which does not exist`)
+    return null
+  }
+  if (current.billing_status !== PRESETUP) {
+    // Already adopted by a sibling caller, or already live. Nothing to spend.
+    return current as MerchantRef
+  }
+
+  const now = new Date().toISOString()
+  const { data: won } = await admin
+    .from('merchants')
+    .update({
+      billing_status:             PENDING_SIGNATURE,
+      subscription_status:        'active',
+      stripe_customer_id:         customerId,
+      stripe_subscription_id:     subscriptionId,
+      stripe_checkout_session_id: checkoutSessionId,
+      implementation_fee_paid:    true,
+      implementation_fee_paid_at: now,
+      presetup_token:             null,
+    })
+    .eq('id', merchantId)
+    .eq('billing_status', PRESETUP)
+    .select(REF_COLUMNS)
+    .maybeSingle()
+
+  if (!won) {
+    const { data: after } = await admin
+      .from('merchants').select(REF_COLUMNS).eq('id', merchantId).maybeSingle()
+    return (after as MerchantRef) ?? null
+  }
+
+  // The sign-in account, which pre-setup deliberately did not create: an admin
+  // typing an address into a form is not consent to register it, and an unpaid
+  // pre-setup store that gets deleted should leave no auth user behind. The
+  // winner of the claim makes it, exactly as the organic path does at this
+  // same point. An address that is already registered leaves auth_user_id null
+  // and lib/merchant-auth resolves by owner_email instead.
+  if (!current.auth_user_id && current.owner_email) {
+    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+      email: String(current.owner_email), email_confirm: true,
+    })
+    if (authData?.user?.id) {
+      await admin.from('merchants').update({ auth_user_id: authData.user.id }).eq('id', merchantId)
+    } else if (authError && !authError.message.toLowerCase().includes('already')) {
+      console.error('[merchant-onboarding] auth user create failed for pre-setup merchant:', authError)
+    }
+  }
+
+  console.log(`[merchant-onboarding] pre-setup merchant ${merchantId} adopted after payment (customer ${customerId})`)
+  return won as MerchantRef
 }
 
 /** A merchant from the old flow ('pending', paid for now) joins the new one. */

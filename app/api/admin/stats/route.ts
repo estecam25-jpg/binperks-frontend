@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { verifyAdmin } from '@/lib/admin-auth'
 import { computeMrr, monthlyBilling, VIP_PRICE } from '@/lib/mrr'
+import { PRESETUP } from '@/lib/presetup'
 
 export async function GET() {
   const adminEmail = await verifyAdmin()
@@ -45,7 +46,11 @@ export async function GET() {
     // growth needs per-merchant location counts to be priced correctly.
     admin.from('merchants').select('id, billing_status, subscription_status, location_count, implementation_fee_paid_at, created_at').eq('billing_status', 'active'),
     admin.from('members').select('*', { count: 'exact', head: true }).gte('created_at', som),
-    admin.from('merchants').select('*', { count: 'exact', head: true }).gte('created_at', som),
+    // Pre-setup merchants are rows an admin typed in, not merchants who joined,
+    // so they do not count as new this month. They are counted on the day they
+    // activate, like everyone else.
+    admin.from('merchants').select('*', { count: 'exact', head: true })
+      .gte('created_at', som).neq('billing_status', PRESETUP),
     admin.from('members').select('*', { count: 'exact', head: true }).eq('subscription_status', 'vip').gte('created_at', som),
     admin.from('members').select('*', { count: 'exact', head: true }),
     admin.from('referrals').select('*', { count: 'exact', head: true }),

@@ -10,6 +10,7 @@ import AnnouncementsTab from './AnnouncementsTab'
 import SocialMediaTab from './SocialMediaTab'
 import MarketingTemplatesTab from './MarketingTemplatesTab'
 import AnalyticsTab from './AnalyticsTab'
+import PresetupStoresTab from './PresetupStoresTab'
 import { StatCard, Spinner } from './ui'
 import { CONTENT_TYPES, contentTypeBySlug } from '@/lib/admin-content'
 
@@ -133,7 +134,7 @@ interface ScannerStats {
 }
 type TabId =
   | 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'scanner' | 'alerts'
-  | 'analytics' | 'announcements' | 'social' | 'templates'
+  | 'analytics' | 'announcements' | 'social' | 'templates' | 'presetup'
   // Content tabs, one per entry in CONTENT_TYPES. Prefixed so a content slug
   // can never collide with an operational tab name.
   | `content:${string}`
@@ -1384,6 +1385,8 @@ export default function AdminDashboard() {
     { id: 'analytics', label: 'Analytics' },
     { id: 'merchants', label: 'Merchants' },
     { id: 'stores',    label: 'Stores' },
+    // Next to Merchants, because it is the stage before one.
+    { id: 'presetup',  label: 'Pre-setup Stores' },
     { id: 'members',   label: 'Members' },
     { id: 'settlement', label: 'Settlement' },
     { id: 'scanner',   label: 'Scanner' },
@@ -1437,6 +1440,7 @@ export default function AdminDashboard() {
 
         {/* Both fetch their own data; nothing to lazy-load from here. */}
         {tab === 'analytics' && <AnalyticsTab />}
+        {tab === 'presetup' && <PresetupStoresTab />}
         {tab === 'announcements' && <AnnouncementsTab />}
         {tab === 'social' && <SocialMediaTab />}
         {tab === 'templates' && <MarketingTemplatesTab />}
