@@ -14,7 +14,10 @@
 
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { PWA_APPS, appForPath, pwaAppForHost, MEMBER_APP_ORIGIN, type PwaAppId } from '@/lib/pwa-manifest'
+import {
+  PWA_APPS, appForPath, pwaAppForHost, MEMBER_APP_ORIGIN,
+  isMarketingHost, MARKETING_HOME_PATH, type PwaAppId,
+} from '@/lib/pwa-manifest'
 import { storeKeyFromPath } from '@/lib/stamp-store-url'
 
 /**
@@ -84,6 +87,69 @@ function wrongSubdomainRedirect(request: NextRequest, hostname: string): URL | n
 }
 
 /**
+ * binperks.com — the public marketing site.
+ *
+ *   /            → rewritten to /home, the member homepage
+ *   /merchant/*  → redirected to merchant.binperks.com
+ *   /member/*    → redirected to app.binperks.com
+ *   /admin/*, /stamptool/*  likewise
+ *   everything else served as-is: /terms, /api, /join/<storeKey>, /r/<code>
+ *
+ * The app paths are redirected rather than served because sessions are
+ * per-origin: binperks.com/member/home would render the member app signed out,
+ * next to a cookie jar nothing else uses. Redirecting also keeps one canonical
+ * address per page for search.
+ *
+ * Returns a URL to redirect to, a URL to rewrite to, or null to serve as-is.
+ */
+function marketingRoute(
+  request: NextRequest,
+  hostname: string,
+): { redirect: URL } | { rewrite: URL } | null {
+  if (!isMarketingHost(hostname)) return null
+
+  const { pathname, search } = request.nextUrl
+
+  const owner = appForPath(pathname)
+  if (owner) {
+    return { redirect: new URL(pathname + search, originFor(owner, request, hostname)) }
+  }
+
+  if (pathname === '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = MARKETING_HOME_PATH
+    return { rewrite: url }
+  }
+
+  return null
+}
+
+/**
+ * app.binperks.com/merchant/signup → merchant.binperks.com/merchant/signup.
+ *
+ * The landing page's home is the merchant subdomain now. This keeps the old
+ * address working — it is on printed material — without serving the page from
+ * two origins, which would give search two copies and give a merchant who
+ * signs in from it a session on the wrong host.
+ *
+ * EXACT PATH ONLY. /merchant/signup/apply, /plan, /sign and /thankyou are the
+ * paid signup flow: Stripe's success_url and DocuSeal's redirect both name
+ * app.binperks.com, and bouncing those mid-flow would strand a merchant who
+ * has just paid between two origins with their session on neither.
+ */
+function legacySignupRedirect(request: NextRequest, hostname: string): URL | null {
+  if (pwaAppForHost(hostname) || isMarketingHost(hostname)) return null
+  if (request.nextUrl.pathname !== '/merchant/signup') return null
+  // originFor, not the production origin: on localhost this has to land on the
+  // dev server's own merchant host, or testing the funnel locally bounces you
+  // to production.
+  return new URL(
+    '/merchant/signup' + request.nextUrl.search,
+    originFor('merchant', request, hostname),
+  )
+}
+
+/**
  * Subdomain apps — stamptool., merchant. and admin.binperks.com — each served
  * as its own installable PWA. The host table lives in lib/pwa-manifest
  * (PWA_APPS); this function only applies it.
@@ -149,6 +215,9 @@ export async function middleware(request: NextRequest) {
   const redirectTo = wrongSubdomainRedirect(request, hostname)
   if (redirectTo) return NextResponse.redirect(redirectTo, 307)
 
+  const legacySignup = legacySignupRedirect(request, hostname)
+  if (legacySignup) return NextResponse.redirect(legacySignup, 307)
+
   // The current URL, passed forward as a header.
   //
   // A server layout cannot see the request URL, and the merchant dashboard
@@ -167,7 +236,12 @@ export async function middleware(request: NextRequest) {
   // Every response below is built by this one function, so the subdomain
   // rewrite survives the cookie refresh in setAll() — which replaces the
   // response object and would otherwise silently drop back to next().
-  const rewriteTo = subdomainRewrite(request, hostname)
+  const marketing = marketingRoute(request, hostname)
+  if (marketing && 'redirect' in marketing) {
+    return NextResponse.redirect(marketing.redirect, 307)
+  }
+
+  const rewriteTo = marketing?.rewrite ?? subdomainRewrite(request, hostname)
   const continueRequest = () => rewriteTo
     ? NextResponse.rewrite(rewriteTo, { request: { headers: forwardedHeaders } })
     : NextResponse.next({ request: { headers: forwardedHeaders } })

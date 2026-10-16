@@ -77,7 +77,11 @@ export const PWA_APPS: Record<PwaAppId, PwaApp> = {
     shortName:     'Merchant',
     origin:        'https://merchant.binperks.com',
     hosts:         new Set(['merchant.binperks.com', 'merchant.localhost']),
-    homePath:      '/merchant/dashboard',
+    // /merchant, not /merchant/dashboard: that route shows the landing page to
+    // a signed-out visitor and redirects a signed-in merchant to the
+    // dashboard. The installed app still opens on the dashboard, because a
+    // merchant who installed it is signed in.
+    homePath:      '/merchant',
     manifestPath:  '/merchant.webmanifest',
     dismissKey:    'merchant-pwa-dismissed',
     bannerHeading: 'Install the Merchant App',
@@ -99,6 +103,35 @@ export const PWA_APPS: Record<PwaAppId, PwaApp> = {
 
 /** The member app and everything not claimed by a subdomain app below. */
 export const MEMBER_APP_ORIGIN = 'https://app.binperks.com'
+
+/**
+ * The public marketing site — the root domain.
+ *
+ * NOT a PWA app: nothing installs from it and it has no manifest. It is listed
+ * here anyway because the middleware has to recognise the host, and keeping
+ * every BinPerks hostname in one file is what stops the routing table and the
+ * manifest table disagreeing about which host is which.
+ *
+ * www is included so it resolves even before the redirect to the apex is in
+ * place at the DNS or Vercel layer; a visitor who types www should never see
+ * the member sign-in screen by accident.
+ */
+export const MARKETING_ORIGIN = 'https://binperks.com'
+
+export const MARKETING_HOSTS: ReadonlySet<string> = new Set([
+  'binperks.com',
+  'www.binperks.com',
+  // Local equivalents, same trick as the subdomain apps.
+  'binperks.localhost',
+  'www.binperks.localhost',
+])
+
+/** What the marketing host serves at `/`. */
+export const MARKETING_HOME_PATH = '/home'
+
+export function isMarketingHost(hostname: string): boolean {
+  return MARKETING_HOSTS.has(hostname.toLowerCase())
+}
 
 /**
  * Which app a path belongs to, by its first segment — 'member' meaning the main

@@ -40,11 +40,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PENDING_SIGNATURE, ensureDocusealSubmission, signPagePath } from '@/lib/merchant-onboarding'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
+import { ORIGIN_COMMISSION_PER_VIP as SHARED_ORIGIN_COMMISSION_PER_VIP } from '@/lib/mrr'
 
 // Origin Merchant commission per VIP member per month while eligible.
 // Source of truth: CLAUDE.md "PRICING (V3 LOCKED)". Mirrored in
 // /api/member/vip-webhook, which writes the immutable commission_decisions.
-const ORIGIN_COMMISSION_PER_VIP = 19.99
+// Re-exported from lib/mrr so the dashboard, its Overview tab and the
+// merchant landing page all quote the same figure.
+const ORIGIN_COMMISSION_PER_VIP = SHARED_ORIGIN_COMMISSION_PER_VIP
 
 function getFiscalWeekRange(fiscalWeekStart: string = 'friday') {
   const dayMap: Record<string, number> = {

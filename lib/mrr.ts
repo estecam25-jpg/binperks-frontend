@@ -17,6 +17,19 @@ export const PLATFORM_PRICE       = 99.00
 export const EXTRA_LOCATION_PRICE = 49.99
 export const VIP_PRICE            = 29.99
 
+/**
+ * The Origin Store's share of one VIP membership, per month.
+ *
+ * Lives here rather than in a route because three places quote it to a
+ * merchant — the dashboard route that computes it, the Overview tab that
+ * explains it, and the landing page that sells it — and a figure that decides
+ * what a merchant is paid should not be typed out in each of them.
+ *
+ * BinPerks keeps the remainder (VIP_PRICE - this) and keeps the whole amount
+ * when the Origin Store is not commission-eligible.
+ */
+export const ORIGIN_COMMISSION_PER_VIP = 19.99
+
 export interface BillableMerchant {
   location_count: number | null
   implementation_fee_paid_at: string | null
