@@ -188,13 +188,51 @@ async function main() {
 
   // ── 4. The print kit ──────────────────────────────────────────────────
   //
-  // NOT EXERCISED HERE. Building it pulls in lib/marketing-render, which Node's
-  // type stripper cannot load (it uses a TypeScript parameter property), and
-  // the send needs RESEND_API_KEY, which is not available locally. It is
-  // verified end to end against production instead — real Resend, real
-  // attachments — through the admin resend button on a throwaway store.
+  // BUILT, not sent: RESEND_API_KEY is not available locally, and the delivery
+  // path is exercised against production separately. Everything that decides
+  // what lands in the printer's inbox is checked here.
+  //
+  // Needs --experimental-transform-types: lib/marketing-render uses a
+  // TypeScript parameter property, which Node's strip-only mode rejects.
   section('Print kit')
-  console.log('  SKIPPED locally — verified against production (see report)')
+  const { buildPrintKit, printKitSubject, printKitBody, sendPrintKitEmail } =
+    await import('../lib/print-kit.ts')
+  const { data: kitStore } = await db.from('stores')
+    .select('id, display_name, canonical_key, address, city, state, zip').eq('id', store.id).single()
+
+  const kit = await buildPrintKit(db, kitStore)
+  ck('11 attachments', kit.length === 11, String(kit.length))
+  const names = kit.map(a => a.filename)
+  const wantNames = [...Array(10)].map((_, i) => `poster-${String(i + 1).padStart(2, '0')}.pdf`)
+    .concat('countertop-decal.pdf')
+  ck('file names are poster-01..poster-10 plus countertop-decal',
+    JSON.stringify(names) === JSON.stringify(wantNames), names.join(' '))
+
+  let allSingle = true
+  for (const a of kit) {
+    const pdf = await PDFDocument.load(a.content)
+    if (pdf.getPageCount() !== 1) { allSingle = false; console.log(`    ${a.filename}: ${pdf.getPageCount()} pages`) }
+  }
+  ck('every attachment is a single-page PDF', allSingle)
+  ck('attachments are non-trivial in size', kit.every(a => a.content.length > 20000),
+    `${Math.round(kit.reduce((s, a) => s + a.content.length, 0) / 1024)}KB total`)
+
+  const subject = printKitSubject(kitStore)
+  const body    = printKitBody(kitStore)
+  ck('subject is exact', subject === 'Print kit order: ZZ Batch Store, ZZBatchCity, FL', subject)
+  const wantBody = 'Please print 1qty of each as decal (sticky on back) 8.5" x 11"\n'
+                 + 'ship in flat rate padded envelope to: ZZ Batch Store, 42 Test Avenue, ZZBatchCity, FL 33602'
+  ck('body is exact', body === wantBody, JSON.stringify(body).slice(0, 80))
+  console.log('\n  --- the email, as it will be sent ---')
+  console.log(`  Subject: ${subject}`)
+  for (const line of body.split('\n')) console.log(`  ${line}`)
+  console.log(`  Attachments: ${names.join(', ')}\n`)
+
+  section('One order per location')
+  await db.from('stores').update({ print_kit_sent_at: new Date().toISOString() }).eq('id', store.id)
+  const second = await sendPrintKitEmail(db, store.id)
+  ck('a second order is refused once one has been sent',
+    second.sent === false && second.reason === 'already_sent', JSON.stringify(second))
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   section('Cleanup')
