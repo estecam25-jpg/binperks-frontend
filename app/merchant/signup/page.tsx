@@ -11,6 +11,9 @@
  */
 
 import MerchantLanding from '../MerchantLanding'
+import { merchantLandingMetadata } from '../landing-metadata'
+
+export const metadata = merchantLandingMetadata
 
 export default function MerchantSignupLandingPage() {
   return <MerchantLanding />

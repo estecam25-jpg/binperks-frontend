@@ -24,6 +24,9 @@
 import { redirect } from 'next/navigation'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
 import MerchantLanding from './MerchantLanding'
+import { merchantLandingMetadata } from './landing-metadata'
+
+export const metadata = merchantLandingMetadata
 
 export const dynamic = 'force-dynamic'
 
