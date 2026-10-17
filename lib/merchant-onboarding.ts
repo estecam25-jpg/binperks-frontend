@@ -43,6 +43,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { postToGhl } from '@/lib/ghl-webhook'
 import { PRESETUP, PRESETUP_MERCHANT_ID_KEY } from '@/lib/presetup'
+import { waitUntil } from '@vercel/functions'
+import { sendPrintKitsForMerchant } from '@/lib/print-kit'
 
 type Admin = SupabaseClient
 
@@ -657,6 +659,15 @@ export async function activateAfterSignature(
  * The caller decides whether to wait for it.
  */
 export async function sendActivationNotices(admin: Admin, merchantId: string): Promise<void> {
+  // The printed kit for every location that does not have one.
+  //
+  // waitUntil, not await: rendering eleven PDFs per location takes seconds and
+  // this function sits on the path a merchant is waiting at. It claims per
+  // store before it renders, so running it from two activation callers at once
+  // still sends one email per location. Started first so the rendering
+  // overlaps the notices below rather than queueing behind them.
+  waitUntil(sendPrintKitsForMerchant(admin, merchantId))
+
   try {
     const { data: m } = await admin
       .from('merchants')

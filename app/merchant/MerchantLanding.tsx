@@ -38,12 +38,102 @@ import {
   MERCHANT_EXTRA_LOCATION_PRICE,
 } from '@/lib/merchant-signup-session'
 import { TIERS, STARTER_TIER, COUPON_CYCLE, TIER_EMOJI, TIER_LABELS } from '@/lib/tiers'
+import { FREE_SLOTS, FREE_REQUIRED, VIP_SLOTS, VIP_REQUIRED } from '@/lib/perks'
+import { MERCHANT_EXTRA_LOCATION_PRICE as EXTRA_LOCATION } from '@/lib/merchant-signup-session'
 import { VIP_PRICE, ORIGIN_COMMISSION_PER_VIP } from '@/lib/mrr'
 import { PWA_APPS } from '@/lib/pwa-manifest'
 
 /** Absolute, so the links are right whichever host rendered the page. */
 const MERCHANT_ORIGIN = PWA_APPS.merchant.origin
 const MEMBER_SITE     = 'https://binperks.com'
+
+/**
+ * The owner-facing FAQ.
+ *
+ * Grouped the way the questions actually arrive: what do I do first, what does
+ * it cost me, how do I get paid, and what am I signing. Values that exist as
+ * constants are interpolated rather than typed out, so a price change cannot
+ * leave a wrong answer sitting in the FAQ.
+ */
+const FAQ_GROUPS: { title: string; items: { q: string; a: string }[] }[] = [
+  {
+    title: 'Getting started',
+    items: [
+      {
+        q: 'How long does setup take?',
+        a: 'Your store goes live as soon as you pay and sign the agreement. Your QR codes and '
+         + 'marketing materials are generated automatically, ready to print on your office printer, '
+         + 'so there’s nothing technical for you to do.',
+      },
+      {
+        q: 'Do I get professional prints?',
+        a: 'Yes. Every location gets a professional print kit: 10 poster decals and a sheet of '
+         + 'countertop decals, delivered to your store about 10 business days after you sign up.',
+      },
+      {
+        q: 'What do I need?',
+        a: 'Any phone or tablet with internet for your register, and your Google review link. '
+         + 'No special hardware and no app of your own.',
+      },
+      {
+        q: 'Do my staff need training?',
+        a: 'Barely. Cashiers sign in to the stamp tool with their own PIN, look up the member by '
+         + 'phone number, and tap to award a stamp or redeem a coupon. It takes a few minutes to learn.',
+      },
+      {
+        q: 'Can my employees be members?',
+        a: 'No. To keep stamps fair, cashiers and staff should not hold a BinPerks member account.',
+      },
+    ],
+  },
+  {
+    title: 'Rewards and perks',
+    items: [
+      {
+        q: 'What do coupons cost me?',
+        a: `Members earn a coupon every ${COUPON_CYCLE} stamps: $${STARTER_TIER.couponValue} for free `
+         + `Starter members, and $${TIERS[0].couponValue} to $${TIERS[TIERS.length - 1].couponValue} for `
+         + 'paying VIP members depending on their tier. Members who stop visiting may also get a '
+         + 'one-time $2 comeback coupon. You set these discounts in your POS.',
+      },
+      {
+        q: 'Can I choose my own perks?',
+        a: `Yes. Offer at least ${FREE_REQUIRED} perk for free Starter members (up to ${FREE_SLOTS}) and `
+         + `at least ${VIP_REQUIRED} for paying VIP members (up to ${VIP_SLOTS}), and change them anytime `
+         + 'from your dashboard.',
+      },
+      {
+        q: 'What if a stamp is given by mistake?',
+        a: 'Email support@binperks.com and we’ll fix it.',
+      },
+    ],
+  },
+  {
+    title: 'Money and locations',
+    items: [
+      {
+        q: 'How do I get paid my VIP share?',
+        a: 'Your share of each VIP membership is paid out through Stripe to your bank account.',
+      },
+      {
+        q: 'Can I use BinPerks at more than one location?',
+        a: `Yes. Each additional location is $${EXTRA_LOCATION} a month, and your members earn stamps `
+         + 'at all of your locations.',
+      },
+    ],
+  },
+  {
+    title: 'Contract',
+    items: [
+      {
+        q: 'Is there a long-term contract? What if I cancel?',
+        a: 'No long-term contract. It’s month to month. To cancel, give 30 days’ notice. '
+         + 'You’ll keep honoring coupons members already earned for 30 days after you leave, and '
+         + 'your shoppers stay BinPerks members. The setup fee isn’t refundable.',
+      },
+    ],
+  },
+]
 
 export default function MerchantLanding() {
   const router = useRouter()
@@ -91,18 +181,39 @@ export default function MerchantLanding() {
         {/* What the merchant gets — read before the price, which is the order
             the question actually arrives in. */}
         <div className="w-full bg-white rounded-2xl shadow-sm px-5 py-5 flex flex-col gap-3">
-          <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Why bin stores join</h2>
+          <h2 className="font-['Coiny'] text-[22px] text-[#1A1A2E] leading-snug">
+            Most bin store owners don&rsquo;t have time to chase reviews or follow up with
+            shoppers. BinPerks is more than an app. BinPerks is that system, and we run it
+            for you.
+          </h2>
           <div className="flex flex-col gap-2.5">
             {[
-              'We run the loyalty program — you focus on your store',
-              'Members are motivated to visit more often',
-              'No app to manage, no punch cards to print',
-              'Real-time stamp tracking and coupon management',
-              'Earn revenue share from VIP memberships',
-            ].map(benefit => (
-              <div key={benefit} className="flex items-start gap-2.5">
+              { lead: 'Reward shoppers every time they shop.',
+                body: `A stamp every visit, and a coupon every ${COUPON_CYCLE} stamps.` },
+              { lead: 'Reward shoppers who bring a friend.',
+                body: 'When a friend joins and gets their first stamp, both earn bonus stamps.' },
+              { lead: 'Get more Google reviews.',
+                body: 'Every member gets a review request after their visit, which helps your store get found and stand out online.' },
+              { lead: 'Bring inactive shoppers back.',
+                body: 'Automatic “we miss you” reminders, plus a comeback coupon.' },
+              { lead: 'You control the perks.',
+                body: `Offer at least ${FREE_REQUIRED} perk for free Starter members (up to ${FREE_SLOTS}) and at least ${VIP_REQUIRED} for paying VIP members (up to ${VIP_SLOTS}).` },
+              { lead: 'Promote your daily bin price.',
+                body: 'Your store card shows today’s bin price, what’s in the bins and your store message, so members check it before they drive over.' },
+              { lead: 'Mitigate open boxes.',
+                body: 'Shoppers can take a snapshot by scanning an item in your bins and see what it is and what it sells for at retail. That’s a reason to keep digging.' },
+              { lead: 'Earn from VIP memberships.',
+                body: `You earn $${ORIGIN_COMMISSION_PER_VIP} of every $${VIP_PRICE} VIP membership attributed to your store, every month.` },
+              { lead: 'Marketing materials, ready to go.',
+                body: 'Posters, table tents, QR codes and social media content, made with your store name.' },
+              { lead: 'No hardware.',
+                body: 'Cashiers stamp from any phone or tablet with their own PIN.' },
+            ].map(item => (
+              <div key={item.lead} className="flex items-start gap-2.5">
                 <span className="text-[13px] flex-shrink-0 mt-0.5">✅</span>
-                <p className="text-[13px] font-medium text-[#1A1A2E] leading-relaxed">{benefit}</p>
+                <p className="text-[13px] font-medium text-[#1A1A2E] leading-relaxed">
+                  <span className="font-bold">{item.lead}</span> {item.body}
+                </p>
               </div>
             ))}
           </div>
@@ -177,6 +288,7 @@ export default function MerchantLanding() {
           <div className="flex flex-col gap-2.5">
             {[
               { icon: '📱', title: 'Done-for-you setup', body: 'BinPerks provisions your store — QR codes, branding, cashier PINs. You don’t touch a line of code.' },
+              { icon: '📦', title: 'Professional print kit included', body: 'About 10 business days after you sign up, a professionally printed kit of poster decals and countertop decals arrives at your store. Need something today? Print table tents and posters from your office printer while you wait.' },
               { icon: '🔁', title: 'Automated follow-up', body: 'Stamp confirmations, coupon alerts, and win-back messages go out automatically by text and email.' },
               { icon: '⭐', title: 'Review requests', body: 'Every member who earns a stamp gets the same request to leave a Google review an hour later, at most once a month.' },
               { icon: '📊', title: 'Live dashboard', body: 'Stamps, redemptions, new members, VIP numbers and review clicks, updated as they happen.' },
@@ -228,6 +340,47 @@ export default function MerchantLanding() {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* ── Questions from store owners ──────────────────────────────────
+            Native <details>, not a hand-rolled accordion: closed by default,
+            keyboard operable (Enter and Space on the summary), announced as a
+            disclosure by screen readers, and it still opens with JavaScript
+            off. The only custom part is hiding the default marker so the
+            BinPerks chevron can sit on the right. */}
+        <div className="w-full flex flex-col gap-4">
+          <h2 className="font-['Coiny'] text-2xl text-[#1A1A2E]">Questions from store owners</h2>
+
+          {FAQ_GROUPS.map(group => (
+            <div key={group.title} className="flex flex-col gap-2">
+              <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8] px-1">
+                {group.title}
+              </p>
+
+              {group.items.map(item => (
+                <details key={item.q} className="group bg-white rounded-2xl shadow-sm overflow-hidden">
+                  <summary
+                    className="cursor-pointer list-none [&::-webkit-details-marker]:hidden
+                               px-4 py-3.5 flex items-start justify-between gap-3"
+                  >
+                    <span className="text-[13px] font-bold text-[#1A1A2E] leading-snug">
+                      {item.q}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="text-[#4A4B98] text-[18px] leading-none font-bold shrink-0
+                                 transition-transform group-open:rotate-45"
+                    >
+                      +
+                    </span>
+                  </summary>
+                  <p className="px-4 pb-4 -mt-1 text-[12px] font-medium text-[#8E8EA8] leading-relaxed">
+                    {item.a}
+                  </p>
+                </details>
+              ))}
+            </div>
+          ))}
         </div>
 
         {/* Bottom CTA */}

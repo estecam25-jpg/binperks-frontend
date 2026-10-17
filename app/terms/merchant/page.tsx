@@ -26,6 +26,7 @@
  */
 
 import Link from 'next/link'
+import { FREE_SLOTS, FREE_REQUIRED, VIP_SLOTS, VIP_REQUIRED } from '@/lib/perks'
 
 export default function MerchantTermsPage() {
   return (
@@ -251,6 +252,7 @@ export default function MerchantTermsPage() {
             'Honor all valid BinPerks coupons presented by BinPerks members at their location(s)',
             'Train staff on the BinPerks stamp tool and cashier procedures',
             'Maintain accurate store information in the BinPerks merchant dashboard',
+            `Maintain the member perks required by Section 14.4 at each participating location`,
             'Maintain a connected and verified Stripe payout account',
             'Comply with all BinPerks network standards as described in Section 2.3',
             'Provide taxpayer identification information as described in Section 11',
@@ -267,6 +269,7 @@ export default function MerchantTermsPage() {
             'Permit cashiers or other staff to hold a BinPerks member account of any kind, including a free Starter account, at any location operated by the Merchant',
           ]} />
           <P><B>14.3 Staff Member Accounts.</B> Cashiers and other staff working at any participating location may not hold a BinPerks member account of any kind — including a free Starter account — at any location operated by the same Merchant. This restriction applies to every account type and membership tier. It exists to protect the integrity of stamp awards, coupon issuance, and settlement, because staff control the award of stamps at the point of sale. The Merchant is responsible for ensuring its staff comply, and BinPerks may void stamps, coupons, and any associated Merchant Commission arising from a non-compliant account.</P>
+          <P><B>14.4 Member Perks.</B> Each participating location maintains at least {FREE_REQUIRED} and no more than {FREE_SLOTS} active perks for Starter (free) members, and at least {VIP_REQUIRED} and no more than {VIP_SLOTS} active perks for VIP members. Perk content is at the Merchant&apos;s discretion. Perks are set and updated by the Merchant in the BinPerks merchant dashboard, and the perks in effect at a location continue to apply until the Merchant changes them.</P>
         </Section>
 
         <Section title="15. Intellectual Property and Branding">

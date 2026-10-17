@@ -69,6 +69,8 @@ interface Store {
   networkVisible: boolean
   enrollmentEnabled: boolean
   commissionEligible: boolean   // merchant-level, read-only here
+  /** When the printed kit was last ordered for this location; null = never. */
+  printKitSentAt: string | null
 }
 // The three store status columns an admin may flip from this screen.
 type StoreToggleField = 'is_open_for_shopping' | 'network_visible' | 'enrollment_enabled'
@@ -423,10 +425,12 @@ function MerchantCard({
   )
 }
 
-function StoreCard({ s, onToggle, togglingField }: {
+function StoreCard({ s, onToggle, togglingField, onResendPrintKit, resendingKit }: {
   s: Store
   onToggle: (store: Store, field: StoreToggleField, next: boolean) => void
   togglingField: StoreToggleField | null
+  onResendPrintKit: (store: Store) => void
+  resendingKit: boolean
 }) {
   const eng = s.engagementRate
   const engColor = eng >= 50 ? 'text-green-700' : eng >= 20 ? 'text-yellow-700' : 'text-red-700'
@@ -498,6 +502,30 @@ function StoreCard({ s, onToggle, togglingField }: {
           </span>
         </div>
       </div>
+
+      {/* The printed kit. Ordered automatically when the location goes live;
+          this is the manual path for a location added later, or a first order
+          that never arrived. */}
+      <div className="border-t border-[#EBEBF2] pt-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#8E8EA8]">
+            Print kit
+          </p>
+          <p className="text-[11px] font-medium text-[#1A1A2E] mt-0.5">
+            {s.printKitSentAt
+              ? `Ordered ${s.printKitSentAt.slice(0, 10)}`
+              : 'Not ordered yet'}
+          </p>
+        </div>
+        <button
+          onClick={() => onResendPrintKit(s)}
+          disabled={resendingKit}
+          className="shrink-0 text-[11px] font-bold rounded-xl px-3 py-2
+                     bg-[#EBEBF2] text-[#1A1A2E] disabled:opacity-50"
+        >
+          {resendingKit ? 'Sending…' : s.printKitSentAt ? 'Resend print kit' : 'Send print kit'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -536,6 +564,7 @@ export default function AdminDashboard() {
   const [historyByMerchant, setHistoryByMerchant] = useState<Record<string, EligibilityEvent[]>>({})
   const [historyLoading, setHistoryLoading] = useState<string | null>(null)
   const [storeToggling, setStoreToggling] = useState<string | null>(null)  // `${storeId}:${field}`
+  const [kitSending,    setKitSending]    = useState<string | null>(null)  // storeId
   const [enrollmentConfirm, setEnrollmentConfirm] = useState<Store | null>(null)
 
   // Phase 3: settlement batches
@@ -730,6 +759,46 @@ export default function AdminDashboard() {
   // routes through a confirmation. Re-enabling is not destructive and applies
   // straight away. Note enrollment_enabled must stay on after merchant
   // cancellation — turn it off only for a documented reason (CLAUDE.md rule 21).
+  /**
+   * Re-order the printed kit for one location.
+   *
+   * Confirmed first because it puts eleven PDFs in someone's inbox and ends
+   * with a physical package being posted — a mis-click costs postage, not just
+   * a wasted request. Awaited rather than optimistic, so the result is the
+   * server's answer and not a guess.
+   */
+  async function handleResendPrintKit(store: Store) {
+    if (kitSending) return
+    const already = store.printKitSentAt
+    if (!confirm(
+      `${already ? 'Re-order' : 'Order'} the printed kit for ${store.brand_name}?
+
+`
+      + `This emails support@binperks.com the 10 poster decals and the countertop `
+      + `decal sheet for this location, to be printed and posted.`
+      + (already ? `
+
+The last order went out on ${already.slice(0, 10)}.` : ''),
+    )) return
+
+    setKitSending(store.id)
+    try {
+      const res = await adminFetch('/api/admin/stores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: store.id, action: 'resend_print_kit' }),
+      })
+      const d = await res.json().catch(() => null)
+      if (!res.ok) {
+        alert(`Could not send the print kit: ${d?.error ?? res.status}`)
+        return
+      }
+      await loadStores()
+    } finally {
+      setKitSending(null)
+    }
+  }
+
   function handleStoreToggle(store: Store, field: StoreToggleField, next: boolean) {
     if (field === 'enrollment_enabled' && next === false) {
       setEnrollmentConfirm(store)
@@ -947,6 +1016,8 @@ export default function AdminDashboard() {
                 ? (storeToggling.split(':')[1] as StoreToggleField)
                 : null
             }
+            onResendPrintKit={handleResendPrintKit}
+            resendingKit={kitSending === s.id}
           />
         ))}
       </div>

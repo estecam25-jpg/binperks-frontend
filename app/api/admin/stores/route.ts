@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { verifyAdmin } from '@/lib/admin-auth'
+import { sendPrintKitEmail } from '@/lib/print-kit'
 
 export async function GET() {
   const adminEmail = await verifyAdmin()
@@ -13,7 +14,7 @@ export async function GET() {
   const thirtyDaysAgoDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
   const [storesResult, merchantsResult, allMembers, recentStamps, recentVisits] = await Promise.all([
-    admin.from('stores').select('id, brand_name, canonical_key, is_active, merchant_id, bin_count, is_open_for_shopping, network_visible, enrollment_enabled').order('canonical_key'),
+    admin.from('stores').select('id, brand_name, canonical_key, is_active, merchant_id, bin_count, is_open_for_shopping, network_visible, enrollment_enabled, print_kit_sent_at').order('canonical_key'),
     admin.from('merchants').select('id, company_name, name, commission_eligible'),
     admin.from('members').select('home_store_id, subscription_status'),
     admin.from('activity_events').select('store_id, effective_stamps').gte('occurred_at', sevenDaysAgo),
@@ -77,10 +78,52 @@ export async function GET() {
       enrollmentEnabled:        s.enrollment_enabled ?? true,
       // Merchant-level, read-only here.
       commissionEligible:       merchantEligibleById[s.merchant_id] ?? false,
+      // When the printed kit was last ordered for this location. Null means
+      // never — which is the case admin needs to see.
+      printKitSentAt:           s.print_kit_sent_at ?? null,
     }
   })
 
   return NextResponse.json({ stores })
+}
+
+/**
+ * POST /api/admin/stores — { storeId, action: 'resend_print_kit' }
+ *
+ * Re-orders the printed kit for one location: the same eleven PDFs, to the
+ * same address, as the automatic order at activation. For a location added
+ * after the merchant went live, and for the case where the first order failed
+ * or never arrived.
+ *
+ * DELIBERATELY NOT GUARDED BY print_kit_sent_at. A resend is admin saying "send
+ * it again", which is the whole point of the button; the timestamp is updated
+ * so the column keeps meaning "when the last order went out".
+ *
+ * Awaited rather than deferred — admin is looking at the button and wants to
+ * know whether it worked.
+ */
+export async function POST(req: NextRequest) {
+  const adminEmail = await verifyAdmin()
+  if (!adminEmail) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+
+  const { storeId, action } = await req.json().catch(() => ({ storeId: null, action: null }))
+  if (action !== 'resend_print_kit') {
+    return NextResponse.json({ error: 'unknown_action' }, { status: 400 })
+  }
+  if (!storeId || typeof storeId !== 'string') {
+    return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
+  }
+
+  const admin = createAdminSupabaseClient()
+  const result = await sendPrintKitEmail(admin, storeId, { force: true })
+
+  if (!result.sent) {
+    console.error(`[admin/stores] print kit resend failed for ${storeId}: ${result.reason}`)
+    return NextResponse.json({ error: result.reason }, { status: result.reason === 'store_not_found' ? 404 : 500 })
+  }
+
+  console.log(`[admin/stores] ${adminEmail} re-ordered the print kit for store ${storeId}`)
+  return NextResponse.json({ ok: true, attachments: result.attachments })
 }
 
 /**

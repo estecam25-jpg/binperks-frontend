@@ -32,6 +32,10 @@ interface MerchantMaterial {
 // behave identically wherever it appears, and one implementation is the only
 // way to guarantee that.
 import { RevealBox, CoverImage } from '@/components/member/FeedCards'
+import {
+  FREE_SLOTS, FREE_REQUIRED, VIP_SLOTS, VIP_REQUIRED,
+  missingRequiredPerks, missingPerksMessage,
+} from '@/lib/perks'
 
 // --- PerksTab ---
 
@@ -70,26 +74,50 @@ function emptyPerks(count: number): Perk[] {
  * so React reconciles the existing input instead of replacing it.
  */
 function PerkCard({
-  perk, label, onChange,
+  perk, label, onChange, required = false, missing = false,
 }: {
   perk: Perk
   label: string
   onChange: (slot: number, field: keyof Perk, value: string | boolean) => void
+  /** One of the slots the Merchant Agreement requires this store to fill. */
+  required?: boolean
+  /** Required, empty, and the merchant has tried to save. */
+  missing?: boolean
 }) {
   return (
-    <div className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3">
+    <div className={`bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3 ${
+      missing ? 'ring-2 ring-red-300' : ''
+    }`}>
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">{label}</span>
-        <button
-          onClick={() => onChange(perk.slot, 'isActive', !perk.isActive)}
-          className={`relative w-10 h-6 rounded-full transition-colors ${perk.isActive ? 'bg-[#4A4B98]' : 'bg-[#D1D1DC]'}`}
-        >
-          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${perk.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
-        </button>
+        <span className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8]">
+          {label}
+          {required && (
+            <span className="ml-2 text-[10px] font-bold tracking-normal normal-case
+                             text-[#DA1212] bg-red-50 rounded-full px-2 py-0.5">
+              Required
+            </span>
+          )}
+        </span>
+        {required ? (
+          // No toggle: a required perk is always shown to members, so a switch
+          // that cannot be turned off would be a lie. The server stores these
+          // active whatever arrives.
+          <span className="text-[10px] font-bold text-[#4A4B98]">Always on</span>
+        ) : (
+          <button
+            type="button"
+            aria-label={`${perk.isActive ? 'Hide' : 'Show'} ${label}`}
+            onClick={() => onChange(perk.slot, 'isActive', !perk.isActive)}
+            className={`relative w-10 h-6 rounded-full transition-colors ${perk.isActive ? 'bg-[#4A4B98]' : 'bg-[#D1D1DC]'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${perk.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
+          </button>
+        )}
       </div>
       <input
         type="text"
-        placeholder="Perk title..."
+        placeholder={required ? 'Perk title (required)...' : 'Perk title...'}
+        aria-required={required}
         value={perk.title}
         onChange={e => onChange(perk.slot, 'title', e.target.value)}
         maxLength={60}
@@ -109,13 +137,17 @@ function PerkCard({
 
 export function PerksTab({ storeId, stores }: { storeId: string | null; stores: StoreRef[] }) {
   const activeStoreId = storeId ?? stores[0]?.id
-  const [freePerks, setFreePerks] = useState<Perk[]>(() => emptyPerks(2))
-  const [vipPerks, setVipPerks] = useState<Perk[]>(() => emptyPerks(5))
+  const [freePerks, setFreePerks] = useState<Perk[]>(() => emptyPerks(FREE_SLOTS))
+  const [vipPerks, setVipPerks] = useState<Perk[]>(() => emptyPerks(VIP_SLOTS))
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [freeWarning, setFreeWarning] = useState(false)
-  const [vipWarning, setVipWarning] = useState(false)
+  // Which required slots were empty at the last save attempt. Empty until the
+  // merchant actually tries — a form that scolds you before you have typed
+  // anything is noise.
+  const [missingFree, setMissingFree] = useState<number[]>([])
+  const [missingVip,  setMissingVip]  = useState<number[]>([])
+  const [saveError,   setSaveError]   = useState<string | null>(null)
 
   useEffect(() => {
     if (!activeStoreId) return
@@ -125,34 +157,50 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
       .then(d => {
         const fp: Perk[] = d.freePerks ?? []
         const vp: Perk[] = d.vipPerks ?? []
-        setFreePerks(fp.length > 0 ? fp : emptyPerks(2))
-        setVipPerks(vp.length > 0 ? vp : emptyPerks(5))
+        setFreePerks(fp.length > 0 ? fp : emptyPerks(FREE_SLOTS))
+        setVipPerks(vp.length > 0 ? vp : emptyPerks(VIP_SLOTS))
         setLoading(false)
       })
   }, [activeStoreId])
 
   function updateFree(slot: number, field: keyof Perk, value: string | boolean) {
     setFreePerks(prev => prev.map(p => p.slot === slot ? { ...p, [field]: value } : p))
-    setSaved(false); setFreeWarning(false)
+    setSaved(false); setMissingFree([]); setSaveError(null)
   }
 
   function updateVip(slot: number, field: keyof Perk, value: string | boolean) {
     setVipPerks(prev => prev.map(p => p.slot === slot ? { ...p, [field]: value } : p))
-    setSaved(false); setVipWarning(false)
+    setSaved(false); setMissingVip([]); setSaveError(null)
   }
 
   async function handleSave() {
     if (!activeStoreId) return
-    if (freePerks.filter(p => p.isActive).length < 1) { setFreeWarning(true); return }
-    if (vipPerks.filter(p => p.isActive).length < 3) { setVipWarning(true); return }
-    setSaving(true)
+
+    // Checked here so the merchant is told before a round trip, and checked
+    // again on the server, which is where it is actually enforced.
+    const mf = missingRequiredPerks(freePerks, FREE_REQUIRED)
+    const mv = missingRequiredPerks(vipPerks,  VIP_REQUIRED)
+    if (mf.length > 0 || mv.length > 0) {
+      setMissingFree(mf); setMissingVip(mv)
+      setSaveError(missingPerksMessage(mf, mv))
+      return
+    }
+
+    setSaving(true); setSaveError(null)
     const res = await fetch('/api/merchant/perks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ storeId: activeStoreId, freePerks, vipPerks }),
     })
+    const data = await res.json().catch(() => null)
     setSaving(false)
-    if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000) }
+
+    if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000); return }
+
+    // The server rejected it — most likely the same rule, from a stale tab.
+    setMissingFree(data?.missingFree ?? [])
+    setMissingVip(data?.missingVip ?? [])
+    setSaveError(data?.message ?? 'Could not save your perks. Please try again.')
   }
 
   if (loading) {
@@ -179,15 +227,19 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
           <p className="font-['Coiny'] text-[26px] text-[#1A1A2E] leading-tight">
             <span className="text-[#4A4B98]">FREE</span> Starter Member Perks
           </p>
-          <span className="text-[11px] font-semibold text-[#8E8EA8]">2 slots &middot; min 1 active</span>
+          <span className="text-[11px] font-semibold text-[#8E8EA8]">
+            {FREE_SLOTS} slots &middot; first {FREE_REQUIRED} required
+          </span>
         </div>
-        {freeWarning && (
-          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
-            <p className="text-[12px] font-semibold text-red-700">At least 1 Free perk must be active.</p>
-          </div>
-        )}
         {freePerks.map(p => (
-          <PerkCard key={p.slot} perk={p} label={`Free Perk ${p.slot}`} onChange={updateFree} />
+          <PerkCard
+            key={p.slot}
+            perk={p}
+            label={`Starter Perk ${p.slot}`}
+            onChange={updateFree}
+            required={p.slot <= FREE_REQUIRED}
+            missing={missingFree.includes(p.slot)}
+          />
         ))}
       </div>
 
@@ -199,17 +251,27 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
           <p className="font-['Coiny'] text-[26px] text-[#1A1A2E] leading-tight">
             <span className="text-[#4A4B98]">PAID</span> VIP Member Perks
           </p>
-          <span className="text-[11px] font-semibold text-[#8E8EA8]">5 slots &middot; min 3 active</span>
+          <span className="text-[11px] font-semibold text-[#8E8EA8]">
+            {VIP_SLOTS} slots &middot; first {VIP_REQUIRED} required
+          </span>
         </div>
-        {vipWarning && (
-          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
-            <p className="text-[12px] font-semibold text-red-700">At least 3 VIP perks must be active.</p>
-          </div>
-        )}
         {vipPerks.map(p => (
-          <PerkCard key={p.slot} perk={p} label={`VIP Perk ${p.slot}`} onChange={updateVip} />
+          <PerkCard
+            key={p.slot}
+            perk={p}
+            label={`VIP Perk ${p.slot}`}
+            onChange={updateVip}
+            required={p.slot <= VIP_REQUIRED}
+            missing={missingVip.includes(p.slot)}
+          />
         ))}
       </div>
+
+      {saveError && (
+        <div role="alert" className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="text-[12px] font-semibold text-red-700 leading-snug">{saveError}</p>
+        </div>
+      )}
 
       <button
         onClick={handleSave}

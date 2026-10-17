@@ -2,17 +2,32 @@
  * GET  /api/merchant/perks?storeId=...
  * POST /api/merchant/perks  body: { storeId, freePerks: [...], vipPerks: [...] }
  *
- * Rules:
- *   - Free perks: 2 slots, at least 1 must be active (enforced client-side)
- *   - VIP perks:  5 slots, at least 3 must be active (enforced client-side)
+ * Rules, from Merchant Agreement V3.6 section 6.2:
+ *   - Starter (free): 3 slots, the FIRST ONE REQUIRED, the other two optional
+ *   - VIP:            5 slots, the FIRST THREE REQUIRED, the other two optional
  *   - member_type column distinguishes 'free' vs 'vip' rows
  *   - POST deletes existing perks for the store and re-inserts to avoid
  *     dependency on a specific unique constraint shape
+ *
+ * ── REQUIRED MEANS IT HAS A TITLE ──────────────────────────────────────────
+ * The old rule counted ACTIVE perks, which a merchant satisfied by toggling an
+ * empty perk on: the agreement's minimum was met on paper while members saw a
+ * blank card. A required slot now has to carry a title, and is stored active
+ * whatever the toggle says, because an empty or switched-off required perk is
+ * the same broken promise either way.
+ *
+ * ENFORCED HERE, not only in the form. The form is where it is explained; this
+ * is where it is true. A stale tab, a double submit or a direct POST all reach
+ * this check.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
+import {
+  FREE_SLOTS, FREE_REQUIRED, VIP_SLOTS, VIP_REQUIRED,
+  missingRequiredPerks, missingPerksMessage, type PerkInput,
+} from '@/lib/perks'
 
 /** See lib/merchant-auth — resilient to a stale merchants.auth_user_id. */
 async function getMerchantId() {
@@ -40,8 +55,8 @@ export async function GET(req: NextRequest) {
 
   const all = rows ?? []
 
-  // Free perks: 2 slots
-  const freePerks = Array.from({ length: 2 }, (_, i) => {
+  // Starter perks: 3 slots
+  const freePerks = Array.from({ length: FREE_SLOTS }, (_, i) => {
     const slot = i + 1
     const p = all.find(r => r.slot === slot && r.member_type === 'free')
     return p
@@ -50,7 +65,7 @@ export async function GET(req: NextRequest) {
   })
 
   // VIP perks: 5 slots
-  const vipPerks = Array.from({ length: 5 }, (_, i) => {
+  const vipPerks = Array.from({ length: VIP_SLOTS }, (_, i) => {
     const slot = i + 1
     const p = all.find(r => r.slot === slot && r.member_type === 'vip')
     return p
@@ -76,31 +91,46 @@ export async function POST(req: NextRequest) {
     .from('stores').select('id').eq('id', storeId).eq('merchant_id', merchantId).single()
   if (!store) return NextResponse.json({ error: 'Store not found' }, { status: 404 })
 
+  // The agreement's minimum, checked before anything is written.
+  const missingFree = missingRequiredPerks(freePerks as PerkInput[], FREE_REQUIRED)
+  const missingVip  = missingRequiredPerks(vipPerks  as PerkInput[], VIP_REQUIRED)
+  if (missingFree.length > 0 || missingVip.length > 0) {
+    return NextResponse.json({
+      error:   'required_perks_missing',
+      message: missingPerksMessage(missingFree, missingVip),
+      missingFree,
+      missingVip,
+    }, { status: 400 })
+  }
+
   const now = new Date().toISOString()
 
   const rows = [
-    ...freePerks
-      .filter((p: { slot: number }) => p.slot >= 1 && p.slot <= 2)
-      .map((p: { slot: number; title: string; description: string; isActive: boolean }) => ({
+    ...(freePerks as PerkInput[])
+      .filter(p => p.slot >= 1 && p.slot <= FREE_SLOTS)
+      .map(p => ({
         store_id:    storeId,
         merchant_id: merchantId,
         slot:        p.slot,
         member_type: 'free',
         title:       (p.title ?? '').trim(),
         description: (p.description ?? '').trim(),
-        is_active:   p.isActive ?? false,
+        // A required slot is always live. It passed the check above, so it has
+        // a title, and leaving it switched off would hide the perk the
+        // agreement requires this store to offer.
+        is_active:   p.slot <= FREE_REQUIRED ? true : (p.isActive ?? false),
         updated_at:  now,
       })),
-    ...vipPerks
-      .filter((p: { slot: number }) => p.slot >= 1 && p.slot <= 5)
-      .map((p: { slot: number; title: string; description: string; isActive: boolean }) => ({
+    ...(vipPerks as PerkInput[])
+      .filter(p => p.slot >= 1 && p.slot <= VIP_SLOTS)
+      .map(p => ({
         store_id:    storeId,
         merchant_id: merchantId,
         slot:        p.slot,
         member_type: 'vip',
         title:       (p.title ?? '').trim(),
         description: (p.description ?? '').trim(),
-        is_active:   p.isActive ?? false,
+        is_active:   p.slot <= VIP_REQUIRED ? true : (p.isActive ?? false),
         updated_at:  now,
       })),
   ]

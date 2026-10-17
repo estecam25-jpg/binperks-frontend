@@ -97,7 +97,10 @@ export const MATERIALS: MaterialSpec[] = [
   },
   {
     slug: 'countertop-display',
-    label: 'Countertop Display',
+    // The recipe slug stays 'countertop-display' — it is the key the database
+    // rows point at and renaming it would orphan them. Only what people read
+    // changed.
+    label: 'Countertop Decal',
     section: 'register',
     description: '6 decals per sheet · 4.25" × 3.67" each · full colour',
     qrTarget: 'register',
@@ -179,13 +182,13 @@ export const CATEGORIES: {
   {
     id: 'at_the_register',
     title: 'At The Register',
-    subtitle: 'Stamp awarded when new members scan and sign up',
+    subtitle: 'These QR codes give new members their first stamp, so keep them at the register only.',
     editable: true,
   },
   {
     id: 'in_store_signage',
     title: 'In-Store Signage',
-    subtitle: 'Help customers discover BinPerks and sign up',
+    subtitle: 'These QR codes let shoppers join from anywhere in the store or from your window.',
     editable: true,
   },
   {
