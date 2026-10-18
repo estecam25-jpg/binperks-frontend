@@ -997,6 +997,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
   const [fontFamily,    setFontFamily]    = useState('Google Sans')
   const [logoUrl,       setLogoUrl]       = useState<string | null>(null)
   const [reviewUrl,     setReviewUrl]     = useState<string>('')
+  const [websiteUrl,    setWebsiteUrl]    = useState<string>('')
   const [binCount,      setBinCount]      = useState<string>('')
   const [logoUploading, setLogoUploading] = useState(false)
   const [brandSaving,   setBrandSaving]   = useState(false)
@@ -1022,6 +1023,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
           setFontFamily(d.fontFamily ?? 'Coiny')
           setLogoUrl(d.logoUrl ?? null)
           setReviewUrl(d.reviewUrl ?? '')
+          setWebsiteUrl(d.websiteUrl ?? '')
           setBinCount(d.binCount != null ? String(d.binCount) : '')
         }
         setBrandLoading(false)
@@ -1063,7 +1065,7 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
     const res = await fetch('/api/merchant/store', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId: activeStoreId, brandColor, fontFamily: fontFamily || null, logoUrl, reviewUrl: reviewUrl || null, binCount: binCount ? Number(binCount) : null }),
+      body: JSON.stringify({ storeId: activeStoreId, brandColor, fontFamily: fontFamily || null, logoUrl, reviewUrl: reviewUrl || null, websiteUrl: websiteUrl || null, binCount: binCount ? Number(binCount) : null }),
     })
     setBrandSaving(false)
     if (res.ok) { setBrandSaved(true); setTimeout(() => setBrandSaved(false), 3000) }
@@ -1234,6 +1236,22 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
               />
               <p className="text-[11px] text-[#8E8EA8] font-medium">
                 Members will see a &ldquo;Leave a Review&rdquo; button after submitting feedback.
+              </p>
+            </div>
+
+            {/* Store website — stored now, not shown to members yet. */}
+            <div className="flex flex-col gap-2">
+              <label className="text-[13px] font-bold text-[#1A1A2E]">Store website</label>
+              <input
+                type="text"
+                inputMode="url"
+                placeholder="acmebins.com"
+                value={websiteUrl}
+                onChange={e => setWebsiteUrl(e.target.value)}
+                className="rounded-xl border border-[#EBEBF2] bg-[#F5F5F8] px-4 py-2.5 text-[13px] text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-[#4A4B98]/30 placeholder:text-[#D1D1DC]"
+              />
+              <p className="text-[11px] text-[#8E8EA8] font-medium">
+                Optional. With or without https:// &mdash; we save it as https://.
               </p>
             </div>
 

@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { findMerchantForRequest } from '@/lib/merchant-auth'
 import { todayPrice, DAY_NAMES, type PricingSchedule, type SpecialEvent } from '@/lib/store-pricing'
+import { websiteUrlOrNull } from '@/lib/store-website'
 
 /** Event dates are plain YYYY-MM-DD, compared as strings against the store's
  *  own local date — no Date parsing, no timezone games. */
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
 
   const { data: store } = await admin
     .from('stores')
-    .select('id, brand_color, font_family, logo_url, store_message, google_review_url, bin_count, pricing_schedule, restock_days, special_events, timezone, address, address_line2, city, state, zip, google_maps_url')
+    .select('id, brand_color, font_family, logo_url, store_message, google_review_url, website_url, bin_count, pricing_schedule, restock_days, special_events, timezone, address, address_line2, city, state, zip, google_maps_url')
     .eq('id', storeId)
     .eq('merchant_id', owner.merchantId)
     .single()
@@ -59,6 +60,7 @@ export async function GET(req: NextRequest) {
     logoUrl:      store.logo_url          ?? null,
     storeMessage: store.store_message     ?? null,
     reviewUrl:    store.google_review_url ?? null,
+    websiteUrl:   store.website_url       ?? null,
     binCount:   store.bin_count          ?? null,
     pricingSchedule: schedule,
     restockDays:     restock,
@@ -100,9 +102,11 @@ export async function PATCH(req: NextRequest) {
     state?:             string | null
     zip?:               string | null
     googleMapsUrl?:     string | null
+    /** Optional store website. Normalized to https:// before it is stored. */
+    websiteUrl?:        string | null
   }
 
-  const { storeId, brandColor, fontFamily, logoUrl, storeMessage, reviewUrl, binCount, marketingDownloaded, joinPageVisited, pricingSchedule, restockDays, specialEvents, address, addressLine2, city, state, zip, googleMapsUrl } = body
+  const { storeId, brandColor, fontFamily, logoUrl, storeMessage, reviewUrl, websiteUrl, binCount, marketingDownloaded, joinPageVisited, pricingSchedule, restockDays, specialEvents, address, addressLine2, city, state, zip, googleMapsUrl } = body
   if (!storeId) return NextResponse.json({ error: 'storeId required' }, { status: 400 })
 
   // Validate hex color if provided
@@ -213,6 +217,9 @@ export async function PATCH(req: NextRequest) {
   if (logoUrl     !== undefined)  updates.logo_url            = logoUrl ?? null
   if (storeMessage !== undefined) updates.store_message       = storeMessage ?? null
   if (reviewUrl   !== undefined)  updates.google_review_url   = reviewUrl ?? null
+  // Normalized here rather than trusted: three forms write this column and
+  // only one normalizer decides what ends up in it.
+  if (websiteUrl  !== undefined)  updates.website_url         = websiteUrlOrNull(websiteUrl)
   if (binCount    !== undefined)  updates.bin_count           = binCount ?? null
   if (marketingDownloaded)        updates.marketing_downloaded_at = new Date().toISOString()
   if (joinPageVisited)            updates.join_page_visited_at    = new Date().toISOString()
@@ -234,7 +241,7 @@ export async function PATCH(req: NextRequest) {
     .from('stores')
     .update(updates)
     .eq('id', storeId)
-    .select('id, brand_color, font_family, logo_url, store_message, google_review_url, bin_count, pricing_schedule, restock_days, special_events, timezone, address, address_line2, city, state, zip, google_maps_url')
+    .select('id, brand_color, font_family, logo_url, store_message, google_review_url, website_url, bin_count, pricing_schedule, restock_days, special_events, timezone, address, address_line2, city, state, zip, google_maps_url')
     .single()
 
   if (error) {
@@ -250,6 +257,7 @@ export async function PATCH(req: NextRequest) {
     logoUrl:      updated.logo_url          ?? null,
     storeMessage: updated.store_message     ?? null,
     reviewUrl:    updated.google_review_url ?? null,
+    websiteUrl:   updated.website_url       ?? null,
     binCount:   updated.bin_count          ?? null,
     pricingSchedule: savedSchedule,
     restockDays:     Array.isArray(updated.restock_days) ? updated.restock_days as string[] : [],

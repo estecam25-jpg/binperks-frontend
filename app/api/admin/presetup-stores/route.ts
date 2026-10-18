@@ -27,6 +27,7 @@ import {
   PRESETUP, newPresetupToken, presetupCanonicalKey, validatePresetup,
   finishSetupUrl, type PresetupInput,
 } from '@/lib/presetup'
+import { websiteUrlOrNull } from '@/lib/store-website'
 
 const LOGO_BUCKET = 'store-logos'
 const MAX_LOGO_BYTES = 5 * 1024 * 1024
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
   const ids = (merchants ?? []).map(m => m.id as string)
   const { data: storeRows } = ids.length
     ? await admin.from('stores')
-        .select('id, merchant_id, display_name, brand_name, canonical_key, address, city, state, zip, logo_url')
+        .select('id, merchant_id, display_name, brand_name, canonical_key, address, city, state, zip, logo_url, website_url')
         .in('merchant_id', ids)
     : { data: null }
 
@@ -61,6 +62,7 @@ export async function GET(req: NextRequest) {
     id: string; merchant_id: string; display_name: string | null; brand_name: string | null
     canonical_key: string | null; address: string | null; city: string | null
     state: string | null; zip: string | null; logo_url: string | null
+    website_url: string | null
   }
   const storeByMerchant = new Map<string, StoreRow>()
   for (const s of (storeRows ?? []) as unknown as StoreRow[]) storeByMerchant.set(s.merchant_id, s)
@@ -82,6 +84,7 @@ export async function GET(req: NextRequest) {
         storeId:      s?.id ?? null,
         storeName:    s?.display_name ?? null,
         brandName:    s?.brand_name ?? null,
+        websiteUrl:   s?.website_url ?? null,
         storeKey:     s?.canonical_key ?? null,
         address:      [s?.address, s?.city, s?.state, s?.zip].filter(Boolean).join(', '),
         logoUrl:      s?.logo_url ?? null,
@@ -101,7 +104,7 @@ export async function POST(req: NextRequest) {
 
   const input: PresetupInput = {
     companyName:   str('companyName'),
-    brandName:     str('brandName') || str('storeName'),
+    websiteUrl:    websiteUrlOrNull(str('websiteUrl')) ?? '',
     ownerName:     str('ownerName'),
     ownerEmail:    str('ownerEmail').toLowerCase(),
     ownerPhone:    str('ownerPhone'),
@@ -180,8 +183,11 @@ export async function POST(req: NextRequest) {
     .insert({
       merchant_id:       merchant.id,
       canonical_key:     canonicalKey,
-      brand_name:        input.brandName,
+      // brand_name is no longer asked for separately; the store name is the
+      // brand unless something else sets it later.
+      brand_name:        input.storeName,
       display_name:      input.storeName,
+      website_url:       input.websiteUrl || null,
       address:           input.address,
       city:              input.city,
       state:             input.state,

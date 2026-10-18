@@ -98,6 +98,7 @@ export default function MemberTermsPage() {
           <P><B>5.9</B> Coupons have no cash value and cannot be exchanged for cash.</P>
           <P><B>5.10</B> BinPerks reserves the right to void coupons or stamps obtained through fraud, manipulation, or abuse of the platform.</P>
           <P><B>5.11</B> Coupon values are settled within the BinPerks network and are offset against the participating merchant&apos;s revenue share. You redeem your coupon in store at a participating location; BinPerks does not make a cash payment directly to you for a coupon.</P>
+          <P><B>5.12</B> Store perks are offered and honored by each participating store. Perks never require you to share, like, follow, post, or leave a review.</P>
         </Section>
 
         <Section title="6. VIP Membership — Billing and Cancellation">

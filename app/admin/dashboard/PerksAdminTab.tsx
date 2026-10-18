@@ -26,7 +26,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Spinner } from './ui'
-import { groupMenu, type MenuPerk } from '@/lib/perk-menu'
+import {
+  groupMenu, APPROVAL_CHECKLIST, APPROVAL_CHECKLIST_HEADING, type MenuPerk,
+} from '@/lib/perk-menu'
 
 const BLUE = '#4A4B98'
 
@@ -303,6 +305,19 @@ function SubmissionCard({
                 className="border border-[#EBEBF2] rounded-xl px-3 py-2 text-[13px] text-[#1A1A2E]">
           {groupNames.map(g => <option key={g} value={g}>{g}</option>)}
         </select>
+      </div>
+
+      {/* The standard, in front of the person applying it. Read-only on
+          purpose: a tickable list invites clicking through it. */}
+      <div className="bg-[#F5F5F8] rounded-xl px-4 py-3">
+        <p className="text-[11px] font-bold text-[#1A1A2E]">{APPROVAL_CHECKLIST_HEADING}</p>
+        <ul className="mt-1.5 flex flex-col gap-1">
+          {APPROVAL_CHECKLIST.map(line => (
+            <li key={line} className="text-[11px] text-[#5A5A72] font-medium leading-snug flex gap-2">
+              <span aria-hidden="true" className="text-[#8E8EA8]">&middot;</span>{line}
+            </li>
+          ))}
+        </ul>
       </div>
 
       {declining && (

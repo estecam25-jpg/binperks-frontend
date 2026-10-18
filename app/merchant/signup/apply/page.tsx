@@ -160,7 +160,7 @@ export default function MerchantApplyPage() {
                 className={inputClass(false)} />
             </Field>
 
-            <Field label="Website" hint="Optional">
+            <Field label="Store website" hint="Optional — we save it as https://">
               <input type="url" placeholder="https://mybinstore.com"
                 value={form.website}
                 onChange={e => update('website', e.target.value)}
@@ -217,7 +217,7 @@ export default function MerchantApplyPage() {
             </div>
 
             <Field
-              label="Store Name (DBA)"
+              label="Store Name"
               hint="The name your customers know you by (e.g. 'Acme Bins')"
               error={err('storeName')}
             >

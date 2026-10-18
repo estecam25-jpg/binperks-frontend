@@ -47,9 +47,19 @@ export interface MenuGroup {
  */
 export const MENU_SEARCH_THRESHOLD = 20
 
-/** The groups the menu ships with. Admin may add others; this only decides the
- *  order of the ones we know, and is not a whitelist. */
-export const SEEDED_GROUPS = ['Discounts', 'Bags', 'Access', 'Events'] as const
+/**
+ * The groups the menu ships with, in order.
+ *
+ * Not a whitelist — admin may add others, and group_order in the database is
+ * what actually sorts them. This records the shipped set so tests and seeds
+ * have one place to read it.
+ *
+ * "Bags" was split: a free bag and a fixed price to fill one are different
+ * offers, and merging them meant reading every sentence to tell them apart.
+ */
+export const SEEDED_GROUPS = [
+  'Discounts', 'Shopping Bags', 'Fill-A-Bag', 'Access', 'Events',
+] as const
 
 // ── The rules, written once ─────────────────────────────────────────────────
 
@@ -63,6 +73,27 @@ export const NO_CHANCE_RULE =
  *  who receives a perk and that is not obvious from the slot label alone. */
 export const VIP_INCLUDES_STARTER_NOTE =
   'VIP members also get all your Starter perks.'
+
+/**
+ * What a reviewer checks before approving, in the order the problems actually
+ * turn up. Display only — nothing is ticked and nothing is stored; the point
+ * is that the standard is in front of the person applying it rather than in a
+ * document they are meant to remember.
+ *
+ * These are the same rules the Merchant Agreement states in section 6.2 and
+ * the merchant terms state in plain language, so a perk declined here can be
+ * explained by pointing at the agreement.
+ */
+export const APPROVAL_CHECKLIST_HEADING = 'Approve only if all are true:'
+
+export const APPROVAL_CHECKLIST: readonly string[] = [
+  'Every member can earn it with their own visit or purchase',
+  'Doesn’t depend on what other people do (shares, likes, followers, group goals)',
+  'No social media actions or reviews',
+  'Member knows at the register whether they qualify',
+  'No chance',
+  'Doesn’t name another store',
+]
 
 export type SubmissionStatus = 'pending' | 'approved' | 'declined'
 

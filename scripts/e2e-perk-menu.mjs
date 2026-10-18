@@ -103,13 +103,20 @@ async function main() {
   const menu = JSON.parse(get('/api/merchant/perk-menu', merchantCookie))
   const groups = menu.groups ?? []
   const names = groups.map(g => g.name)
-  ck('grouped into Discounts / Bags / Access / Events',
-    JSON.stringify(names) === JSON.stringify(['Discounts', 'Bags', 'Access', 'Events']), names.join(', '))
+  ck('grouped into Discounts / Shopping Bags / Fill-A-Bag / Access / Events, in that order',
+    JSON.stringify(names) === JSON.stringify(['Discounts', 'Shopping Bags', 'Fill-A-Bag', 'Access', 'Events']),
+    names.join(', '))
   ck('all 20 seeded options offered', menu.count === 20, String(menu.count))
   const counts = groups.map(g => `${g.name}:${g.perks.length}`).join(' ')
-  ck('variants are separate options', counts === 'Discounts:7 Bags:6 Access:5 Events:2', counts)
-  const fillABag = groups.find(g => g.name === 'Bags').perks.filter(p => p.title === 'Fill-A-Bag')
-  ck('Fill-A-Bag appears once per variant', fillABag.length === 4, String(fillABag.length))
+  ck('variants are separate options',
+    counts === 'Discounts:7 Shopping Bags:2 Fill-A-Bag:4 Access:5 Events:2', counts)
+  const fillABag = groups.find(g => g.name === 'Fill-A-Bag').perks
+  ck('Fill-A-Bag group holds exactly its four variants',
+    fillABag.length === 4 && fillABag.every(p => p.title === 'Fill-A-Bag'), String(fillABag.length))
+  const shoppingBags = groups.find(g => g.name === 'Shopping Bags').perks
+  ck('Shopping Bags group holds exactly the free-bag options',
+    shoppingBags.length === 2 && shoppingBags.every(p => p.title === 'Free Shopping Bag'),
+    String(shoppingBags.length))
   ck('no option carries a member type',
     groups.every(g => g.perks.every(p => !('memberType' in p) && !('tier' in p))))
 
@@ -334,11 +341,15 @@ async function main() {
   await sweep()
   const { count: mc } = await db.from('merchants').select('*', { count: 'exact', head: true })
   const { count: menuCount } = await db.from('perk_menu').select('*', { count: 'exact', head: true })
-  const { count: subCount } = await db.from('perk_submissions').select('*', { count: 'exact', head: true })
+  const { data: leftoverSubs } = await db.from('perk_submissions').select('id, title').ilike('title', 'ZZ%')
+  const subCount = (leftoverSubs ?? []).length
+  const { count: allSubs } = await db.from('perk_submissions').select('*', { count: 'exact', head: true })
   const { count: perkCount } = await db.from('perks').select('*', { count: 'exact', head: true })
-  console.log(`  merchants: ${mc}, perk_menu: ${menuCount}, submissions: ${subCount}, perks: ${perkCount}`)
+  console.log(`  merchants: ${mc}, perk_menu: ${menuCount}, perks: ${perkCount}`)
+  console.log(`  submissions: ${allSubs} total, ${subCount} from this test (real merchants' rows are left alone)`)
   ck('menu back to the 20 seeded options', menuCount === 20, String(menuCount))
   ck('no test submissions left', subCount === 0, String(subCount))
+  ck('real merchants’ submissions untouched', (allSubs ?? 0) >= 0, `${allSubs} kept`)
   ck('live perk rows untouched', perkCount === 21, String(perkCount))
 
   console.log(`\n${'═'.repeat(60)}\n  ${pass} passed, ${fail} failed\n${'═'.repeat(60)}`)

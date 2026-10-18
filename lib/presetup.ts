@@ -90,7 +90,10 @@ export function presetupCanonicalKey(
 /** The pre-setup form, as the admin tab sends it and the create route stores it. */
 export interface PresetupInput {
   companyName: string
-  brandName: string
+  /** Optional store website, normalized to https://. Replaced the DBA field:
+   *  brand_name is still a column and still populated, just from the store
+   *  name rather than a second thing to type. */
+  websiteUrl: string
   ownerName: string
   ownerEmail: string
   ownerPhone: string

@@ -47,6 +47,7 @@ import { merchantCheckoutLineItems } from '@/lib/merchant-checkout'
 import { signupMetadata } from '@/lib/merchant-onboarding'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { PRESETUP, finishSetupUrl } from '@/lib/presetup'
+import { websiteUrlOrNull } from '@/lib/store-website'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
     const {
       firstName, lastName, email, phone,
       companyName, storeName, address, city, state, zip,
-      locationCount, binCount,
+      locationCount, binCount, website,
     } = body
 
     // Basic validation
@@ -121,6 +122,9 @@ export async function POST(req: NextRequest) {
       lastName:      String(lastName).trim(),
       email:         normalizedEmail,
       phone:         phone ? String(phone) : '',
+      // Optional. Rejected input is dropped rather than failing the checkout:
+      // a mistyped website must not stand between a merchant and paying.
+      website:       websiteUrlOrNull(website) ?? '',
       companyName:   String(companyName).trim(),
       storeName:     String(storeName).trim(),
       address:       address ? String(address) : '',

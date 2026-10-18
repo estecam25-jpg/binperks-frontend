@@ -39,7 +39,7 @@ interface PresetupStore {
   createdBy: string | null
   storeId: string | null
   storeName: string | null
-  brandName: string | null
+  websiteUrl: string | null
   storeKey: string | null
   address: string
   logoUrl: string | null
@@ -47,7 +47,7 @@ interface PresetupStore {
 }
 
 const EMPTY = {
-  companyName: '', brandName: '', ownerName: '', ownerEmail: '', ownerPhone: '',
+  companyName: '', websiteUrl: '', ownerName: '', ownerEmail: '', ownerPhone: '',
   storeName: '', address: '', city: '', state: '', zip: '', locationCount: '1',
 }
 
@@ -168,9 +168,10 @@ export default function PresetupStoresTab() {
             <Field label="Business legal name" required
                    value={form.companyName} onChange={v => setForm(f => ({ ...f, companyName: v }))}
                    placeholder="XYZ Liquidation LLC" />
-            <Field label="DBA / store brand"
-                   value={form.brandName} onChange={v => setForm(f => ({ ...f, brandName: v }))}
-                   placeholder="Acme Bins" />
+            <Field label="Store website"
+                   value={form.websiteUrl} onChange={v => setForm(f => ({ ...f, websiteUrl: v }))}
+                   placeholder="acmebins.com"
+                   hint="Optional · saved as https://" />
           </Group>
 
           <Group title="Owner">

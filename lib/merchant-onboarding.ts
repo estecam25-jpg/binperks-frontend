@@ -43,6 +43,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { postToGhl } from '@/lib/ghl-webhook'
 import { PRESETUP, PRESETUP_MERCHANT_ID_KEY } from '@/lib/presetup'
+import { websiteUrlOrNull } from '@/lib/store-website'
 import { waitUntil } from '@vercel/functions'
 import { sendPrintKitsForMerchant } from '@/lib/print-kit'
 
@@ -73,6 +74,8 @@ export interface SignupForm {
   lastName: string
   email: string
   phone: string
+  /** Optional store website, already normalized to https:// by the caller. */
+  website: string
   companyName: string
   storeName: string
   address: string
@@ -96,6 +99,7 @@ export function signupMetadata(form: SignupForm): Record<string, string> {
     lastName:      s(form.lastName),
     email:         s(form.email),
     phone:         s(form.phone),
+    website:       s(form.website),
     companyName:   s(form.companyName),
     storeName:     s(form.storeName),
     address:       s(form.address),
@@ -115,6 +119,7 @@ function formFromMetadata(m: Stripe.Metadata | null | undefined): SignupForm | n
     lastName:      m.lastName ?? '',
     email:         m.email.toLowerCase().trim(),
     phone:         m.phone ?? '',
+    website:       m.website ?? '',
     companyName:   m.companyName.trim(),
     storeName:     m.storeName.trim(),
     address:       m.address ?? '',
@@ -260,6 +265,9 @@ export async function createMerchantAfterPayment(
     brand_color:       '#4A4B98',
     fiscal_week_start: 'friday',
     bin_count:         form.binCount,
+    // Optional, and not shown to members yet — stored so it is there when the
+    // store card is ready for it.
+    website_url:       websiteUrlOrNull(form.website),
     // Not live, not listed, not enrolling until the agreement is signed.
     is_active:          false,
     network_visible:    false,

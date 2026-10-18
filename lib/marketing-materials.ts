@@ -134,17 +134,6 @@ export const MATERIALS: MaterialSpec[] = [
     fileStem: 'binperks-posters',
   },
   {
-    slug: 'window-cling',
-    label: 'Window Cling Decals',
-    section: 'signage',
-    description: '6 decals per sheet · 4.25" × 3.67" each · print on cling paper',
-    qrTarget: 'social',
-    output: 'pdf',
-    templates: ['window-cling'],
-    sheet: DECAL_SHEET,
-    fileStem: 'binperks-window-cling',
-  },
-  {
     slug: 'storefront-photo',
     label: 'Storefront Photo Print',
     section: 'signage',
