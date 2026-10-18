@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import PricingScheduleCard from '../PricingScheduleCard'
 import BinPhotosCard from '../BinPhotosCard'
 import StoreAddressCard from '../StoreAddressCard'
-import SuggestedPerks from '../SuggestedPerks'
 import { validatePin } from '@/lib/pin-strength'
 import { validateStaffPhone, formatStaffPhone } from '@/lib/staff-phone'
 import { personalizeCaption } from '@/lib/social-caption'
@@ -34,56 +33,90 @@ interface MerchantMaterial {
 import { RevealBox, CoverImage } from '@/components/member/FeedCards'
 import {
   FREE_SLOTS, FREE_REQUIRED, VIP_SLOTS, VIP_REQUIRED,
-  missingRequiredPerks, missingPerksMessage,
+  missingPerksMessage,
 } from '@/lib/perks'
+import {
+  MENU_SEARCH_THRESHOLD, NO_CHANCE_RULE, VIP_INCLUDES_STARTER_NOTE,
+  menuPerkLabel, menuPerkMatches, submissionStatusLabel,
+  type MenuGroup, type PerkSubmission,
+} from '@/lib/perk-menu'
 
 // --- PerksTab ---
 
-interface Perk { slot: number; title: string; description: string; isActive: boolean }
+/**
+ * One perk slot, as the merchant fills it.
+ *
+ * MENU-ONLY. There is no free typing: a slot is filled by choosing from the
+ * shared perk menu, which is what makes the offer consistent across the
+ * network and lets BinPerks review wording before members see it. A merchant
+ * with an idea the menu does not carry submits it at the bottom of the tab.
+ *
+ * A LEGACY PERK IS SHOWN AS THE CURRENT CHOICE. Perks chosen before the menu
+ * existed have no menu id and their own wording. They stay live exactly as
+ * they are, so the dropdown shows "Your current perk" selected and says it
+ * stays until replaced — picking anything else is the merchant replacing it,
+ * and there is no way back to the old wording.
+ */
+interface Perk {
+  slot: number
+  menuPerkId: string | null
+  title: string
+  description: string
+  isActive: boolean
+  /** Chosen before the perk menu existed; stays live until replaced. */
+  legacy?: boolean
+  /** Admin pulled it from member view. */
+  hidden?: boolean
+  hiddenReason?: string | null
+}
 interface StoreRef { id: string; storeName: string; storeKey?: string }
 
 /**
  * Empty perk slots — what a merchant starts from.
  *
- * NO PRE-FILLED PERKS. These used to be stocked with example perks ("Birthday
- * Perk", "VIP Bins", …) shown as active, which a merchant could save without
- * reading: the examples then became that store's real member-facing perks, and
- * the onboarding checklist ticked itself. Every perk is now written by the
- * merchant. Ideas still live in the Suggested Perks panel, which copies to the
- * clipboard rather than filling these in.
- *
- * The slots themselves stay (2 free, 5 VIP) — they are the editor, not content.
+ * NO PRE-FILLED PERKS. These used to be stocked with example perks, which
+ * merchants saved unread, so members were offered things the store had never
+ * agreed to.
  */
 function emptyPerks(count: number): Perk[] {
   return Array.from({ length: count }, (_, i) => ({
-    slot: i + 1, title: '', description: '', isActive: false,
+    slot: i + 1, menuPerkId: null, title: '', description: '', isActive: false,
   }))
 }
 
 /**
- * One editable perk.
+ * The slot editor.
  *
- * MUST stay at module scope. This was previously declared inside PerksTab, so
- * every keystroke — which sets state and re-renders the tab — produced a NEW
- * function identity for this component. React compares element types by
- * identity, saw a different type in the same position, and unmounted the whole
- * subtree to mount a fresh one. The DOM input was destroyed and recreated on
- * every character, which is why focus jumped out after each letter.
- *
- * Declaring it here gives it one stable identity for the life of the module,
- * so React reconciles the existing input instead of replacing it.
+ * MUST stay at module scope. Declared inside PerksTab, every keystroke gave it
+ * a new function identity, React saw a different component type in the same
+ * position, and the DOM node was destroyed and recreated — which is why focus
+ * used to jump out of the inputs after each character.
  */
-function PerkCard({
-  perk, label, onChange, required = false, missing = false,
+function PerkSlotCard({
+  perk, label, groups, onChange, required = false, missing = false, searchable,
 }: {
   perk: Perk
   label: string
-  onChange: (slot: number, field: keyof Perk, value: string | boolean) => void
-  /** One of the slots the Merchant Agreement requires this store to fill. */
+  groups: MenuGroup[]
+  onChange: (slot: number, menuPerkId: string | null) => void
   required?: boolean
-  /** Required, empty, and the merchant has tried to save. */
   missing?: boolean
+  /** The menu is long enough to be worth filtering. */
+  searchable: boolean
 }) {
+  const [query, setQuery] = useState('')
+
+  const visible = useMemo(() => {
+    if (!query.trim()) return groups
+    return groups
+      .map(g => ({ ...g, perks: g.perks.filter(p => menuPerkMatches(p, query)) }))
+      .filter(g => g.perks.length > 0)
+  }, [groups, query])
+
+  const chosen = perk.menuPerkId
+    ? groups.flatMap(g => g.perks).find(p => p.id === perk.menuPerkId) ?? null
+    : null
+
   return (
     <div className={`bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3 ${
       missing ? 'ring-2 ring-red-300' : ''
@@ -98,39 +131,77 @@ function PerkCard({
             </span>
           )}
         </span>
-        {required ? (
-          // No toggle: a required perk is always shown to members, so a switch
-          // that cannot be turned off would be a lie. The server stores these
-          // active whatever arrives.
-          <span className="text-[10px] font-bold text-[#4A4B98]">Always on</span>
-        ) : (
-          <button
-            type="button"
-            aria-label={`${perk.isActive ? 'Hide' : 'Show'} ${label}`}
-            onClick={() => onChange(perk.slot, 'isActive', !perk.isActive)}
-            className={`relative w-10 h-6 rounded-full transition-colors ${perk.isActive ? 'bg-[#4A4B98]' : 'bg-[#D1D1DC]'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${perk.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
-          </button>
-        )}
+        {required
+          ? <span className="text-[10px] font-bold text-[#4A4B98]">Always on</span>
+          : <span className="text-[10px] font-medium text-[#8E8EA8]">Optional</span>}
       </div>
-      <input
-        type="text"
-        placeholder={required ? 'Perk title (required)...' : 'Perk title...'}
+
+      {searchable && (
+        <input
+          type="search"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search perks…"
+          aria-label={`Search perks for ${label}`}
+          className="w-full px-3 py-2 rounded-xl bg-[#F5F5F8] border-2 border-transparent
+                     focus:border-[#4A4B98] outline-none text-[13px] text-[#1A1A2E]
+                     placeholder:text-[#D1D1DC]"
+        />
+      )}
+
+      <select
+        value={perk.menuPerkId ?? (perk.legacy ? 'legacy' : '')}
+        aria-label={label}
         aria-required={required}
-        value={perk.title}
-        onChange={e => onChange(perk.slot, 'title', e.target.value)}
-        maxLength={60}
-        className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[14px] font-bold text-[#1A1A2E] placeholder:font-normal placeholder:text-[#D1D1DC]"
-      />
-      <textarea
-        rows={2}
-        placeholder="Short description members will see..."
-        value={perk.description}
-        onChange={e => onChange(perk.slot, 'description', e.target.value)}
-        maxLength={140}
-        className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent focus:border-[#4A4B98] outline-none text-[13px] font-medium text-[#1A1A2E] placeholder:text-[#D1D1DC] resize-none"
-      />
+        onChange={e => {
+          const v = e.target.value
+          // 'legacy' is only ever the initial value; choosing it again is a
+          // no-op, and choosing anything else replaces the old wording.
+          onChange(perk.slot, v === '' || v === 'legacy' ? null : v)
+        }}
+        className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent
+                   focus:border-[#4A4B98] outline-none text-[13px] font-medium text-[#1A1A2E]"
+      >
+        <option value="">{required ? 'Choose a perk…' : 'No perk in this slot'}</option>
+
+        {/* The merchant's own pre-menu wording, kept selectable so the form can
+            be saved without silently replacing it. */}
+        {perk.legacy && (
+          <option value="legacy">Your current perk: {perk.title}</option>
+        )}
+
+        {visible.map(g => (
+          <optgroup key={g.name} label={g.name}>
+            {g.perks.map(p => (
+              <option key={p.id} value={p.id}>{menuPerkLabel(p)}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+
+      {chosen && (
+        <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed -mt-1">
+          {chosen.description}
+        </p>
+      )}
+
+      {!chosen && perk.legacy && (
+        <p className="text-[12px] text-[#8E8EA8] font-medium leading-relaxed -mt-1">
+          {perk.description}
+          <span className="block text-[11px] text-[#4A4B98] font-semibold mt-1">
+            This perk stays live until you choose a different one.
+          </span>
+        </p>
+      )}
+
+      {perk.hidden && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+          <p className="text-[11px] font-semibold text-red-700 leading-snug">
+            BinPerks hid this perk from members{perk.hiddenReason ? `: ${perk.hiddenReason}` : '.'}
+            {' '}Choose a different perk for this slot.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -138,48 +209,69 @@ function PerkCard({
 export function PerksTab({ storeId, stores }: { storeId: string | null; stores: StoreRef[] }) {
   const activeStoreId = storeId ?? stores[0]?.id
   const [freePerks, setFreePerks] = useState<Perk[]>(() => emptyPerks(FREE_SLOTS))
-  const [vipPerks, setVipPerks] = useState<Perk[]>(() => emptyPerks(VIP_SLOTS))
+  const [vipPerks,  setVipPerks]  = useState<Perk[]>(() => emptyPerks(VIP_SLOTS))
+  const [groups,    setGroups]    = useState<MenuGroup[]>([])
+  const [menuCount, setMenuCount] = useState(0)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [saved,  setSaved]  = useState(false)
   const [loading, setLoading] = useState(true)
+
   // Which required slots were empty at the last save attempt. Empty until the
-  // merchant actually tries — a form that scolds you before you have typed
-  // anything is noise.
+  // merchant actually tries — a form that scolds before you have typed is noise.
   const [missingFree, setMissingFree] = useState<number[]>([])
   const [missingVip,  setMissingVip]  = useState<number[]>([])
   const [saveError,   setSaveError]   = useState<string | null>(null)
 
+  const [submissions, setSubmissions] = useState<PerkSubmission[]>([])
+
+  const loadSubmissions = useCallback(async () => {
+    if (!activeStoreId) return
+    try {
+      const r = await fetch(`/api/merchant/perk-submissions?storeId=${activeStoreId}`)
+      const d = await r.json()
+      setSubmissions(d.submissions ?? [])
+    } catch { /* the list is supplementary; the form still works */ }
+  }, [activeStoreId])
+
   useEffect(() => {
     if (!activeStoreId) return
     setLoading(true)
-    fetch(`/api/merchant/perks?storeId=${activeStoreId}`)
-      .then(r => r.json())
-      .then(d => {
-        const fp: Perk[] = d.freePerks ?? []
-        const vp: Perk[] = d.vipPerks ?? []
+    Promise.all([
+      fetch(`/api/merchant/perks?storeId=${activeStoreId}`).then(r => r.json()),
+      fetch('/api/merchant/perk-menu').then(r => r.json()),
+    ])
+      .then(([perks, menu]) => {
+        const fp: Perk[] = perks.freePerks ?? []
+        const vp: Perk[] = perks.vipPerks  ?? []
         setFreePerks(fp.length > 0 ? fp : emptyPerks(FREE_SLOTS))
-        setVipPerks(vp.length > 0 ? vp : emptyPerks(VIP_SLOTS))
-        setLoading(false)
+        setVipPerks(vp.length  > 0 ? vp : emptyPerks(VIP_SLOTS))
+        setGroups(menu.groups ?? [])
+        setMenuCount(menu.count ?? 0)
       })
-  }, [activeStoreId])
+      .finally(() => setLoading(false))
+    void loadSubmissions()
+  }, [activeStoreId, loadSubmissions])
 
-  function updateFree(slot: number, field: keyof Perk, value: string | boolean) {
-    setFreePerks(prev => prev.map(p => p.slot === slot ? { ...p, [field]: value } : p))
-    setSaved(false); setMissingFree([]); setSaveError(null)
-  }
+  const searchable = menuCount > MENU_SEARCH_THRESHOLD
 
-  function updateVip(slot: number, field: keyof Perk, value: string | boolean) {
-    setVipPerks(prev => prev.map(p => p.slot === slot ? { ...p, [field]: value } : p))
-    setSaved(false); setMissingVip([]); setSaveError(null)
+  function choose(setter: typeof setFreePerks, clearMissing: (v: number[]) => void) {
+    return (slot: number, menuPerkId: string | null) => {
+      setter(prev => prev.map(p => p.slot === slot
+        // Choosing from the menu replaces the slot outright: the title and
+        // sentence are re-read from the menu on save, and a legacy perk that
+        // has been replaced is gone.
+        ? { ...p, menuPerkId, legacy: menuPerkId ? false : p.legacy, isActive: !!menuPerkId || p.isActive }
+        : p))
+      setSaved(false); clearMissing([]); setSaveError(null)
+    }
   }
 
   async function handleSave() {
     if (!activeStoreId) return
 
-    // Checked here so the merchant is told before a round trip, and checked
-    // again on the server, which is where it is actually enforced.
-    const mf = missingRequiredPerks(freePerks, FREE_REQUIRED)
-    const mv = missingRequiredPerks(vipPerks,  VIP_REQUIRED)
+    const filled = (p: Perk) => !!p.menuPerkId || (!!p.legacy && !!p.title.trim())
+    const mf = freePerks.filter(p => p.slot <= FREE_REQUIRED && !filled(p)).map(p => p.slot)
+    const mv = vipPerks .filter(p => p.slot <= VIP_REQUIRED  && !filled(p)).map(p => p.slot)
     if (mf.length > 0 || mv.length > 0) {
       setMissingFree(mf); setMissingVip(mv)
       setSaveError(missingPerksMessage(mf, mv))
@@ -195,9 +287,16 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
     const data = await res.json().catch(() => null)
     setSaving(false)
 
-    if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000); return }
+    if (res.ok) {
+      setSaved(true); setTimeout(() => setSaved(false), 3000)
+      // Re-read: the server snapshots the menu wording onto each slot, and a
+      // replaced legacy perk is now an ordinary menu choice.
+      const fresh = await fetch(`/api/merchant/perks?storeId=${activeStoreId}`).then(r => r.json())
+      setFreePerks(fresh.freePerks ?? freePerks)
+      setVipPerks(fresh.vipPerks ?? vipPerks)
+      return
+    }
 
-    // The server rejected it — most likely the same rule, from a stale tab.
     setMissingFree(data?.missingFree ?? [])
     setMissingVip(data?.missingVip ?? [])
     setSaveError(data?.message ?? 'Could not save your perks. Please try again.')
@@ -216,12 +315,12 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
 
       <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
         <p className="text-[12px] font-semibold text-amber-800 leading-snug">
-          Update your perks monthly. If you don&apos;t update them, last month&apos;s carry over automatically.
-          Members see these on their dashboard.
+          Update your perks monthly. If you don&apos;t update them, last month&apos;s carry over
+          automatically. Members see these on their dashboard.
         </p>
       </div>
 
-      {/* Free member perks */}
+      {/* Starter perks */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
           <p className="font-['Coiny'] text-[26px] text-[#1A1A2E] leading-tight">
@@ -231,12 +330,17 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
             {FREE_SLOTS} slots &middot; first {FREE_REQUIRED} required
           </span>
         </div>
+        <p className="text-[12px] text-[#8E8EA8] font-medium px-1 -mt-1">
+          Every member gets these, Starter and VIP alike.
+        </p>
         {freePerks.map(p => (
-          <PerkCard
+          <PerkSlotCard
             key={p.slot}
             perk={p}
             label={`Starter Perk ${p.slot}`}
-            onChange={updateFree}
+            groups={groups}
+            searchable={searchable}
+            onChange={choose(setFreePerks, setMissingFree)}
             required={p.slot <= FREE_REQUIRED}
             missing={missingFree.includes(p.slot)}
           />
@@ -245,7 +349,7 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
 
       <div className="border-t border-[#EBEBF2]" />
 
-      {/* VIP member perks */}
+      {/* VIP perks */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
           <p className="font-['Coiny'] text-[26px] text-[#1A1A2E] leading-tight">
@@ -255,12 +359,17 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
             {VIP_SLOTS} slots &middot; first {VIP_REQUIRED} required
           </span>
         </div>
+        <p className="text-[12px] text-[#8E8EA8] font-medium px-1 -mt-1">
+          {VIP_INCLUDES_STARTER_NOTE}
+        </p>
         {vipPerks.map(p => (
-          <PerkCard
+          <PerkSlotCard
             key={p.slot}
             perk={p}
             label={`VIP Perk ${p.slot}`}
-            onChange={updateVip}
+            groups={groups}
+            searchable={searchable}
+            onChange={choose(setVipPerks, setMissingVip)}
             required={p.slot <= VIP_REQUIRED}
             missing={missingVip.includes(p.slot)}
           />
@@ -279,15 +388,163 @@ export function PerksTab({ storeId, stores }: { storeId: string | null; stores: 
         className="w-full py-4 rounded-2xl font-bold text-[16px] text-white font-['Montserrat'] bg-[#4A4B98] disabled:opacity-50 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
       >
         {saving && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-        {saved ? '✓ Saved' : saving ? 'Saving...' : 'Save Perks'}
+        {saved ? '✓ Saved — live now' : saving ? 'Saving...' : 'Save Perks'}
       </button>
 
-      {/* Below the Save button on purpose: ideas to borrow, not part of the
-          form being submitted. */}
-      <SuggestedPerks />
+      <SubmitPerk storeId={activeStoreId} submissions={submissions} onSubmitted={loadSubmissions} />
     </div>
   )
 }
+
+/**
+ * Propose a perk the menu does not carry.
+ *
+ * Below the Save button on purpose: it is a separate errand from filling the
+ * slots, and nothing typed here goes live. The rules are stated ABOVE the
+ * fields rather than after them, because "no raffles" is the first thing a
+ * merchant needs to know, not something to discover on a decline.
+ */
+function SubmitPerk({
+  storeId, submissions, onSubmitted,
+}: {
+  storeId: string | undefined
+  submissions: PerkSubmission[]
+  onSubmitted: () => void
+}) {
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (busy || !storeId) return
+    setBusy(true); setError(null)
+    try {
+      const res = await fetch('/api/merchant/perk-submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId, title, description, note }),
+      })
+      const d = await res.json().catch(() => null)
+      if (!res.ok) { setError(d?.message ?? 'Could not send your perk. Please try again.'); return }
+      setTitle(''); setDescription(''); setNote('')
+      setSent(true); setTimeout(() => setSent(false), 4000)
+      onSubmitted()
+    } catch {
+      setError('Could not send your perk. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 pt-2">
+      <div className="border-t border-[#EBEBF2]" />
+
+      <p className="font-['Coiny'] text-[22px] text-[#1A1A2E] leading-tight px-1">
+        Submit a new perk
+      </p>
+
+      <div className="bg-[#F5F5F8] rounded-2xl px-4 py-3">
+        <p className="text-[12px] text-[#5A5A72] font-medium leading-relaxed">
+          {NO_CHANCE_RULE}
+        </p>
+      </div>
+
+      <form onSubmit={submit} className="bg-white rounded-2xl px-4 py-4 shadow-sm flex flex-col gap-3">
+        <label className="block">
+          <span className="block text-[11px] font-bold tracking-wide uppercase text-[#8E8EA8] mb-1">
+            Perk title
+          </span>
+          <input
+            type="text" required maxLength={60} value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Early Entry"
+            className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent
+                       focus:border-[#4A4B98] outline-none text-[14px] font-bold text-[#1A1A2E]
+                       placeholder:font-normal placeholder:text-[#D1D1DC]"
+          />
+        </label>
+
+        <label className="block">
+          <span className="block text-[11px] font-bold tracking-wide uppercase text-[#8E8EA8] mb-1">
+            Description
+          </span>
+          <textarea
+            rows={2} required maxLength={280} value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Shop 30 minutes before we open on restock day."
+            className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent
+                       focus:border-[#4A4B98] outline-none text-[13px] font-medium text-[#1A1A2E]
+                       placeholder:text-[#D1D1DC] resize-none"
+          />
+        </label>
+
+        <label className="block">
+          <span className="block text-[11px] font-bold tracking-wide uppercase text-[#8E8EA8] mb-1">
+            Note to BinPerks <span className="font-medium normal-case tracking-normal">(optional)</span>
+          </span>
+          <textarea
+            rows={2} maxLength={500} value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="Anything we should know about how this works at your store."
+            className="w-full px-3 py-2.5 rounded-xl bg-[#F5F5F8] border-2 border-transparent
+                       focus:border-[#4A4B98] outline-none text-[13px] font-medium text-[#1A1A2E]
+                       placeholder:text-[#D1D1DC] resize-none"
+          />
+        </label>
+
+        {error && (
+          <p role="alert" className="text-[12px] font-semibold text-red-700">{error}</p>
+        )}
+
+        <button
+          type="submit" disabled={busy}
+          className="w-full py-3 rounded-2xl font-bold text-[14px] text-white font-['Montserrat']
+                     bg-[#4A4B98] disabled:opacity-50 active:scale-[0.97] transition-all"
+        >
+          {busy ? 'Sending…' : sent ? '✓ Sent for review' : 'Submit for review'}
+        </button>
+      </form>
+
+      {submissions.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[11px] font-bold tracking-[0.07em] uppercase text-[#8E8EA8] px-1">
+            Your submissions
+          </p>
+          {submissions.map(s => (
+            <div key={s.id} className="bg-white rounded-2xl px-4 py-3 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-bold text-[#1A1A2E]">{s.title}</p>
+                  <p className="text-[12px] text-[#8E8EA8] font-medium leading-snug mt-0.5">
+                    {s.description}
+                  </p>
+                </div>
+                <span className={`shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
+                  s.status === 'approved' ? 'bg-green-50 text-green-700'
+                  : s.status === 'declined' ? 'bg-red-50 text-red-700'
+                  : 'bg-[#F5F5F8] text-[#8E8EA8]'
+                }`}>
+                  {submissionStatusLabel(s.status)}
+                </span>
+              </div>
+              {s.status === 'declined' && s.declineReason && (
+                <p className="text-[11px] font-semibold text-red-700 mt-2 leading-snug">
+                  {s.declineReason}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 // --- MarketingTab ---
 

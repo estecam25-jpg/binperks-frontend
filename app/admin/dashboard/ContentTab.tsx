@@ -447,9 +447,7 @@ export default function ContentTab({ type }: { type: ContentType }) {
         <div>
           <h2 className="font-['Coiny'] text-xl text-[#1A1A2E]">{type.label}</h2>
           <p className="text-[11px] text-[#8E8EA8] font-medium mt-0.5">
-            {type.slug === 'suggested-perks'
-              ? 'Ideas shown to merchants in the perk editor.'
-              : 'Shown in the member Home feed. Pinned items come first.'}
+            Shown in the member Home feed. Pinned items come first.
           </p>
         </div>
         {!adding && !editingId && (

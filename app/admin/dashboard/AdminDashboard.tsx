@@ -11,6 +11,7 @@ import SocialMediaTab from './SocialMediaTab'
 import MarketingTemplatesTab from './MarketingTemplatesTab'
 import AnalyticsTab from './AnalyticsTab'
 import PresetupStoresTab from './PresetupStoresTab'
+import PerksAdminTab from './PerksAdminTab'
 import { StatCard, Spinner } from './ui'
 import { CONTENT_TYPES, contentTypeBySlug } from '@/lib/admin-content'
 
@@ -137,6 +138,9 @@ interface ScannerStats {
 type TabId =
   | 'overview' | 'merchants' | 'stores' | 'members' | 'settlement' | 'scanner' | 'alerts'
   | 'analytics' | 'announcements' | 'social' | 'templates' | 'presetup'
+  // One tab for the perk menu, the review queue and the hide switch: they are
+  // three views of the same decision about what a merchant may offer.
+  | 'perks'
   // Content tabs, one per entry in CONTENT_TYPES. Prefixed so a content slug
   // can never collide with an operational tab name.
   | `content:${string}`
@@ -1458,6 +1462,7 @@ The last order went out on ${already.slice(0, 10)}.` : ''),
     { id: 'stores',    label: 'Stores' },
     // Next to Merchants, because it is the stage before one.
     { id: 'presetup',  label: 'Pre-setup Stores' },
+    { id: 'perks',     label: 'Perks' },
     { id: 'members',   label: 'Members' },
     { id: 'settlement', label: 'Settlement' },
     { id: 'scanner',   label: 'Scanner' },
@@ -1512,6 +1517,7 @@ The last order went out on ${already.slice(0, 10)}.` : ''),
         {/* Both fetch their own data; nothing to lazy-load from here. */}
         {tab === 'analytics' && <AnalyticsTab />}
         {tab === 'presetup' && <PresetupStoresTab />}
+        {tab === 'perks' && <PerksAdminTab />}
         {tab === 'announcements' && <AnnouncementsTab />}
         {tab === 'social' && <SocialMediaTab />}
         {tab === 'templates' && <MarketingTemplatesTab />}

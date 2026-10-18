@@ -82,8 +82,8 @@ const BENEFITS: { lead: string; body: string }[] = [
     body: 'Your dashboard shows stamps, redemptions, new members and VIPs as they happen.' },
   { lead: 'No extra hardware.',
     body: 'Cashiers stamp from any phone or tablet with their own PIN.' },
-  { lead: 'You control the perks.',
-    body: `Offer at least ${FREE_REQUIRED} Starter perk (up to ${FREE_SLOTS}) and at least ${VIP_REQUIRED} VIP perks (up to ${VIP_SLOTS}).` },
+  { lead: 'You choose the perks.',
+    body: `Offer at least ${FREE_REQUIRED} Starter perk and ${VIP_REQUIRED} VIP perks from our list of proven perks, or submit a new one for review.` },
 ]
 
 /**
@@ -129,9 +129,11 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: 'Can I choose my own perks?',
-    a: `Yes. Offer at least ${FREE_REQUIRED} perk for free Starter members (up to ${FREE_SLOTS}) and `
-     + `at least ${VIP_REQUIRED} for paying VIP members (up to ${VIP_SLOTS}), and change them anytime `
-     + 'from your dashboard.',
+    a: `Yes. Choose at least ${FREE_REQUIRED} perk for free Starter members (up to ${FREE_SLOTS}) and `
+     + `at least ${VIP_REQUIRED} for paying VIP members (up to ${VIP_SLOTS}) from our list of proven `
+     + 'perks, and change them anytime from your dashboard. Have a different idea? Submit it for '
+     + 'review; we review new perks within 3 business days. Perks can’t involve chance, like '
+     + 'raffles or drawings.',
   },
   {
     q: 'How do I get paid my VIP share?',

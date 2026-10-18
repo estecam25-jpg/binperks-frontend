@@ -41,24 +41,12 @@ export interface ContentType {
   titleField: string
   /** Optional second line in the admin list. */
   subtitleField?: string
-  /** Whether this type supports the pinned flag. suggested_perks does not. */
+  /** Whether this type supports the pinned flag. */
   pinned: boolean
   fields: ContentField[]
 }
 
 export const CONTENT_TYPES: ContentType[] = [
-  {
-    slug: 'suggested-perks',
-    table: 'suggested_perks',
-    label: 'Suggested Perks',
-    titleField: 'title',
-    subtitleField: 'description',
-    pinned: false,
-    fields: [
-      { name: 'title',       label: 'Title',       kind: 'text',     required: true, placeholder: 'Early Bird Access' },
-      { name: 'description', label: 'Description', kind: 'textarea', required: true, placeholder: 'What the member gets' },
-    ],
-  },
   {
     slug: 'promos',
     table: 'binperks_promos',

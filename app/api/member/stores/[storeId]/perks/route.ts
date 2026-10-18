@@ -7,9 +7,20 @@
  * Lazy rather than bundled into /api/member/stores because most members
  * expand one or two stores, and this is the bulk of the payload.
  *
- * VIP perks are returned to every member, Starter included, so the UI can
- * show them locked. Hiding them outright would remove the main reason a
+ * WHO GETS WHAT IS DECIDED BY THE SLOT. A Starter slot reaches every member;
+ * a VIP slot reaches VIP members only. VIP members therefore have BOTH lists,
+ * which is why both are returned and why the UI shows a VIP member the
+ * Starter perks as theirs too.
+ *
+ * VIP perks are also returned to Starter members, but greyed and behind an
+ * "Upgrade to VIP to unlock these" link — they are a preview, not an
+ * entitlement. Withholding them entirely would remove the main reason a
  * Starter member upgrades.
+ *
+ * A PERK ADMIN HAS HIDDEN REACHES NOBODY. hidden_at is set when a perk breaks
+ * the rules after going live, and this is the gate that makes that immediate —
+ * the merchant keeps the slot and is shown the reason in their dashboard, but
+ * no member sees the perk again until it is replaced or un-hidden.
  *
  * storeMessage reads the store_message column (formerly member_memo — the
  * old column still exists but nothing reads it; see the migration note).
@@ -67,6 +78,7 @@ export async function GET(
     .select('id, slot, title, description, member_type')
     .eq('store_id', storeId)
     .eq('is_active', true)
+    .is('hidden_at', null)
     .order('slot', { ascending: true })
 
   const all = (perkRows ?? []) as PerkRow[]
