@@ -16,17 +16,20 @@
  * Responses (200):
  *   { state: 'processing' }        payment not confirmed yet, or not a merchant
  *                                  signup — keep polling
- *   { state: 'preparing' }         merchant exists; the DocuSeal session is not
- *                                  open yet — keep polling
- *   { state: 'ready', signUrl }    go sign
- *   { state: 'active' }            already signed and live
+ *   { state: 'ready', signUrl }    go and accept the agreement
+ *   { state: 'active' }            already accepted and live
+ *
+ * There is no 'preparing' state any more. It existed because a DocuSeal
+ * submission had to be created over the network before the merchant could be
+ * sent anywhere; the agreement is now rendered in-app, so the moment the
+ * merchant row exists the page is ready.
  * 400 { error: 'invalid_session' }
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import {
-  PENDING_SIGNATURE, createMerchantFromCheckoutSession, ensureDocusealSubmission, signPagePath,
+  PENDING_SIGNATURE, createMerchantFromCheckoutSession, signPagePath,
 } from '@/lib/merchant-onboarding'
 
 export async function GET(req: NextRequest) {
@@ -50,8 +53,5 @@ export async function GET(req: NextRequest) {
   if (!merchant) return NextResponse.json({ state: 'processing' })
   if (merchant.billing_status !== PENDING_SIGNATURE) return NextResponse.json({ state: 'active' })
 
-  const slug = merchant.docuseal_slug ?? await ensureDocusealSubmission(admin, merchant.id)
-  if (!slug) return NextResponse.json({ state: 'preparing' })
-
-  return NextResponse.json({ state: 'ready', signUrl: signPagePath(slug) })
+  return NextResponse.json({ state: 'ready', signUrl: signPagePath(sessionId) })
 }

@@ -120,7 +120,7 @@ export default function FinishSetupStart({
       )}
 
       <p className="text-[11px] text-[#8E8EA8] text-center mt-4 leading-snug">
-        Step 1 of 2 · After payment you will sign the Merchant Agreement and W-9.
+        Step 1 of 2 · After payment you will review and accept the Merchant Agreement.
         Your store goes live the moment you sign.
       </p>
     </Shell>

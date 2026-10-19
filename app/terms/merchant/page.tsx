@@ -13,7 +13,7 @@
  * handled differently here:
  *
  *   - The [MERCHANT LEGAL NAME] / [DBA/STORE NAME] placeholders in PARTIES are
- *     filled per merchant on the executed DocuSeal copy. Rendering the raw
+ *     filled per merchant on the copy they accept in-app. Rendering the raw
  *     brackets on a public page would just look broken, so the parties clause
  *     describes them instead.
  *   - The blank signature block is omitted; this page is the reference copy,

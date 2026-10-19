@@ -235,11 +235,22 @@ const BATCH_STATUS_TONE: Record<string, 'green' | 'red' | 'gray' | 'amber' | 'bl
   locked:           'green',
 }
 
+/** One merchant's in-app acceptance, or absent for anyone who joined before
+ *  in-app acceptance existed. */
+interface AgreementAcceptance {
+  version: string
+  acceptedAt: string
+  signerName: string
+  signerTitle: string
+  hasPdf: boolean
+}
+
 function MerchantCard({
   m, onAction, actionLoading, onW9Action, onW9Reject,
-  expanded, onToggleExpand, history, historyLoading,
+  expanded, onToggleExpand, history, historyLoading, agreement,
 }: {
   m: Merchant
+  agreement: AgreementAcceptance | undefined
   onAction: (id: string, action: 'activate' | 'deactivate') => Promise<void>
   actionLoading: string | null
   onW9Action: (id: string, action: 'approve_w9') => void
@@ -304,6 +315,32 @@ function MerchantCard({
           </div>
         ))}
       </div>
+      {/* Agreement — in-app acceptance, or a note for anyone who predates it */}
+      <div className="border border-[#EBEBF2] rounded-xl px-3 py-2.5 flex items-center justify-between gap-3">
+        {agreement ? (
+          <>
+            <p className="text-[12px] font-semibold text-[#1A1A2E] min-w-0">
+              📄 Agreement: {agreement.version} accepted {agreement.acceptedAt.slice(0, 10)}
+              <span className="block text-[11px] font-medium text-[#8E8EA8]">
+                by {agreement.signerName}, {agreement.signerTitle}
+              </span>
+            </p>
+            {agreement.hasPdf && (
+              <a
+                href={`/api/admin/merchant-agreements?merchantId=${m.id}&download=1`}
+                className="shrink-0 text-[11px] font-bold rounded-xl px-3 py-2 bg-[#EBEBF2] text-[#1A1A2E]"
+              >
+                Download PDF
+              </a>
+            )}
+          </>
+        ) : (
+          <p className="text-[12px] font-semibold text-[#8E8EA8]">
+            📄 Accepted before in-app acceptance
+          </p>
+        )}
+      </div>
+
       {/* W-9 status */}
       <div className="border border-[#EBEBF2] rounded-xl px-3 py-2.5 flex flex-col gap-2">
         {!m.w9?.status && (
@@ -568,6 +605,7 @@ export default function AdminDashboard() {
   const [historyByMerchant, setHistoryByMerchant] = useState<Record<string, EligibilityEvent[]>>({})
   const [historyLoading, setHistoryLoading] = useState<string | null>(null)
   const [storeToggling, setStoreToggling] = useState<string | null>(null)  // `${storeId}:${field}`
+  const [agreements, setAgreements] = useState<Record<string, AgreementAcceptance>>({})
   const [kitSending,    setKitSending]    = useState<string | null>(null)  // storeId
   const [enrollmentConfirm, setEnrollmentConfirm] = useState<Store | null>(null)
 
@@ -627,8 +665,14 @@ export default function AdminDashboard() {
 
   const loadMerchants = useCallback(async () => {
     setTabLoading('merchants')
-    const res = await adminFetch('/api/admin/merchants')
+    // Acceptances come alongside: a merchant card shows which agreement
+    // version was accepted, by whom, and offers the PDF.
+    const [res, agr] = await Promise.all([
+      adminFetch('/api/admin/merchants'),
+      adminFetch('/api/admin/merchant-agreements'),
+    ])
     if (res.ok) { const d = await res.json(); setMerchants(d.merchants ?? []) }
+    if (agr.ok) { const d = await agr.json(); setAgreements(d.acceptances ?? {}) }
     setTabLoading(null); setLoadedTabs(p => new Set([...p, 'merchants']))
   }, [adminFetch])
 
@@ -999,7 +1043,8 @@ The last order went out on ${already.slice(0, 10)}.` : ''),
             expanded={expandedMerchant === m.id}
             onToggleExpand={() => handleToggleExpand(m.id)}
             history={historyByMerchant[m.id]}
-            historyLoading={historyLoading === m.id} />
+            historyLoading={historyLoading === m.id}
+            agreement={agreements[m.id]} />
         ))}
       </div>
     )

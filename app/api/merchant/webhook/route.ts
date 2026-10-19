@@ -33,7 +33,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { createMerchantAfterPayment, ensureDocusealSubmission } from '@/lib/merchant-onboarding'
+import { createMerchantAfterPayment } from '@/lib/merchant-onboarding'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 const isTest = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test')
@@ -112,11 +112,10 @@ async function onboardAfterPayment(
   supabase: ReturnType<typeof createAdminSupabaseClient>,
   args: Parameters<typeof createMerchantAfterPayment>[1],
 ): Promise<void> {
-  const merchant = await createMerchantAfterPayment(supabase, args)
-  if (!merchant) return
-  if (merchant.billing_status === 'pending_signature' && !merchant.docuseal_slug) {
-    await ensureDocusealSubmission(supabase, merchant.id)
-  }
+  // Creating the merchant is all this does now. There is no signing session to
+  // open in advance: the agreement is rendered in-app the moment the merchant
+  // opens the acceptance page.
+  await createMerchantAfterPayment(supabase, args)
 }
 
 // ── route ───────────────────────────────────────────────────────────────────

@@ -998,6 +998,9 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
   const [logoUrl,       setLogoUrl]       = useState<string | null>(null)
   const [reviewUrl,     setReviewUrl]     = useState<string>('')
   const [websiteUrl,    setWebsiteUrl]    = useState<string>('')
+  const [agreementAccepted, setAgreementAccepted] = useState<{
+    version: string; acceptedAt: string; signerName: string; signerTitle: string; hasPdf: boolean
+  } | null>(null)
   const [binCount,      setBinCount]      = useState<string>('')
   const [logoUploading, setLogoUploading] = useState(false)
   const [brandSaving,   setBrandSaving]   = useState(false)
@@ -1024,6 +1027,14 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
           setLogoUrl(d.logoUrl ?? null)
           setReviewUrl(d.reviewUrl ?? '')
           setWebsiteUrl(d.websiteUrl ?? '')
+          // Supplementary: the settings page still works if this 404s.
+          fetch('/api/merchant/agreement')
+            .then(r => (r.ok ? r.json() : null))
+            .then(a => {
+              if (!a?.accepted) return
+              setAgreementAccepted({ version: a.version, ...a.accepted })
+            })
+            .catch(() => {})
           setBinCount(d.binCount != null ? String(d.binCount) : '')
         }
         setBrandLoading(false)
@@ -1238,6 +1249,32 @@ export function SettingsTab({ storeId, stores }: { storeId: string | null; store
                 Members will see a &ldquo;Leave a Review&rdquo; button after submitting feedback.
               </p>
             </div>
+
+            {/* Your agreement — only for merchants who accepted in-app. Anyone
+                who joined earlier has their copy elsewhere, and a dead button
+                would be worse than no button. */}
+            {agreementAccepted && (
+              <div className="flex flex-col gap-2">
+                <label className="text-[13px] font-bold text-[#1A1A2E]">Your agreement</label>
+                <div className="flex items-center justify-between gap-3 rounded-xl bg-[#F5F5F8] px-4 py-3">
+                  <p className="text-[12px] text-[#5A5A72] font-medium">
+                    Merchant Agreement {agreementAccepted.version}
+                    <span className="block text-[11px] text-[#8E8EA8]">
+                      Accepted {agreementAccepted.acceptedAt.slice(0, 10)} by{' '}
+                      {agreementAccepted.signerName}, {agreementAccepted.signerTitle}
+                    </span>
+                  </p>
+                  {agreementAccepted.hasPdf && (
+                    <a
+                      href="/api/merchant/agreement/pdf"
+                      className="shrink-0 text-[12px] font-bold rounded-xl px-3 py-2 bg-white text-[#1A1A2E] border border-[#EBEBF2]"
+                    >
+                      Download PDF
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Store website — stored now, not shown to members yet. */}
             <div className="flex flex-col gap-2">

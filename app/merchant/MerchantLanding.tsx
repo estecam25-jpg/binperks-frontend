@@ -98,7 +98,7 @@ const BENEFITS: { lead: string; body: string }[] = [
 const FAQ: { q: string; a: string }[] = [
   {
     q: 'How long does setup take?',
-    a: 'Your store goes live as soon as you pay and sign the agreement. Your QR codes and '
+    a: 'Your store goes live as soon as you pay and accept the agreement, right in your browser. Your QR codes and '
      + 'marketing materials are generated automatically, ready to print on your office printer, '
      + 'so there’s nothing technical for you to do.',
   },

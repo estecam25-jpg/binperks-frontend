@@ -13,9 +13,10 @@
  * them over. Adding an item means adding it once, in `onboardingChecklist`,
  * and both screens move together.
  *
- * WHAT IS NOT HERE: the W-9. It is reviewed in admin and has its own status on
- * the merchant card, and the checklist covers it inside the DocuSeal item
- * ("Merchant Agreement + W-9 signed"), which is where a merchant actually
+ * WHAT IS NOT HERE: the W-9. Tax details are collected and verified by Stripe
+ * during payout setup, so there is no W-9 step in onboarding. The upload page
+ * and its admin review remain as a backup, with their own status on the
+ * merchant card, which is where a merchant actually
  * signs it.
  */
 
@@ -56,7 +57,7 @@ export interface OnboardingItem {
 export function onboardingChecklist(f: OnboardingFacts): OnboardingItem[] {
   return [
     // BinPerks sets these up.
-    { id: 'agreement_signed',  label: 'Merchant Agreement + W-9 signed (via DocuSeal)', completed: f.agreementSigned,              binPerks: true  },
+    { id: 'agreement_signed',  label: 'Merchant Agreement accepted',           completed: f.agreementSigned,              binPerks: true  },
     { id: 'store_provisioned', label: 'Store provisioned',                              completed: f.storeCount > 0,               binPerks: true  },
     { id: 'activated',         label: 'Merchant account activated',                     completed: f.billingStatus === 'active',   binPerks: true  },
 

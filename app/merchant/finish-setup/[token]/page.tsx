@@ -11,8 +11,8 @@
  * token that does not resolve.
  *
  * WHAT HAPPENS AFTER THE BUTTON is not this page's business. Stripe returns to
- * the ordinary thank-you page, which opens the DocuSeal session and forwards
- * to the ordinary signing page. This page exists only to replace the signup
+ * the ordinary thank-you page, which forwards to the ordinary in-app
+ * acceptance page. This page exists only to replace the signup
  * form the owner never filled in.
  */
 

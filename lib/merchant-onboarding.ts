@@ -419,9 +419,20 @@ export async function createMerchantFromCheckoutSession(
 
 // ── Step 3: the DocuSeal signing session ────────────────────────────────────
 
-/** The in-app signing page for a slug. */
-export function signPagePath(slug: string): string {
-  return `/merchant/signup/sign?session=${encodeURIComponent(slug)}`
+/**
+ * The in-app acceptance page.
+ *
+ * Takes the STRIPE CHECKOUT SESSION ID, not a DocuSeal slug: a merchant who
+ * has just paid has no sign-in yet, and that id is the credential their
+ * browser already holds. It is verified with Stripe on arrival.
+ *
+ * Called with no argument for a merchant who is already signed in — the
+ * dashboard gate sends them here and the API accepts their session instead.
+ */
+export function signPagePath(checkoutSessionId?: string | null): string {
+  return checkoutSessionId
+    ? `/merchant/signup/sign?session=${encodeURIComponent(checkoutSessionId)}`
+    : '/merchant/signup/sign'
 }
 
 /** The DocuSeal form the signing page embeds. */

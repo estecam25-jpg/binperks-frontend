@@ -122,8 +122,8 @@ function DashboardShell() {
     }
   }
 
-  // Paid, not signed: the agreement comes before the dashboard. Nothing is live
-  // yet and nothing here is theirs to manage until it is signed.
+  // Paid, not accepted: the agreement comes before the dashboard. Nothing is
+  // live yet and nothing here is theirs to manage until it is accepted.
   if (signGate !== undefined) {
     return (
       <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
@@ -132,7 +132,7 @@ function DashboardShell() {
           <img src="/icon.png" alt="BinPerks" className="h-16 w-16 object-contain" />
           <h1 className="font-['Coiny'] text-3xl text-white leading-tight">One last step</h1>
           <p className="text-[14px] text-white/75 font-medium leading-relaxed max-w-sm">
-            {companyName ? `${companyName}, your` : 'Your'} payment is in. Sign your BinPerks Merchant
+            {companyName ? `${companyName}, your` : 'Your'} payment is in. Accept your BinPerks Merchant
             Agreement and your dashboard opens right away.
           </p>
         </div>
@@ -140,7 +140,7 @@ function DashboardShell() {
           <div className="bg-white rounded-2xl shadow-xl px-5 py-6 flex flex-col gap-4 text-center">
             {signGate ? (
               <a href={signGate} className="w-full py-3.5 rounded-xl font-bold text-[14px] text-white bg-[#4A4B98]">
-                Sign your agreement →
+                Review and accept your agreement →
               </a>
             ) : (
               <>

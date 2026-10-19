@@ -77,7 +77,7 @@ function SignAgreementStep({ sessionId }: { sessionId: string | null }) {
         </div>
         <div className="flex-1">
           <p className="text-[15px] font-bold text-[#1A1A2E]">
-            {state === 'active' ? 'Agreement signed' : 'Next: sign your Merchant Agreement'}
+            {state === 'active' ? 'Agreement accepted' : 'Next: accept your Merchant Agreement'}
           </p>
           <p className="text-[12px] text-[#8E8EA8] font-medium">
             {state === 'active'
@@ -158,7 +158,7 @@ export default function ThankYouContent({
           {ownerFirstName ? `Welcome aboard, ${ownerFirstName}!` : "You're in!"}
         </h1>
         <p className="text-[14px] text-white/70 font-medium leading-relaxed max-w-sm">
-          Payment received. One more step: sign your Merchant Agreement and
+          Payment received. One more step: accept your Merchant Agreement and
           {storeName ? ` ${storeName}` : ' your store'} joins the BinPerks network.
         </p>
       </div>
@@ -176,7 +176,7 @@ export default function ThankYouContent({
             </div>
             <div>
               <p className="text-[14px] font-bold text-[#1A1A2E]">Payment confirmed</p>
-              <p className="text-[12px] text-[#8E8EA8] font-medium">Your account activates once your agreement is signed</p>
+              <p className="text-[12px] text-[#8E8EA8] font-medium">Your account activates once your agreement is accepted</p>
             </div>
           </div>
 
