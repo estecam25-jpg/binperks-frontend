@@ -13,6 +13,11 @@
  * they are not in network stats, they are not in the Merchants tab — see
  * lib/presetup for the full list of what the status excludes.
  *
+ * EDIT NEVER MOVES THE JOIN LINK. Everything on the card can be corrected
+ * before the visit - legal name, owner, email, phone, locations, address,
+ * website, logo, store message, and the store's display name - but the store
+ * key is fixed at creation, so QR codes already printed keep working.
+ *
  * DELETE IS HERE AND NOWHERE ELSE, and only while still pre-setup. Once an
  * owner has paid there is a Stripe subscription behind the row and once they
  * have signed there is an executed agreement; neither should be removable by
@@ -42,6 +47,11 @@ interface PresetupStore {
   websiteUrl: string | null
   storeKey: string | null
   address: string
+  street: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
+  storeMessage: string | null
   logoUrl: string | null
   finishSetupUrl: string | null
 }
@@ -49,6 +59,27 @@ interface PresetupStore {
 const EMPTY = {
   companyName: '', websiteUrl: '', ownerName: '', ownerEmail: '', ownerPhone: '',
   storeName: '', address: '', city: '', state: '', zip: '', locationCount: '1',
+}
+
+/** The edit form carries one field the create form does not: the store
+ *  message, which is usually written after the store has been visited. */
+type EditForm = typeof EMPTY & { storeMessage: string }
+
+function formFor(s: PresetupStore): EditForm {
+  return {
+    companyName:   s.companyName  ?? '',
+    websiteUrl:    s.websiteUrl   ?? '',
+    ownerName:     s.ownerName    ?? '',
+    ownerEmail:    s.ownerEmail   ?? '',
+    ownerPhone:    s.ownerPhone   ?? '',
+    storeName:     s.storeName    ?? '',
+    address:       s.street       ?? '',
+    city:          s.city         ?? '',
+    state:         s.state        ?? '',
+    zip:           s.zip          ?? '',
+    locationCount: String(s.locationCount ?? 1),
+    storeMessage:  s.storeMessage ?? '',
+  }
 }
 
 export default function PresetupStoresTab() {
@@ -60,6 +91,12 @@ export default function PresetupStoresTab() {
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState<string | null>(null)
   const [copied,  setCopied]  = useState<string | null>(null)
+
+  // Which card is open for editing, and the draft being typed into it. One at
+  // a time: two open forms would both be saving the same merchant.
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm,  setEditForm]  = useState<EditForm | null>(null)
+  const [editLogo,  setEditLogo]  = useState<File | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -97,6 +134,44 @@ export default function PresetupStoresTab() {
       await load()
     } catch {
       setError('Could not create the store.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function startEdit(s: PresetupStore) {
+    setEditingId(s.merchantId)
+    setEditForm(formFor(s))
+    setEditLogo(null)
+    setAdding(false)
+    setError(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null); setEditForm(null); setEditLogo(null); setError(null)
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (saving || !editingId || !editForm) return
+    setSaving(true); setError(null)
+
+    const body = new FormData()
+    body.append('merchantId', editingId)
+    for (const [k, v] of Object.entries(editForm)) body.append(k, v)
+    if (editLogo) body.append('logo', editLogo)
+
+    try {
+      const res  = await fetch('/api/admin/presetup-stores', { method: 'PATCH', body })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.message ?? data.error ?? 'Could not save the changes.')
+        return
+      }
+      cancelEdit()
+      await load()
+    } catch {
+      setError('Could not save the changes.')
     } finally {
       setSaving(false)
     }
@@ -278,12 +353,118 @@ export default function PresetupStoresTab() {
                                    bg-[#EBEBF2] text-[#1A1A2E] disabled:opacity-50">
                   {copied === s.merchantId ? 'Copied' : 'Copy finish-setup link'}
                 </button>
+                <button onClick={() => editingId === s.merchantId ? cancelEdit() : startEdit(s)}
+                        className="text-[12px] font-bold rounded-xl px-3.5 py-2.5
+                                   bg-[#EBEBF2] text-[#1A1A2E]">
+                  {editingId === s.merchantId ? 'Cancel' : 'Edit'}
+                </button>
                 <button onClick={() => remove(s)}
                         className="text-[12px] font-bold rounded-xl px-3.5 py-2.5
                                    bg-red-50 text-[#DA1212] hover:bg-red-100">
                   Delete
                 </button>
               </div>
+
+              {editingId === s.merchantId && editForm && (
+                <form onSubmit={saveEdit} className="w-full border-t border-[#EBEBF2] pt-4 flex flex-col gap-4">
+
+                  <Group title="Business">
+                    <Field label="Business legal name" required
+                           value={editForm.companyName}
+                           onChange={v => setEditForm(f => f && { ...f, companyName: v })}
+                           placeholder="XYZ Liquidation LLC" />
+                    <Field label="Store website"
+                           value={editForm.websiteUrl}
+                           onChange={v => setEditForm(f => f && { ...f, websiteUrl: v })}
+                           placeholder="acmebins.com"
+                           hint="Optional · saved as https://" />
+                  </Group>
+
+                  <Group title="Owner">
+                    <Field label="Owner name" required
+                           value={editForm.ownerName}
+                           onChange={v => setEditForm(f => f && { ...f, ownerName: v })}
+                           placeholder="Jane Doe" />
+                    <Field label="Owner email" required type="email"
+                           value={editForm.ownerEmail}
+                           onChange={v => setEditForm(f => f && { ...f, ownerEmail: v })}
+                           placeholder="owner@example.com" />
+                    <Field label="Owner phone"
+                           value={editForm.ownerPhone}
+                           onChange={v => setEditForm(f => f && { ...f, ownerPhone: v })}
+                           placeholder="8135551234" />
+                  </Group>
+
+                  <Group title="Store">
+                    <Field label="Store name" required
+                           value={editForm.storeName}
+                           onChange={v => setEditForm(f => f && { ...f, storeName: v })}
+                           placeholder="Acme Bins Downtown" />
+                    <Field label="Street address"
+                           value={editForm.address}
+                           onChange={v => setEditForm(f => f && { ...f, address: v })}
+                           placeholder="123 Main St" />
+                    <Field label="City" required
+                           value={editForm.city}
+                           onChange={v => setEditForm(f => f && { ...f, city: v })}
+                           placeholder="Tampa" />
+                    <Field label="State" required maxLength={2}
+                           value={editForm.state}
+                           onChange={v => setEditForm(f => f && { ...f, state: v.toUpperCase() })}
+                           placeholder="FL" />
+                    <Field label="ZIP"
+                           value={editForm.zip}
+                           onChange={v => setEditForm(f => f && { ...f, zip: v })}
+                           placeholder="33601" />
+                    <Field label="Locations" type="number"
+                           value={editForm.locationCount}
+                           onChange={v => setEditForm(f => f && { ...f, locationCount: v })}
+                           hint="Sets the additional-location charge at checkout" />
+                    <Field label="Store message"
+                           value={editForm.storeMessage}
+                           onChange={v => setEditForm(f => f && { ...f, storeMessage: v })}
+                           placeholder="New bins every Friday"
+                           hint="Shown on the store card once the store is live" />
+                  </Group>
+
+                  {/* The one thing editing deliberately cannot change. */}
+                  <div className="bg-[#F5F5F8] rounded-xl px-4 py-3">
+                    <p className="text-[11px] font-bold text-[#1A1A2E]">
+                      QR codes and join links stay the same.
+                    </p>
+                    <p className="text-[11px] text-[#8E8EA8] mt-0.5">
+                      Renaming the store changes what members see, not its link.
+                      This store stays at{' '}
+                      <span className="font-mono text-[#1A1A2E]">/join/{s.storeKey}</span>,
+                      so anything already printed keeps working.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold tracking-wide uppercase text-[#8E8EA8] mb-1">
+                      Replace store logo
+                    </label>
+                    <input type="file" accept="image/png,image/jpeg,image/webp"
+                           onChange={e => setEditLogo(e.target.files?.[0] ?? null)}
+                           className="text-[12px] text-[#5A5A72]" />
+                    <p className="text-[10px] text-[#8E8EA8] mt-1">
+                      PNG, JPEG or WebP · up to 5 MB · leave empty to keep the current logo
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button type="submit" disabled={saving}
+                            className="text-white text-[13px] font-bold rounded-xl px-5 py-3 disabled:opacity-60"
+                            style={{ background: BLUE }}>
+                      {saving ? 'Saving…' : 'Save changes'}
+                    </button>
+                    <button type="button" onClick={cancelEdit}
+                            className="text-[13px] font-bold rounded-xl px-5 py-3 bg-[#EBEBF2] text-[#1A1A2E]">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           ))}
         </div>
