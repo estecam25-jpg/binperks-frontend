@@ -2,22 +2,33 @@
  * Benny, the BinPerks mascot.
  *
  * ── SWAPPING THE ARTWORK IS ONE CHANGE, IN THIS FILE ───────────────────────
- * Drop the image into `public/` and set BENNY_IMAGE_SRC to its path. Nothing
- * else moves: every page that shows Benny renders <BennyMascot />, so the path
- * is written down once.
+ * Drop the image into `public/benny/` and set BENNY_IMAGE_SRC to its path.
+ * Nothing else moves: every page that shows Benny renders <BennyMascot />, so
+ * the path is written down once.
  *
- *     export const BENNY_IMAGE_SRC: string | null = '/benny.png'
+ * ── WHY THE WEBP AND NOT THE PNG ───────────────────────────────────────────
+ * The delivered artwork is 1254x1254 and 1.9 MB, which is a lot of bytes for
+ * something drawn at 150px above the fold. public/benny/benny-hero.webp is the
+ * same picture at 800x800 and 101 KB — still over 5x the rendered size, so it
+ * stays sharp on a 3x phone screen. The original PNG is kept beside it as the
+ * master; nothing in the app points at it.
  *
- * While it is null the component draws a clearly marked placeholder rather
- * than a broken image. A missing file that renders as a grey box with the word
- * "placeholder" on it is obvious in review; a 404'd <img> looks like a bug and
- * gets shipped.
+ * ── THE ARTWORK IS AN OPAQUE SQUARE SCENE, NOT A CUT-OUT ───────────────────
+ * Benny is painted into a bin-store background, so there is no transparency to
+ * let the hero's indigo show through. Dropped in flat it would read as a
+ * pasted screenshot with a hard square edge. The frame is therefore clipped to
+ * the same rounded-3xl the placeholder used, which keeps the footprint
+ * identical and makes it read as a framed picture.
  *
- * The frame keeps its size either way, so dropping the real artwork in cannot
- * reflow the hero around it.
+ * Composition note for anyone changing the shape: Benny's face and phone sit
+ * in the upper middle and the bin fills the bottom. Keep it square. If it ever
+ * has to be cropped to a non-square box, bias the crop upward.
  */
 
-export const BENNY_IMAGE_SRC: string | null = null
+import Image from 'next/image'
+
+/** The optimized copy. The 1.9 MB PNG master is public/benny/benny-hero.png. */
+export const BENNY_IMAGE_SRC: string | null = '/benny/benny-hero.webp'
 
 /** Alt text for the real artwork, kept beside the path it describes. */
 const BENNY_ALT = 'Benny, the BinPerks mascot'
@@ -25,20 +36,25 @@ const BENNY_ALT = 'Benny, the BinPerks mascot'
 export default function BennyMascot({
   className = '',
   size = 160,
+  /** Above the fold on the homepage, so it is eager by default. */
+  priority = true,
 }: {
   className?: string
   /** Rendered width and height in pixels. The artwork is square. */
   size?: number
+  priority?: boolean
 }) {
   if (BENNY_IMAGE_SRC) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
+      <Image
         src={BENNY_IMAGE_SRC}
         alt={BENNY_ALT}
         width={size}
         height={size}
-        className={`object-contain ${className}`}
+        priority={priority}
+        // Width AND height are fixed and the source is 1:1, so the box is
+        // reserved before the bytes arrive — nothing reflows around it.
+        className={`rounded-3xl object-cover ${className}`}
         style={{ width: size, height: size }}
       />
     )
