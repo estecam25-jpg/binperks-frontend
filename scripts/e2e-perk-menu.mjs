@@ -20,7 +20,7 @@ const env = Object.fromEntries(
     .map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()] }),
 )
 
-const BASE = 'http://127.0.0.1:3000'
+const BASE = process.env.E2E_BASE || 'http://127.0.0.1:3000'
 const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 })

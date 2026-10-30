@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import bcrypt from 'bcryptjs'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { postToGhl, memberOptedIntoSms } from '@/lib/ghl-webhook'
 import { createAlert, couponReadyAlert, tierUpAlert } from '@/lib/member-alerts'
@@ -20,7 +19,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const supabase = await createServerSupabaseClient()
+    // SERVICE ROLE THROUGHOUT, deliberately.
+    //
+    // This route used the cookie-backed client for its member, visit and
+    // reward work. A cashier has no Supabase session, so those calls ran as
+    // anon and only succeeded because members/visits/rewards each carried a
+    // blanket USING (true) policy -- the same policy that let anyone holding
+    // the publishable key read every member. Those policies are gone, so the
+    // route now does its own reads and writes with the admin client.
+    //
+    // That is not a loosening: the PIN is re-verified below on every single
+    // call, which is a stronger check than RLS was ever applying here.
     const admin    = createAdminSupabaseClient()
     const today    = new Date().toISOString().split('T')[0]
 
@@ -28,7 +37,7 @@ export async function POST(req: NextRequest) {
     //    Never trust the merchantId supplied by the client. Re-checking the PIN
     //    server-side on every stamp prevents a stolen cashier session from being
     //    used if the tablet is compromised after login.
-    const { data: cashier, error: cashierError } = await supabase
+    const { data: cashier, error: cashierError } = await admin
       .from('staff_users')
       .select('merchant_id, pin')
       .eq('id', cashierId)
@@ -97,7 +106,7 @@ export async function POST(req: NextRequest) {
     //
     //     origin_store_id / origin_merchant_id are read for the activity_events
     //     dual-write (step 5a) — permanent attribution, never recomputed here.
-    const { data: member, error: memberError } = await supabase
+    const { data: member, error: memberError } = await admin
       .from('members')
       .select('total_stamps, cycle_stamps, vip_progression_stamps, coupon_due, subscription_status, first_name, last_name, email, phone, sms_opt_in, status, is_blacklisted, origin_store_id, origin_merchant_id')
       .eq('id', memberId)
@@ -128,7 +137,7 @@ export async function POST(req: NextRequest) {
     )
 
     // 1. Check for duplicate visit today
-    const { data: existingVisit } = await supabase
+    const { data: existingVisit } = await admin
       .from('visits')
       .select('id')
       .eq('member_id', memberId)
@@ -174,7 +183,7 @@ export async function POST(req: NextRequest) {
       : tierBefore.multiplier
 
     // 4. Insert visit row
-    const { error: visitError } = await supabase
+    const { error: visitError } = await admin
       .from('visits')
       .insert({
         member_id:  memberId,
@@ -226,7 +235,7 @@ export async function POST(req: NextRequest) {
       console.error(
         `[stamp] member ${memberId} has no origin attribution — cannot record activity`,
       )
-      await supabase.from('visits')
+      await admin.from('visits')
         .delete()
         .eq('member_id', memberId)
         .eq('store_id', storeId)
@@ -253,7 +262,7 @@ export async function POST(req: NextRequest) {
 
     if (activityError) {
       console.error('[stamp] activity_events insert failed:', activityError)
-      await supabase.from('visits')
+      await admin.from('visits')
         .delete()
         .eq('member_id', memberId)
         .eq('store_id', storeId)
@@ -296,7 +305,7 @@ export async function POST(req: NextRequest) {
       ? (nextRung.name.toLowerCase() as 'silver' | 'gold' | 'diamond')
       : null
 
-    await supabase
+    await admin
       .from('members')
       .update({
         total_stamps:           newTotalStamps,
@@ -318,7 +327,7 @@ export async function POST(req: NextRequest) {
 
     if (couponIssued) {
       const earnedAt = new Date().toISOString()
-      await supabase.from('rewards').insert(
+      await admin.from('rewards').insert(
         Array.from({ length: couponsEarned }, () => ({
           member_id:             memberId,
           merchant_id:           merchantId,
@@ -336,7 +345,7 @@ export async function POST(req: NextRequest) {
           funding_merchant_id:   origin.originMerchantId,
         })),
       )
-      await supabase
+      await admin
         .from('members')
         .update({ coupon_due: true })
         .eq('id', memberId)
@@ -417,7 +426,7 @@ export async function POST(req: NextRequest) {
       // member holding two coupons keeps the flag after spending one.
       const stillWaiting = spendable.filter(r => r.id !== toRedeem?.id).length > 0
       if (!stillWaiting) {
-        await supabase
+        await admin
           .from('members')
           .update({ coupon_due: false })
           .eq('id', memberId)

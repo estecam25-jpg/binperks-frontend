@@ -28,7 +28,7 @@ const env = Object.fromEntries(
     .map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()] }),
 )
 
-const BASE  = 'http://127.0.0.1:3000'
+const BASE  = process.env.E2E_BASE || 'http://127.0.0.1:3000'
 const STATE = 'scripts/.e2e-presetup-state.json'
 // Must be on ADMIN_EMAIL_ALLOWLIST in lib/admin-emails, or every admin route
 // answers 403. generateLink CREATES the user if it does not exist, so this

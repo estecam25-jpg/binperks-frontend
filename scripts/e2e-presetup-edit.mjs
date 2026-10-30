@@ -32,7 +32,7 @@ const env = Object.fromEntries(
     .map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()] }),
 )
 
-const BASE = 'http://127.0.0.1:3000'
+const BASE = process.env.E2E_BASE || 'http://127.0.0.1:3000'
 // Must already exist and be on the admin allow-list — generateLink would
 // otherwise create the account rather than sign into it.
 const ADMIN_EMAIL = 'binperksnetwork@gmail.com'

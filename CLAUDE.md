@@ -48,6 +48,7 @@
 - **Transactional email:** Resend (member OTP email, merchant activation alert to support@binperks.com)
 - **Deployment:** Vercel (frontend), Supabase (backend/DB)
 - **IDE:** VS Code with Claude Code extension on Windows (D: drive). Keep Git Bash open while Claude Code runs.
+- **Git auth:** HTTPS + Git Credential Manager (`credential.helper = manager`), credential in Windows Credential Manager `git:https://github.com` (browser/OAuth sign-in, not a PAT). Old classic token "BinPerks Claude" deleted Oct 30, 2026 (never used). No gh CLI, no SSH, no token in remote URL. If a push ever fails with 403: delete that Credential Manager entry and push again — GCM opens a GitHub browser sign-in.
 
 ---
 
@@ -260,7 +261,7 @@ Lets Esteban build a store **before** the owner signs up, then finish signup **a
 - Funder inactive/terminated/short → `coupon_debit_binperks`: BinPerks pays the honoring store; amount recorded as owed by the funder. Collection happens outside the system (Esteban invoices).
 - Month-end batch: admin-run at `/api/admin/settlement/calculate` (nets the new entry types, carries shortfalls as negative balance). **Always settles the PREVIOUS calendar month** (button label shows the month). Approve moves real money (`STRIPE_TRANSFERS_ENABLED=true`) and locks the batch.
 - As of Oct 19, 2026: `settlement_ledger`, `commission_decisions`, batches, statements all **empty** (no VIP payments since Oct 12; the 11 redeemed coupons pre-date `funding_store_id`). Any run today = $0.00 / 0 merchants.
-- ⚠️ Known gap: a statement that fails transfer (e.g. `no_connect_account`) is NOT carried forward and the locked batch can't be re-approved → money stranded. Fix before real money flows.
+- Failed-transfer fix (commit `99f1d32`, built Oct 30, 38/38 tests; pending push): unpaid net on a failed statement carries forward as a credit (`carried_forward_amount`; negative `negative_balance` = credit); admin **Retry transfer** (`/api/admin/settlement/retry-transfer`) pays one failed statement without reopening the batch, CAS claim + Stripe idempotency key, reverses the credit on success. Successful-transfer leg untested (no payable test Connect account; Custom accounts blocked by Connect platform profile).
 - Merchant payout setup: merchant dashboard → 🧾 Settlement tab → **Connect Bank Account** (Stripe Express hosted onboarding). Idempotent; `payouts_enabled` re-checked live at transfer time.
 - Merchant dashboard: "reimbursed to you" / "charged to you" totals only, no names.
 - Admin: monthly settlement view + "Owed to BinPerks" by merchant. (Generated invoice document not built — pinned.)
@@ -604,7 +605,9 @@ Never put promo codes in any legal document.
 - **Oct 30, 2026:** `perk_menu` had RLS off since Oct 18 (anon had full write grants). Fixed with migration `enable_rls_perk_menu` (RLS on, no policies, SELECT/INSERT/UPDATE/DELETE revoked from anon + authenticated). Logs Oct 18–30: zero browser-key requests; data unchanged (20 rows). No personal data in that table. Advisor ERROR cleared.
 - **Rule:** every new table gets RLS ON in the same migration. Default = no policies (service-role only).
 - All other 42 public tables have RLS on but still carry Supabase's default anon/authenticated write grants.
-- Stamp tool reads `members`, `visits`, `rewards` from the browser with the anon key (relies on RLS policies) — audit pending.
+- 🔴 **Oct 30 audit:** `members`, `visits`, `rewards` each have a blanket policy for role `public` with `USING (true)` → anyone with the publishable key (ships in every page) can READ all member names/phones/emails/stamps, all visits and rewards, and INSERT/UPDATE members and rewards (DELETE blocked). Cause: the stamp tool reads these from the browser; cashiers have no Supabase session (PIN in browser storage, re-verified server-side only on award) so to Postgres they're `anon`. Fix: move stamp-tool reads into server routes that verify the cashier PIN (like the award route), return only the member being served, then drop the three `USING (true)` policies.
+- 🔴 `D:\BinPerks\.env` holds the SAME live production Supabase secret key (verified by hash Oct 30). Delete file + rotate key (update Vercel + `frontend\.env.local`).
+- Function `search_path` pinned to `public` on check_coupon_due, clear_coupon_due, increment_total_stamps, claim_webhook_event (migration `fix_function_search_path`, Oct 30).
 - Advisor WARNs: mutable `search_path` on `check_coupon_due`, `clear_coupon_due`, `increment_total_stamps`, `claim_webhook_event`; leaked-password protection off.
 
 ## Local Folder (`D:\BinPerks`) — audited Oct 19
@@ -625,12 +628,12 @@ Never put promo codes in any legal document.
 
 ## Open To-Do (as of Oct 30, 2026)
 
-1. Security batch 2: audit stamp-tool browser access to members/visits/rewards (move to server routes or tighten RLS), revoke default anon/authenticated write grants on all tables, fix 4 functions' search_path.
-2. GitHub classic token "BinPerks Claude": GitHub shows it **"Never used"** (Oct 30) — Claude Code pushes via another login (likely Git Credential Manager). Delete it / let it expire. Confirm pushes still work (git ls-remote + git push --dry-run).
+1. 🔴 **TODAY — member data exposure:** run remaining e2e suites + push `99f1d32`; move stamp-tool browser reads to PIN-checked server routes; drop the `USING (true)` policies on members/visits/rewards; check logs for outside anon reads of those tables.
+2. 🔴 **TODAY — rotate the Supabase secret key** (same key is in `D:\BinPerks\.env`), then delete that file.
 3. Decide mobile hero: leave "Join free" just below the fold, or shrink Benny on mobile 88vw → ~72vw.
 4. Review binperks.com on phone (live Oct 29). If the old GHL page shows, it's local cache: private window / mobile data / `ipconfig /flushdns`. Send a test email to and from the binperks.com address.
 5. Liquidation Motivation LLC: Stripe Connect payout setup (merchant dashboard → 🧾 Settlement → Connect Bank Account) — Esteban texts Thomas.
-6. Cleanup + fixes batch (approved Oct 19): D:\BinPerks folder cleanup/archive, delete root `.env` (check if key = production key; rotate together if so), settlement failed-statement carry-forward + retry, copy fixes (DocuSeal/"sign"/"loyalty program"/"quiet"), payout item on onboarding checklist.
+6. D:\BinPerks folder cleanup/archive (approved Oct 19 list; do while present). Settlement fix, copy fixes, payout checklist item = built in `99f1d32` (Oct 30).
 7. Ask accountant to confirm Stripe's 1099 filing covers Merchant Share (which form), then turn on Stripe Connect tax reporting.
 8. Check the EstaBins inbox for the decline email on the "500 FB shares" submission — confirms perk emails work.
 9. Delete the test print-kit email.

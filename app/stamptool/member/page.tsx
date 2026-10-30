@@ -2,13 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import TierBadge from '@/components/stamp/TierBadge'
 import StampProgress from '@/components/stamp/StampProgress'
 import { cashierSession, storeSession, foundMemberSession, type FoundMember } from '@/lib/stamp-session'
 import { COUPON_CYCLE, tierFor, cycleRemaining } from '@/lib/tiers'
-import { isSpendable } from '@/lib/coupon-settlement'
 
 export default function MemberViewPage() {
   const router = useRouter()
@@ -26,58 +24,35 @@ export default function MemberViewPage() {
     refreshMember(cached, c.storeId)
   }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function refreshMember(cached: FoundMember, storeId: string) {
+  async function refreshMember(cached: FoundMember, _storeId: string) {
     setRefreshing(true)
-    const supabase = createClient()
 
-    const [{ data: fresh }, todayVisitResult] = await Promise.all([
-      supabase
-        .from('members')
-        // subscription_status is refetched rather than taken from the cached
-        // lookup: it decides the tier and coupon value, and a member who
-        // upgraded to VIP since the lookup should see that here.
-        .select('total_stamps, cycle_stamps, vip_progression_stamps, coupon_due, is_blacklisted, subscription_status')
-        .eq('id', cached.id)
-        .single(),
-      supabase
-        .from('visits')
-        .select('id')
-        .eq('member_id', cached.id)
-        .eq('store_id', storeId)
-        .eq('date', new Date().toISOString().split('T')[0])
-        .single(),
-    ])
+    // Re-read through the server, behind the cashier's PIN — see the note in
+    // app/api/stamp/member. Everything is refetched rather than trusted from
+    // the cached lookup: subscription_status decides the tier and coupon
+    // value, and the coupon itself may have expired or been spent at another
+    // till since the lookup screen.
+    //
+    // _storeId is ignored: the route uses the cashier's own store.
+    let payload: { found: boolean; reason?: string; member?: FoundMember }
+    try {
+      const c = cashierSession.get()
+      if (!c) { router.replace('/stamptool'); return }
+      const res = await fetch('/api/stamp/member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cashierId: c.id, pin: c.pin, memberId: cached.id }),
+      })
+      if (res.status === 401) { router.replace('/stamptool'); return }
+      payload = await res.json()
+    } catch {
+      router.replace('/stamptool/lookup')
+      return
+    }
 
-    if (!fresh) { router.replace('/stamptool/lookup'); return }
-    if (fresh.is_blacklisted) { router.replace('/stamptool/lookup'); return }
+    if (!payload.found || !payload.member) { router.replace('/stamptool/lookup'); return }
 
-    // Tier from VIP progression, never the lifetime count — see lib/tiers.
-    const tier = tierFor({
-      vipProgressionStamps: fresh.vip_progression_stamps ?? 0,
-      subscriptionStatus:   fresh.subscription_status,
-    })
-
-    // Re-read the coupon rather than trusting the cached value: it may have
-    // expired, or been spent at another till, since the lookup screen.
-    const { data: openRewards } = await supabase
-      .from('rewards')
-      .select('id, coupon_value, status, expires_at')
-      .eq('member_id', cached.id)
-      .eq('status', 'earned')
-      .order('earned_at', { ascending: true })
-
-    const nextCoupon = (openRewards ?? []).find(r => isSpendable(r as { status: string; expires_at?: string | null }))
-
-    setMember({
-      ...cached,
-      totalStamps: fresh.total_stamps,
-      cycleStamps: fresh.cycle_stamps ?? 0,
-      vipProgressionStamps: fresh.vip_progression_stamps ?? 0,
-      subscriptionStatus: fresh.subscription_status,
-      couponDue: !!nextCoupon,
-      couponValue: nextCoupon ? Number(nextCoupon.coupon_value) : tier.couponValue,
-      alreadyStampedToday: !!todayVisitResult.data,
-    })
+    setMember({ ...cached, ...payload.member })
     setRefreshing(false)
   }
 

@@ -47,7 +47,7 @@ const env = Object.fromEntries(
     .map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()] }),
 )
 
-const BASE  = 'http://127.0.0.1:3000'
+const BASE  = process.env.E2E_BASE || 'http://127.0.0.1:3000'
 const ADMIN_EMAIL = 'binperksnetwork@gmail.com'
 
 if (!env.STRIPE_SECRET_KEY?.startsWith('sk_test')) {

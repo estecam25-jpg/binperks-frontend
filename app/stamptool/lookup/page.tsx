@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
 import StoreHeader from '@/components/stamp/StoreHeader'
 import TierBadge from '@/components/stamp/TierBadge'
 import {
@@ -14,8 +13,6 @@ import {
   type FoundMember,
   type RecentLookup,
 } from '@/lib/stamp-session'
-import { tierFor } from '@/lib/tiers'
-import { isSpendable } from '@/lib/coupon-settlement'
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 10)
@@ -83,85 +80,43 @@ export default function LookupPage() {
     const c = cashierSession.get()
     if (!c) { router.replace(`/stamptool/${storeSession.get()?.storeKey ?? ''}`); return }
 
-    const supabase = createClient()
-
-    // Phone and active status ONLY — deliberately not scoped to this merchant.
+    // ONE server call, behind the cashier's PIN.
     //
-    // A BinPerks membership belongs to the network, not to the store that
-    // happened to enrol the member. Origin Store decides who receives the
-    // commission and nothing else; it has no bearing on where stamps can be
-    // earned. Filtering by merchant_id here made every member invisible to
-    // every store except their own, which is the opposite of a network.
+    // This used to be three queries straight from the tablet against members,
+    // visits and rewards. Cashiers have no Supabase session, so those ran as
+    // `anon` and only worked because each table carried a blanket
+    // `USING (true)` policy — which applied to everyone, not just tablets in
+    // shops. /api/stamp/member does the same work server-side, verifies the
+    // PIN the way the award route does, and returns exactly one member.
     //
-    // Not .single(): the uniqueness index on members is (phone, merchant_id),
-    // so the same phone can legitimately exist under two merchants today.
-    // .single() errors on more than one row, and the cashier would be told
-    // "not found" about a member who in fact exists twice. Take the earliest
-    // enrolment — the one whose Origin Store attribution is the real one — and
-    // log the collision so the duplicate can be merged.
-    const { data: matches } = await supabase
-      .from('members')
-      .select('id, first_name, last_name, phone, total_stamps, cycle_stamps, vip_progression_stamps, subscription_status, coupon_due, is_blacklisted')
-      .eq('phone', digits)
-      .eq('status', 'active')
-      .order('created_at', { ascending: true })
-      .limit(2)
-
-    const member = matches?.[0]
-    if (!member) { setLookupState('not_found'); return }
-
-    if (matches!.length > 1) {
-      console.warn(
-        `[stamptool] phone ${digits} matches more than one active member — ` +
-        'stamping the earliest enrolment. These memberships need merging.',
-      )
+    // The store is NOT sent: the route uses the cashier's own store_id, so a
+    // tampered tablet cannot ask about a different shop's visit history.
+    let payload: { found: boolean; reason?: string; member?: FoundMember }
+    try {
+      const res = await fetch('/api/stamp/member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cashierId: c.id, pin: c.pin, phone: digits }),
+      })
+      if (res.status === 401) {
+        // The PIN stored on this tablet is no longer good — send them back to
+        // the till login rather than showing an empty result.
+        router.replace(`/stamptool/${storeSession.get()?.storeKey ?? ''}`)
+        return
+      }
+      payload = await res.json()
+    } catch {
+      setLookupState('not_found')
+      return
     }
 
-    if (member.is_blacklisted) { setLookupState('inactive'); return }
-
-    const today = new Date().toISOString().split('T')[0]
-    const { data: todayVisit } = await supabase
-      .from('visits')
-      .select('id')
-      .eq('member_id', member.id)
-      .eq('store_id', c.storeId)
-      .eq('date', today)
-      .single()
-
-    // Tier from VIP progression, never the lifetime count: a free member is
-    // Starter with a $5 coupon however many stamps they have, and stamps
-    // earned while free never promote anyone.
-    const tier = tierFor({
-      vipProgressionStamps: member.vip_progression_stamps ?? 0,
-      subscriptionStatus:   member.subscription_status,
-    })
-
-    // THE COUPON IN THEIR HAND, not the one their tier would earn. A $2
-    // reactivation coupon is worth $2 however Gold the member is, and reading
-    // the tier value here would have the cashier announce the wrong amount.
-    const { data: openRewards } = await supabase
-      .from('rewards')
-      .select('id, coupon_value, status, expires_at')
-      .eq('member_id', member.id)
-      .eq('status', 'earned')
-      .order('earned_at', { ascending: true })
-
-    const nextCoupon = (openRewards ?? []).find(r => isSpendable(r as { status: string; expires_at?: string | null }))
-
-    const found: FoundMember = {
-      id: member.id,
-      firstName: member.first_name,
-      lastName: member.last_name,
-      phone: digits,
-      totalStamps: member.total_stamps,
-      cycleStamps: member.cycle_stamps ?? 0,
-      vipProgressionStamps: member.vip_progression_stamps ?? 0,
-      subscriptionStatus: member.subscription_status,
-      couponDue: !!nextCoupon,
-      couponValue: nextCoupon ? Number(nextCoupon.coupon_value) : tier.couponValue,
-      isBlacklisted: false,
-      alreadyStampedToday: !!todayVisit,
+    if (!payload.found || !payload.member) {
+      setLookupState(payload.reason === 'inactive' ? 'inactive' : 'not_found')
+      return
     }
+
+    // phone as dialled, so the screen matches what the cashier typed
+    const found: FoundMember = { ...payload.member, phone: digits }
 
     setFoundMember(found)
     setLookupState('found')
