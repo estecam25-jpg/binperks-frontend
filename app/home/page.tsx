@@ -120,44 +120,74 @@ export default async function MemberHomePage() {
     <div className="min-h-dvh flex flex-col bg-[#F5F5F8]">
 
       {/* ── 1. Hero ──────────────────────────────────────────────────────── */}
-      <header className="bg-[#4A4B98] px-6 pt-14 pb-24 flex flex-col items-center gap-6 text-center">
-        <div className="flex flex-col items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon.png" alt="BinPerks" className="h-20 w-20 object-contain" />
-          <BennyMascot size={150} className="mt-1" />
+      {/*
+        One Benny, two layouts.
+
+        Up to lg the hero is a single centred column: logo, Benny, headline,
+        subtext, buttons. From lg it is two columns — all the words on the
+        left, left-aligned, with Benny beside them.
+
+        The left column's wrapper is `contents` below lg, which dissolves it so
+        the logo and the text block become children of the hero flex row
+        directly. That is what lets Benny sit BETWEEN the logo and the headline
+        on a phone while still being a sibling column on a desktop, without
+        rendering the image twice and making screen readers announce two
+        Bennys.
+      */}
+      <header className="bg-[#4A4B98] px-6 pt-14 pb-24">
+        {/*
+          No width cap below lg, exactly as before: every child already carries
+          its own max-width (the headline and subtext max-w-sm, the buttons
+          max-w-xs sm:max-w-md) and centres itself. Capping the wrapper instead
+          would be narrower than Benny at tablet, which pushes him off-centre
+          and clips the buttons below the width they ask for.
+        */}
+        <div className="mx-auto w-full flex flex-col items-center gap-6
+                        lg:max-w-6xl lg:flex-row lg:items-center lg:justify-between lg:gap-14">
+
+          <div className="contents lg:flex lg:flex-col lg:items-start lg:gap-6 lg:flex-1 lg:min-w-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icon.png" alt="BinPerks"
+                 className="order-1 h-20 w-20 object-contain lg:order-none" />
+
+            <div className="order-3 flex flex-col items-center gap-6 text-center
+                            lg:order-none lg:items-start lg:text-left lg:gap-6 lg:w-full">
+              <h1 className="font-['Coiny'] text-[32px] leading-tight text-white max-w-sm lg:text-[44px] lg:max-w-none">
+                Earn rewards at your favorite bin stores.
+              </h1>
+
+              <p className="text-[16px] font-semibold text-white/80 leading-relaxed max-w-sm lg:max-w-md">
+                A stamp every time you shop. A coupon every {COUPON_CYCLE} stamps.
+                Free forever, at every participating store.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs sm:max-w-md">
+                <a
+                  href={MEMBER_APP_ORIGIN}
+                  className="flex-1 px-8 py-4 rounded-2xl font-bold text-[17px] font-['Montserrat']
+                             tracking-wide bg-[#FFB217] text-[#1A1A2E] shadow-lg text-center
+                             active:scale-[0.97] transition-all"
+                >
+                  Join free
+                </a>
+                <a
+                  href={MEMBER_APP_ORIGIN}
+                  className="flex-1 px-8 py-4 rounded-2xl font-bold text-[17px] font-['Montserrat']
+                             tracking-wide bg-white/10 text-white border border-white/25 text-center
+                             active:scale-[0.97] transition-all"
+                >
+                  Sign in
+                </a>
+              </div>
+
+              <p className="text-[12px] text-white/45 font-medium">
+                No card, no app to download. Your phone number is your membership.
+              </p>
+            </div>
+          </div>
+
+          <BennyMascot className="order-2 lg:order-none" />
         </div>
-
-        <h1 className="font-['Coiny'] text-[32px] leading-tight text-white max-w-sm">
-          Earn rewards at your favorite bin stores.
-        </h1>
-
-        <p className="text-[16px] font-semibold text-white/80 leading-relaxed max-w-sm">
-          A stamp every time you shop. A coupon every {COUPON_CYCLE} stamps.
-          Free forever, at every participating store.
-        </p>
-
-        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs sm:max-w-md">
-          <a
-            href={MEMBER_APP_ORIGIN}
-            className="flex-1 px-8 py-4 rounded-2xl font-bold text-[17px] font-['Montserrat']
-                       tracking-wide bg-[#FFB217] text-[#1A1A2E] shadow-lg
-                       active:scale-[0.97] transition-all"
-          >
-            Join free
-          </a>
-          <a
-            href={MEMBER_APP_ORIGIN}
-            className="flex-1 px-8 py-4 rounded-2xl font-bold text-[17px] font-['Montserrat']
-                       tracking-wide bg-white/10 text-white border border-white/25
-                       active:scale-[0.97] transition-all"
-          >
-            Sign in
-          </a>
-        </div>
-
-        <p className="text-[12px] text-white/45 font-medium">
-          No card, no app to download. Your phone number is your membership.
-        </p>
       </header>
 
       <main className="flex-1 flex flex-col items-center px-4 -mt-12 pb-16 gap-8 max-w-lg mx-auto w-full">
