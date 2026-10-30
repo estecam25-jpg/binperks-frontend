@@ -53,7 +53,7 @@ export default function FinishSetupStart({
       }
       setError(
         data.error === 'already_started'
-          ? 'This store has already been set up. Check your email for the signing link.'
+          ? 'This store has already been set up. Sign in at merchant.binperks.com to accept your agreement, or contact BinPerks support.'
           : data.error === 'not_configured'
             ? 'Checkout is not configured. Contact BinPerks support.'
             : 'This link is no longer valid. Contact BinPerks support.',
@@ -73,7 +73,7 @@ export default function FinishSetupStart({
         </h1>
         <p className="text-[14px] text-[#5A5A72] leading-relaxed mt-2">
           {state === 'started'
-            ? 'This store has already started setup. Check your email for the link to sign your agreement, or contact BinPerks support.'
+            ? 'This store has already started setup. Sign in at merchant.binperks.com to accept your agreement, or contact BinPerks support.'
             : 'This setup link is no longer valid. It may have already been used, or the store may have been removed. Contact BinPerks support and we will send you a new one.'}
         </p>
         <p className="text-[13px] text-[#8E8EA8] mt-4">
@@ -121,7 +121,7 @@ export default function FinishSetupStart({
 
       <p className="text-[11px] text-[#8E8EA8] text-center mt-4 leading-snug">
         Step 1 of 2 · After payment you will review and accept the Merchant Agreement.
-        Your store goes live the moment you sign.
+        Your store goes live the moment you accept it.
       </p>
     </Shell>
   )

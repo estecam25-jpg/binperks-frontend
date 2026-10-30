@@ -187,6 +187,16 @@ export async function POST(req: NextRequest) {
     // would sit stuck rather than reaching the merchant.
     try {
       const account = await stripe.accounts.retrieve(destination)
+      // Already talking to Stripe about this account, so keep the checklist's
+      // cached copy honest for free. See merchants.payouts_enabled.
+      await admin
+        .from('merchants')
+        .update({
+          payouts_enabled:            account.payouts_enabled === true,
+          payouts_enabled_checked_at: new Date().toISOString(),
+        })
+        .eq('id', s.merchant_id)
+
       if (!account.payouts_enabled) {
         console.warn(`[settlement/transfer] statement=${s.id} merchant=${s.merchant_id} FAILED — payouts_enabled false`)
         await markFailed(s.id, 'payouts_disabled')

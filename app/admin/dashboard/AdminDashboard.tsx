@@ -101,6 +101,9 @@ interface SettlementStatement {
   // Stripe Connect payout state
   hasConnectAccount: boolean
   stripeTransferId: string | null
+  /** Unpaid net pushed to the merchant's balance as a credit after a failed
+   *  transfer. Reversed when a retry succeeds. */
+  carriedForwardAmount: number
 }
 interface PayoutSummary {
   total: number; paid: number; failed: number
@@ -873,8 +876,10 @@ The last order went out on ${already.slice(0, 10)}.` : ''),
     setSettlementBusy(null)
   }
 
-  // Approval is the money gate — it never initiates a transfer, but it is the
-  // point of no return for the batch, so it routes through a confirmation.
+  // Approval is the money gate. With STRIPE_TRANSFERS_ENABLED on it creates a
+  // real Stripe transfer for every payable statement and then locks the batch,
+  // so it is the point of no return twice over — hence the confirmation, and
+  // hence the red warning inside it.
   async function handleApproveBatch(batch: SettlementBatch) {
     setSettlementBusy(batch.id); setSettlementError('')
     const res = await adminFetch('/api/admin/settlement/approve', {
@@ -903,6 +908,42 @@ The last order went out on ${already.slice(0, 10)}.` : ''),
     await loadSettlement(false)
     if (expandedBatch === batch.id) await loadStatements(batch.id, true)
     setSettlementBusy(null)
+  }
+
+  // Which failed statement is being retried, and the one awaiting confirmation.
+  const [retryConfirm, setRetryConfirm] = useState<SettlementStatement | null>(null)
+  const [retryBusy,    setRetryBusy]    = useState<string | null>(null)
+
+  async function retryTransfer(s: SettlementStatement, batchId: string) {
+    setRetryBusy(s.id); setSettlementError('')
+    try {
+      const res = await adminFetch('/api/admin/settlement/retry-transfer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statementId: s.id }),
+      })
+      const d = await res.json().catch(() => null)
+      if (!res.ok) {
+        setSettlementError(
+          d?.error === 'no_connect_account'
+            ? `${s.merchantName} still has no Stripe payout account connected.`
+          : d?.error === 'payouts_disabled'
+            ? `${s.merchantName}'s Stripe account is connected but payouts are not enabled yet.`
+          : d?.error === 'already_paid'
+            ? 'That statement has already been paid.'
+          : d?.error === 'transfers_disabled'
+            ? 'STRIPE_TRANSFERS_ENABLED is not on, so no transfer was attempted.'
+          : d?.error === 'transfer_failed'
+            ? `Stripe refused the transfer: ${d?.message ?? 'unknown error'}`
+            : 'Retry failed. Check the server logs.',
+        )
+      }
+      await loadStatements(batchId, true)
+      await loadSettlement(false)
+    } catch {
+      setSettlementError('Retry failed. Check your connection and try again.')
+    } finally {
+      setRetryBusy(null); setRetryConfirm(null)
+    }
   }
 
   async function loadStatements(batchId: string, force = false) {
@@ -1273,6 +1314,29 @@ The last order went out on ${already.slice(0, 10)}.` : ''),
                               )}
                             </div>
                           )}
+                          {/* A failed transfer is money the merchant is still
+                              owed. Say so, and offer the one button that can
+                              pay it without reopening the locked batch. */}
+                          {s.statementStatus === 'failed' && !s.stripeTransferId && s.netDistribution > 0 && (
+                            <div className="bg-red-50 border border-red-200 rounded-lg px-2.5 py-2 flex flex-col gap-1.5 mt-0.5">
+                              <p className="text-[10px] font-bold text-[#DA1212] leading-snug">
+                                Transfer failed — {s.transferStatus?.replace(/_/g, ' ') ?? 'unknown reason'}
+                              </p>
+                              <p className="text-[10px] text-[#8E8EA8] font-medium leading-snug">
+                                {s.carriedForwardAmount > 0
+                                  ? `${money(s.carriedForwardAmount)} is carried forward as a credit — they will be paid it next period if it is not retried.`
+                                  : 'Still owed to the merchant.'}
+                              </p>
+                              <button
+                                onClick={() => setRetryConfirm(s)}
+                                disabled={retryBusy === s.id}
+                                className="self-start text-[11px] font-bold rounded-lg px-3 py-1.5
+                                           bg-[#DA1212] text-white disabled:opacity-50"
+                              >
+                                {retryBusy === s.id ? 'Retrying…' : 'Retry transfer'}
+                              </button>
+                            </div>
+                          )}
                           <p className="text-[10px] text-[#8E8EA8] font-medium leading-relaxed">
                             commissions {money(s.originCommissionCredits)}
                             {' · '}coupons funded −{money(s.couponDebits)}
@@ -1606,6 +1670,60 @@ The last order went out on ${already.slice(0, 10)}.` : ''),
                 className="flex-1 py-3 rounded-xl text-[14px] font-bold text-white bg-[#DA1212] disabled:opacity-40"
               >
                 {actionLoading === w9RejectTarget + 'reject_w9' ? '…' : 'Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Retry one failed transfer. Same red treatment as approve, because it
+          is the same act: real money leaving on a click. */}
+      {retryConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center px-4 z-50">
+          <div className="bg-white rounded-3xl px-6 py-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl">
+            <h3 className="font-['Coiny'] text-xl text-[#1A1A2E]">
+              Retry payout to {retryConfirm.merchantName}?
+            </h3>
+            <p className="text-[13px] text-[#8E8EA8] font-medium leading-relaxed">
+              The earlier transfer failed
+              {retryConfirm.transferStatus ? ` (${retryConfirm.transferStatus.replace(/_/g, ' ')})` : ''}.
+              This pays that one statement without reopening the batch.
+            </p>
+
+            {transfersEnabled ? (
+              <p className="text-[12px] font-bold text-[#DA1212] bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 leading-relaxed">
+                ⚠️ This sends REAL money. A Stripe Connect transfer of{' '}
+                {money(retryConfirm.netDistribution)} will be created immediately. It cannot be
+                undone from this screen.
+              </p>
+            ) : (
+              <p className="text-[12px] font-semibold text-[#1A1A2E] bg-[#F5F5F8] rounded-xl px-3 py-2.5 leading-relaxed">
+                STRIPE_TRANSFERS_ENABLED is off, so no transfer will be attempted.
+              </p>
+            )}
+
+            <p className="text-[11px] text-[#8E8EA8] font-medium leading-relaxed">
+              {retryConfirm.carriedForwardAmount > 0
+                ? `The ${money(retryConfirm.carriedForwardAmount)} credit currently carried on their account is removed at the same time, so they are not paid twice.`
+                : 'Paying the same statement twice is blocked by the statement itself.'}
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setRetryConfirm(null)}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-[#8E8EA8] border-2 border-[#EBEBF2]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const target = retryConfirm
+                  if (target && expandedBatch) void retryTransfer(target, expandedBatch)
+                }}
+                disabled={retryBusy === retryConfirm.id}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold text-white bg-[#DA1212] disabled:opacity-40"
+              >
+                {retryBusy === retryConfirm.id ? 'Sending…' : 'Send transfer'}
               </button>
             </div>
           </div>

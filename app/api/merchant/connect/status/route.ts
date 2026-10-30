@@ -10,6 +10,11 @@
  * anything happening in this app, so a stored copy would go stale silently and
  * we would show "connected" for an account that can no longer be paid.
  *
+ * It does WRITE the answer to merchants.payouts_enabled on the way past. That
+ * copy exists only for the onboarding checklist, which is rendered for every
+ * merchant at once on the admin list and cannot afford a Stripe call each.
+ * Nothing that moves money reads it.
+ *
  * Responses:
  *   200 { connected: false }
  *   200 { connected: true, chargesEnabled, payoutsEnabled, detailsSubmitted,
@@ -41,6 +46,13 @@ export async function GET() {
   if (!merchant) return NextResponse.json({ error: 'Merchant not found' }, { status: 404 })
 
   if (!merchant.stripe_connect_id) {
+    // No account at all means the checklist item is certainly not done. Worth
+    // recording, in case an account was removed at Stripe's end.
+    await admin
+      .from('merchants')
+      .update({ payouts_enabled: false, payouts_enabled_checked_at: new Date().toISOString() })
+      .eq('id', merchant.id)
+      .eq('payouts_enabled', true)
     return NextResponse.json({ connected: false })
   }
 
@@ -54,6 +66,17 @@ export async function GET() {
       external && 'last4' in external && typeof external.last4 === 'string'
         ? external.last4
         : null
+
+    // Refresh the checklist's copy. Not awaited for correctness — the answer
+    // above is already live and authoritative — but awaited so the write is
+    // finished before the serverless function can be frozen.
+    await admin
+      .from('merchants')
+      .update({
+        payouts_enabled:            account.payouts_enabled === true,
+        payouts_enabled_checked_at: new Date().toISOString(),
+      })
+      .eq('id', merchant.id)
 
     return NextResponse.json({
       connected:        true,

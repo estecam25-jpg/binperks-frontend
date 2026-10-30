@@ -43,6 +43,7 @@ export async function GET(
       gross_distribution, net_distribution, closing_negative_balance,
       statement_status, stripe_transfer_id, stripe_transfer_status,
       transfer_initiated_at, transfer_completed_at,
+      carried_forward_amount, carried_forward_at,
       admin_adjustment_amount, admin_adjustment_reason
     `)
     .eq('settlement_batch_id', batchId)
@@ -129,6 +130,7 @@ export async function GET(
       closingNegativeBalance:  Number(s.closing_negative_balance ?? 0),
       statementStatus:         s.statement_status,
       transferStatus:          s.stripe_transfer_status,
+      carriedForwardAmount:    Number(s.carried_forward_amount ?? 0),
       transferInitiatedAt:     s.transfer_initiated_at,
       transferCompletedAt:     s.transfer_completed_at,
       adminAdjustmentAmount:   s.admin_adjustment_amount == null ? null : Number(s.admin_adjustment_amount),

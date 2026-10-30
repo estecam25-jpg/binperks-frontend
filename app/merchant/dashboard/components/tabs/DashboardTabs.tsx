@@ -964,10 +964,12 @@ export function MarketingTab({ storeId, stores }: { storeId: string | null; stor
   )
 }
 
-// W-9 collection moved to DocuSeal, bundled with the Merchant Agreement.
-// The upload UI that lived here is gone; /api/merchant/w9 and every
+// W-9 collection is Stripe's job now: Connect Express gathers and verifies
+// the merchant's tax details during payout setup, so onboarding has no W-9
+// step. The upload UI that lived here is gone; /api/merchant/w9 and every
 // merchant_w9 record are deliberately untouched, so the admin W-9 review
-// screen still works on already-submitted forms.
+// screen still works on the forms already submitted, and on the rare case
+// that needs one by hand.
 
 // --- SettingsTab ---
 
@@ -1559,7 +1561,7 @@ export function GettingStartedTab({ storeId }: { storeId: string | null }) {
         </div>
         {allDone && (
           <p className="text-[13px] font-bold text-green-400">
-            🎉 You&apos;re all set! Your BinPerks loyalty program is live.
+            🎉 You&apos;re all set! Your BinPerks membership rewards are live.
           </p>
         )}
       </div>

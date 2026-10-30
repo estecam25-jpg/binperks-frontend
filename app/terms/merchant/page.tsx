@@ -387,7 +387,7 @@ export default function MerchantTermsPage() {
         </Section>
 
         <Section title="Execution">
-          <P>This agreement is executed electronically via DocuSeal. Electronic signatures are legally binding under the Electronic Signatures in Global and National Commerce Act (E-SIGN) and the Florida Electronic Signature Act.</P>
+          <P>This agreement is executed electronically by accepting it in the merchant dashboard. Electronic acceptance is legally binding under the Electronic Signatures in Global and National Commerce Act (E-SIGN) and the Florida Electronic Signature Act.</P>
         </Section>
 
         <Section title="Contact">

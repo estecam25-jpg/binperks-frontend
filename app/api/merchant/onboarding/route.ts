@@ -6,8 +6,10 @@ import { onboardingChecklist } from '@/lib/merchant-onboarding-checklist'
 /** See lib/merchant-auth. A stale auth_user_id used to 401 here, which the
  *  Getting Started tab renders as an empty checklist. */
 async function getMerchant() {
-  return findMerchantForRequest<{ id: string; billing_status: string | null }>(
-    'id, billing_status',
+  return findMerchantForRequest<{
+    id: string; billing_status: string | null; payouts_enabled: boolean | null
+  }>(
+    'id, billing_status, payouts_enabled',
   )
 }
 
@@ -57,6 +59,10 @@ export async function GET() {
     posCouponsAdded:   storeList.some(s => !!s.pos_coupons_confirmed_at),
     agreementSigned:   storeList.some(s => !!s.agreement_signed_at),
     binPhotosAdded:    (binPhotoCheck.data ?? []).length > 0,
+    // Cached from the last time Stripe was asked about this account — see the
+    // column comment. Opening the Settlement tab refreshes it, which is also
+    // where this item sends them, so the flow corrects itself.
+    payoutAccountReady: merchant.payouts_enabled === true,
   })
 
   const completedCount = items.filter(i => i.completed).length

@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
       // stripe_customer_id, NOT stripe_subscription_id — that column does not
       // exist on merchants and PostgREST rejected the whole select, which is why
       // this route returned 500 and the Merchants tab rendered empty.
-      .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at, stripe_customer_id, participant_type, commission_eligible, negative_balance, admin_suspended, admin_suspension_reason')
+      .select('id, name, owner_email, company_name, billing_status, subscription_status, location_count, created_at, stripe_customer_id, participant_type, commission_eligible, negative_balance, admin_suspended, admin_suspension_reason, payouts_enabled')
       // Pre-setup stores have their own tab. They are real merchant rows, but
       // nobody has paid, signed or agreed to anything, so counting them here
       // would overstate the network and put an un-actionable row in every
@@ -135,10 +135,13 @@ export async function GET(req: NextRequest) {
    * Now both come from lib/merchant-onboarding-checklist, so the number on
    * this card is the fraction of that list the merchant has ticked off.
    *
-   * The W-9 has not gone missing: it is reviewed in admin, shown on the card
-   * as its own status, and covered in the checklist by the DocuSeal item.
+   * The W-9 is not a checklist item at all any more: Stripe Connect collects
+   * and verifies tax details during payout setup. The manual upload survives
+   * as a backup and still has its own status on this card.
    */
-  function calcOnboarding(m: { id: string; billing_status: string }) {
+  function calcOnboarding(m: {
+    id: string; billing_status: string; payouts_enabled?: boolean | null
+  }) {
     const mStores = storesByMerchant[m.id] ?? []
     const primary = mStores[0]
     return onboardingPercent({
@@ -155,6 +158,9 @@ export async function GET(req: NextRequest) {
       posCouponsAdded:   mStores.some(s => !!s.pos_coupons_confirmed_at),
       agreementSigned:   mStores.some(s => !!s.agreement_signed_at),
       binPhotosAdded:    binPhotoMerchants.has(m.id),
+      // Cached column, not a live Stripe call: this runs for every merchant on
+      // one page load. See the merchants.payouts_enabled column comment.
+      payoutAccountReady: m.payouts_enabled === true,
     })
   }
 

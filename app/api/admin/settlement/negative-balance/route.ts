@@ -16,6 +16,21 @@
  * period's earnings closes at 0, and their account must be cleared too —
  * leaving a stale balance would deduct the same debt again next month.
  *
+ * ── UNPAID TRANSFERS CARRY FORWARD TOO ─────────────────────────────────────
+ * A statement whose transfer failed (no Connect account, payouts disabled, a
+ * Stripe error) is money the merchant is still owed. The batch is locked and
+ * approve will not run again, so without this the amount would simply vanish
+ * at the next calculate.
+ *
+ * It is carried as a NEGATIVE balance — a credit. negative_balance is a debt
+ * when positive, and calculate does `gross - priorNegativeBalance`, so a
+ * negative value adds to next period's payout, which is exactly what is
+ * wanted. The amount is recorded on the statement as carried_forward_amount
+ * so a successful retry can reverse precisely that figure.
+ *
+ * Both halves are recomputed from current statement state on every run, so
+ * re-running changes nothing.
+ *
  * Idempotent: a merchant whose stored balance already equals the closing
  * balance is skipped, so re-running produces no duplicate history rows.
  *
@@ -59,7 +74,7 @@ export async function POST(req: NextRequest) {
 
   const { data: statements, error: stmtErr } = await admin
     .from('merchant_settlement_statements')
-    .select('id, merchant_id, closing_negative_balance')
+    .select('id, merchant_id, closing_negative_balance, net_distribution, statement_status, stripe_transfer_id, carried_forward_amount')
     .eq('settlement_batch_id', batchId)
 
   if (stmtErr) {
@@ -88,7 +103,28 @@ export async function POST(req: NextRequest) {
 
   for (const s of rows) {
     const balanceBefore = currentById.get(s.merchant_id) ?? 0
-    const balanceAfter  = money(Number(s.closing_negative_balance ?? 0))
+
+    // Money this statement owed the merchant that Stripe did not deliver.
+    // Only a genuinely unpaid statement counts: one that already carries a
+    // transfer id was paid, whatever its status says.
+    const unpaid = (s.statement_status === 'failed' && !s.stripe_transfer_id)
+      ? Math.max(0, money(Number(s.net_distribution ?? 0)))
+      : 0
+
+    // Debt stays positive, the unpaid payout becomes a credit against it.
+    const balanceAfter = money(Number(s.closing_negative_balance ?? 0) - unpaid)
+
+    // Recorded even when the balance itself does not move, so retry always
+    // knows exactly how much credit to take back.
+    if (money(Number(s.carried_forward_amount ?? 0)) !== unpaid) {
+      await admin
+        .from('merchant_settlement_statements')
+        .update({
+          carried_forward_amount: unpaid,
+          carried_forward_at:     unpaid > 0 ? now : null,
+        })
+        .eq('id', s.id)
+    }
 
     if (money(balanceBefore) === balanceAfter) {
       skipped++
@@ -116,7 +152,9 @@ export async function POST(req: NextRequest) {
         amount:              money(balanceAfter - balanceBefore),
         balance_before:      money(balanceBefore),
         balance_after:       balanceAfter,
-        reason:              `Settlement ${batch.settlement_period} carry-forward`,
+        reason:              unpaid > 0
+          ? `Settlement ${batch.settlement_period} carry-forward (includes ${money(unpaid).toFixed(2)} unpaid transfer owed to merchant)`
+          : `Settlement ${batch.settlement_period} carry-forward`,
         admin_user_id:       adminEmail,
         settlement_batch_id: batchId,
       })

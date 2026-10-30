@@ -1,5 +1,5 @@
 # BinPerks — CLAUDE.md
-*Last updated: October 18, 2026 (commit `ba8d1fc`)*
+*Last updated: October 29, 2026 (commit `9caea7e`)*
 
 ---
 
@@ -23,15 +23,15 @@
 | Vercel token | `D:\BinPerks\.vercel-token` |
 | Supabase project ref | `qayltanzdsmckiyqnxpj` |
 | Live subdomains | `app.binperks.com` (members), `merchant.binperks.com` (merchants + merchant landing page), `admin.binperks.com` (admin), `stamptool.binperks.com` (cashiers) |
-| Member homepage | Built in Next.js (managed by Claude, not GHL). Preview: `app.binperks.com/home`. Will serve `binperks.com` after the DNS switch. |
+| Member homepage | Built in Next.js (managed by Claude, not GHL). **Live at `binperks.com`** (also `app.binperks.com/home`). Benny v2. |
 
-### Domains & DNS (DNS lives at HostGator)
-- `binperks.com` = **members**. `merchant.binperks.com` = **merchants**.
-- ⚠️ **DNS switch pending** (HostGator):
-  - A record `@` → `216.150.1.1` (plus `216.150.16.1`)
-  - CNAME `www` → `66aab3cd8fa03628.vercel-dns-017.com.`
-  - **SPF cleanup:** delete the duplicate `v=spf1 a mx include:websitewelcome.com ~all`; keep the `ip4` version.
-
+### Domains & DNS (DNS lives at HostGator) — ✅ SWITCHED & VERIFIED Oct 29, 2026
+- `binperks.com` = **members** (serves `/home` via middleware rewrite, URL stays binperks.com; www → apex 308). `merchant.binperks.com` = **merchants**. Join/Sign in buttons → `https://app.binperks.com`.
+- Vercel side is DONE: binperks.com + www added and verified on the project; waiting only on DNS. TLS cert issues automatically after the switch.
+- **Before Oct 29** binperks.com + www pointed at **GoHighLevel** (A @ `162.159.140.166`, CNAME www `sites.ludicrous.cloud.`) and served a V1 GHL merchant pitch page. That funnel still exists in GHL but no longer has the domain. GHL workflows checked — none used binperks.com.
+- **Live now (2 records changed):** A @ → `216.150.1.1` + `216.150.16.1` (replace `162.159.140.166`); CNAME www → `66aab3cd8fa03628.vercel-dns-017.com.` (replace `sites.ludicrous.cloud.`). TTL 300. Verified Oct 29: Vercel not misconfigured; Let's Encrypt certs for apex + www (valid to Jan 28, 2027, auto-renew); binperks.com 200 serving /home (URL unchanged); www → 308 → apex; Benny v2 live; all subdomains OK; MX/mail/TXT untouched; mail server 50.87.144.81:25 answering.
+- **NEVER touch:** MX (`mail.binperks.com`, pri 0), A `mail` (`50.87.144.81`, HostGator mail — independent of apex, so email is safe), any TXT (SPF ×2, DMARC, Google verification, Resend on `feedback`), any GHL records, CNAMEs for app/merchant/admin/stamptool. No wildcard record exists.
+- SPF duplicate cleanup: **dropped** (don't touch email DNS).
 ---
 
 ## Tech Stack
@@ -140,15 +140,16 @@
 
 ---
 
-## Pre-Setup Stores (live Oct 2026)
+## Pre-Setup Stores (live Oct 2026; Edit added Oct 19, commit `aba0d5a`)
 
 Lets Esteban build a store **before** the owner signs up, then finish signup **at the visit** (owner pays on-site; EstaBins Tampa is the demo).
 
 - Admin → **Pre-setup stores** tab: create store (hidden, `billing_status = 'presetup'`), **Print materials** page (separate downloads), **finish-setup link** (`merchants.presetup_token`) → Stripe → in-app acceptance, **Delete**.
-- Code: `lib/presetup.ts`, `PresetupStoresTab.tsx`.
+- **Edit** (admin, presetup status only — 409 after payment): legal name, owner name/email/phone, locations, store name, address, website, logo, store message. `canonical_key` / join links / QR codes NEVER change. Test: `scripts/e2e-presetup-edit.mjs` (56/56).
+- Code: `lib/presetup.ts`, `PresetupStoresTab.tsx`, `app/api/admin/presetup-stores` (GET/POST/PATCH/DELETE).
 - Store stays hidden and cannot stamp until paid + signed.
 - ⚠️ First real visit: confirm the finish-setup form is pre-filled.
-- **Pinned:** "Finish your signup" email (pre-filled link; includes the line "Save this email for when you're ready"); edit link for pre-setup stores (keep the original QR codes).
+- **Pinned:** "Finish your signup" email (pre-filled link; includes the line "Save this email for when you're ready").
 
 ---
 
@@ -257,7 +258,10 @@ Lets Esteban build a store **before** the owner signs up, then finish signup **a
 - Redeemed at the funding store → nothing to settle.
 - Redeemed elsewhere → `coupon_credit_redeeming` (honoring store) + `coupon_debit_origin` (funder), face value, tagged with settlement period. Deducted from funder's Merchant Share first.
 - Funder inactive/terminated/short → `coupon_debit_binperks`: BinPerks pays the honoring store; amount recorded as owed by the funder. Collection happens outside the system (Esteban invoices).
-- Month-end batch: admin-run at `/api/admin/settlement/calculate` (nets the new entry types, carries shortfalls as negative balance). **Not yet run — first run Oct 31, 2026.**
+- Month-end batch: admin-run at `/api/admin/settlement/calculate` (nets the new entry types, carries shortfalls as negative balance). **Always settles the PREVIOUS calendar month** (button label shows the month). Approve moves real money (`STRIPE_TRANSFERS_ENABLED=true`) and locks the batch.
+- As of Oct 19, 2026: `settlement_ledger`, `commission_decisions`, batches, statements all **empty** (no VIP payments since Oct 12; the 11 redeemed coupons pre-date `funding_store_id`). Any run today = $0.00 / 0 merchants.
+- ⚠️ Known gap: a statement that fails transfer (e.g. `no_connect_account`) is NOT carried forward and the locked batch can't be re-approved → money stranded. Fix before real money flows.
+- Merchant payout setup: merchant dashboard → 🧾 Settlement tab → **Connect Bank Account** (Stripe Express hosted onboarding). Idempotent; `payouts_enabled` re-checked live at transfer time.
 - Merchant dashboard: "reimbursed to you" / "charged to you" totals only, no names.
 - Admin: monthly settlement view + "Owed to BinPerks" by merchant. (Generated invoice document not built — pinned.)
 
@@ -553,7 +557,8 @@ Logo: `aspect-ratio: 1/1`, `object-fit: cover`, hover/long-hold reveals message.
 
 ## Member Homepage (`binperks.com`, preview `app.binperks.com/home`)
 
-- Code: `app/home/page.tsx`, `components/marketing/BennyMascot.tsx` (placeholder — set `BENNY_IMAGE_SRC` when the Benny file arrives).
+- Code: `app/home/page.tsx`, `components/marketing/BennyMascot.tsx`. Benny artwork live Oct 29 (commit `9caea7e`): `public/benny/benny-hero-v2.webp` (1200px, 172 KB; logo on shirt) from master `public/benny/benny-hero.png` (1254², opaque scene, not a cut-out). Sizes: mobile min(88vw,360px), tablet 400px, desktop 480px; rounded-3xl + shadow. Folder must stay lowercase `benny` (Vercel/Linux is case-sensitive). New artwork = new file name (cache).
+- On a 375×812 phone the first "Join free" button sits at/below the fold (Benny 330px). Lever if needed: mobile cap 88vw → ~72vw.
 - Perks dropdowns, accordion FAQ (incl. VIP FAQ), "more stores joining".
 - ⚠️ Member homepage update prompt on hold until Esteban sends his image.
 
@@ -595,6 +600,19 @@ Never put promo codes in any legal document.
 
 ---
 
+## Database Security
+- **Oct 30, 2026:** `perk_menu` had RLS off since Oct 18 (anon had full write grants). Fixed with migration `enable_rls_perk_menu` (RLS on, no policies, SELECT/INSERT/UPDATE/DELETE revoked from anon + authenticated). Logs Oct 18–30: zero browser-key requests; data unchanged (20 rows). No personal data in that table. Advisor ERROR cleared.
+- **Rule:** every new table gets RLS ON in the same migration. Default = no policies (service-role only).
+- All other 42 public tables have RLS on but still carry Supabase's default anon/authenticated write grants.
+- Stamp tool reads `members`, `visits`, `rewards` from the browser with the anon key (relies on RLS policies) — audit pending.
+- Advisor WARNs: mutable `search_path` on `check_coupon_due`, `clear_coupon_due`, `increment_total_stamps`, `claim_webhook_event`; leaked-password protection off.
+
+## Local Folder (`D:\BinPerks`) — audited Oct 19
+- Only `D:\BinPerks\frontend` is a git repo. Everything else at the root is outside version control.
+- ⚠️ `D:\BinPerks\.env` holds a Supabase service-role key (left from the dead `backend/` prototype).
+- Dead prototypes: `frontend-cra-20260615\` (295 MB), `backend\`, root `scripts\` (keep `rls-policies.sql`), 7 June chat-drop folders, old legal drafts.
+- No W-9s, signed agreements, or member data on disk.
+
 ## Known Issues (Low Priority)
 
 - Supabase SMTP sends merchant sign-in from `noreply@feedback.binperks.com` — cosmetic only, leave as-is (GHL owns feedback.binperks.com DNS)
@@ -605,20 +623,22 @@ Never put promo codes in any legal document.
 
 ---
 
-## Open To-Do (as of Oct 18, 2026)
+## Open To-Do (as of Oct 30, 2026)
 
-1. Confirm the agreement PDF email arrives at support@ on the first real new merchant
-2. Delete the test print-kit email
-3. Liquidation Motivation LLC: complete Stripe Connect onboarding before Oct 31 settlement
-4. Ask accountant to confirm Stripe's 1099 filing covers Merchant Share (which form), then turn on Stripe Connect tax reporting
-5. Member homepage updates prompt (waiting on Esteban's image)
-6. Review `app.binperks.com/home`
-7. HostGator DNS switch + SPF cleanup
-8. First pre-setup visit — check the pre-fill
-9. Check GHL copy for anything implying Free stops at 20
-10. Run first month-end settlement — Oct 31, 2026
-11. Check the EstaBins inbox for the decline email on the "500 FB shares" submission (declined Oct 18) — confirms perk emails work
-12. Member referral automation
+1. Security batch 2: audit stamp-tool browser access to members/visits/rewards (move to server routes or tighten RLS), revoke default anon/authenticated write grants on all tables, fix 4 functions' search_path.
+2. GitHub classic token "BinPerks Claude": GitHub shows it **"Never used"** (Oct 30) — Claude Code pushes via another login (likely Git Credential Manager). Delete it / let it expire. Confirm pushes still work (git ls-remote + git push --dry-run).
+3. Decide mobile hero: leave "Join free" just below the fold, or shrink Benny on mobile 88vw → ~72vw.
+4. Review binperks.com on phone (live Oct 29). If the old GHL page shows, it's local cache: private window / mobile data / `ipconfig /flushdns`. Send a test email to and from the binperks.com address.
+5. Liquidation Motivation LLC: Stripe Connect payout setup (merchant dashboard → 🧾 Settlement → Connect Bank Account) — Esteban texts Thomas.
+6. Cleanup + fixes batch (approved Oct 19): D:\BinPerks folder cleanup/archive, delete root `.env` (check if key = production key; rotate together if so), settlement failed-statement carry-forward + retry, copy fixes (DocuSeal/"sign"/"loyalty program"/"quiet"), payout item on onboarding checklist.
+7. Ask accountant to confirm Stripe's 1099 filing covers Merchant Share (which form), then turn on Stripe Connect tax reporting.
+8. Check the EstaBins inbox for the decline email on the "500 FB shares" submission — confirms perk emails work.
+9. Delete the test print-kit email.
+10. Check GHL copy for anything implying Free stops at 20.
+11. First pre-setup visit — test the acceptance page and check the pre-fill (Edit button available).
+12. First real new merchant — confirm the agreement PDF email arrives at support@.
+13. Settlement: skip Oct 31 (= September, $0). First meaningful run Nov 1+ once VIP revenue exists; carry-forward fix first.
+14. Member referral automation
     - GHL "BinPerks Friend Just Joined" workflow first. SMS: "Your friend just joined BinPerks! Once they earn their first stamp, you'll both get 2 bonus stamps."
     - Monthly referral email cron, 30 days after join, all members, email only, rotating subjects: "Invite a friend to BinPerks", "Know someone who loves bin stores?", "Your referral link is waiting", "Bring a friend to the bins", "Someone you know would love this", "Share the bins with a friend"
     - Referral count on Rewards tab
@@ -631,11 +651,10 @@ Never put promo codes in any legal document.
 
 - "Finish your signup" email for pre-setup stores (pre-filled; includes "Save this email for when you're ready")
 - Attorney look at in-app acceptance + §17.6 (after build)
-- Clean up `D:\BinPerks\` and all subfolders (Claude Code): review every file, remove clutter/duplicates/stale drafts — list proposed deletions for Esteban's approval first; never delete `.vercel-token`, `.env*`, CLAUDE.md, `legal/`, or anything in git without checking
+- Member homepage desktop hero: make it ONE column like mobile (logo, Benny, headline, buttons stacked/centered) — currently Benny sits on the same row as the header/logo at ≥1024px. Low priority (most visitors on mobile).
 - Download The Nieghborhood LLC's signed PDF from DocuSeal (only one ever), cancel DocuSeal, then have Claude Code remove the webhook route, `/signup/confirm` and `DOCUSEAL_*` env vars
 - Sponsors: pricing page + 3 featured Home-tab spots + "See more" + admin limit of 3 (list-row design pending)
-- Edit link for pre-setup stores (keep original QR codes)
-- Benny artwork files
+- Benny: optional transparent cut-out version (current hero is an opaque square scene)
 - Facebook review requests
 - Stripe $200 test price
 - App link in the stamp SMS: "Stamp earned at {{store}}! Check your BinPerks app to see your progress." + link

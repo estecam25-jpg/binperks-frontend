@@ -725,11 +725,11 @@ export default function AnalyticsTab() {
         </div>
 
         <p className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#8E8EA8] pt-2">
-          At risk · 21–29 days quiet{data.reactivation.atRisk.length > 0 ? ` · ${data.reactivation.atRisk.length}` : ''}
+          At risk · 21–29 days inactive{data.reactivation.atRisk.length > 0 ? ` · ${data.reactivation.atRisk.length}` : ''}
         </p>
         <TableWrap minWidth={380}>
           <thead>
-            <tr className="bg-[#F5F5F8]"><Th>Member</Th><Th>Tier</Th><Th>Origin store</Th><Th right>Days quiet</Th></tr>
+            <tr className="bg-[#F5F5F8]"><Th>Member</Th><Th>Tier</Th><Th>Origin store</Th><Th right>Days inactive</Th></tr>
           </thead>
           <tbody className="divide-y divide-[#EBEBF2]">
             {data.reactivation.atRisk.length === 0

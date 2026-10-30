@@ -2,11 +2,11 @@
  * POST /api/merchant/finish-setup — open checkout for a pre-setup store
  *
  * Step 1 of the two the owner does in front of Esteban at the visit. Step 2,
- * signing, and everything after it is the ORGANIC MACHINERY UNCHANGED: this
- * sends the browser to Stripe with success_url pointing at the same thank-you
- * page, which polls the same status route, which creates the DocuSeal session
- * and forwards to the same signing page. Activation only ever happens through
- * the existing DocuSeal webhook.
+ * accepting the agreement, and everything after it is the ORGANIC MACHINERY
+ * UNCHANGED: this sends the browser to Stripe with success_url pointing at the
+ * same thank-you page, which polls the same status route, which forwards to
+ * the same in-app acceptance page. Activation only ever happens when the
+ * merchant accepts the agreement there.
  *
  * The one difference from /api/merchant/apply is what travels in the metadata.
  * Apply carries the whole signup form, because no merchant row exists yet.

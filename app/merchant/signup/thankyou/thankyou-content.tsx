@@ -221,15 +221,15 @@ export default function ThankYouContent({
             {[
               {
                 icon: '✍️',
-                title: 'Sign your Merchant Agreement',
-                body: 'Right here in the app. Your account and your store go live the moment it is signed.',
+                title: 'Accept your Merchant Agreement',
+                body: 'Right here in the app. Your account and your store go live the moment you accept it.',
                 timing: 'Now',
               },
               {
                 icon: '🔑',
                 title: 'Sign in to your dashboard',
                 body: 'Use the email you signed up with — we send you a sign-in code, no password needed.',
-                timing: 'After signing',
+                timing: 'After accepting',
               },
               {
                 icon: '🎨',

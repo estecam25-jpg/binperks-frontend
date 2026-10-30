@@ -39,6 +39,12 @@ export interface OnboardingFacts {
   posCouponsAdded:   boolean
   agreementSigned:   boolean
   binPhotosAdded:    boolean
+  /** Stripe Connect is set up far enough that a payout would actually land.
+   *  Read from the cached merchants.payouts_enabled, which is refreshed every
+   *  time we speak to Stripe about the account — not a live call, because the
+   *  admin list builds this for every merchant at once. Money movement still
+   *  re-checks live at transfer time. */
+  payoutAccountReady: boolean
 }
 
 export interface OnboardingItem {
@@ -61,7 +67,17 @@ export function onboardingChecklist(f: OnboardingFacts): OnboardingItem[] {
     { id: 'store_provisioned', label: 'Store provisioned',                              completed: f.storeCount > 0,               binPerks: true  },
     { id: 'activated',         label: 'Merchant account activated',                     completed: f.billingStatus === 'active',   binPerks: true  },
 
-    // The merchant's own.
+    // The merchant's own. Payouts first: it is the only item where not doing
+    // it costs them money rather than reach, and the Settlement tab it points
+    // at is otherwise easy to never open.
+    {
+      id: 'payout_account',
+      label: 'Connect your payout account',
+      description: 'Settlement tab → Connect Bank Account, so you can receive your Merchant Share.',
+      completed: f.payoutAccountReady,
+      binPerks: false,
+      href: '/merchant/dashboard?tab=settlement',
+    },
     { id: 'brand_configured',  label: 'Brand configured (logo, color, font)',           completed: f.brandConfigured,              binPerks: false },
     { id: 'review_url',        label: 'Google Review URL added',                        completed: f.reviewUrlSet,                 binPerks: false },
     { id: 'free_perks',        label: 'Free member perk added',                         completed: f.freePerks >= 1,               binPerks: false },
